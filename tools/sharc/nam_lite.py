@@ -11,7 +11,7 @@ layer table, weights; booted into Block 3 by the INIT blocks patch_amp.py
 makes of .section dm) as the file to give `patch_amp.py patch --asm`.
 
 --check runs the result in ssim as the stock dispatcher calls it (I0 knobs at
-0.5: gain 2, level 4, I1/I2 16-sample blocks) and compares it with src/sharc/nam_a2.asm
+0.5: gain 1, level 1, I1/I2 16-sample blocks) and compares it with src/sharc/nam_a2.asm
 on the same weights, and checks that the registers it promises to keep are kept.
 
 --layers N (a test on the unit, not NAM): run only the first N layers, for a
@@ -278,7 +278,7 @@ def build(w, layers=None, meter=False):
 
 
 def reference(w, sig):
-    """src/sharc/nam_a2.asm on `sig`, x1 in (Drive 5.0) and x4 out (Ch Vol 5.0), as words."""
+    """src/sharc/nam_a2.asm on `sig`, x1 in (Drive 5.0) and x1 out (Ch Vol 5.0), as words."""
     n = len(sig)
     ref_src = open(os.path.join(root, "src/sharc/nam_a2.asm")).read()
     secs, syms = sasm.assemble(ref_src, "nam_a2.asm")
@@ -293,7 +293,7 @@ def reference(w, sig):
     ref.wr(syms["NAM_OUT"], OUT)
     ref.wr(syms["NAM_N"], n)
     ref.call(syms["NAM_PROCESS"])
-    return [ssim.f2b(4.0 * ssim.b2f(ref.rd(OUT + i))) for i in range(n)]   # Level 0.5: x4, exact
+    return [ref.rd(OUT + i) for i in range(n)]   # Level 0.5: x1
 
 
 EQ_TEST = (0.8, 0.3, 0.6, 0.2)    # Bass, Mid, Treble, Presence in the check

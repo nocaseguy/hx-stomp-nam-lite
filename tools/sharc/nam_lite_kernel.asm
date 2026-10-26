@@ -35,7 +35,7 @@
 // 0..1 (the model's blob
 // routes them there; DM(3) and DM(4) belong to fn_ctrl 0x611ddd): Drive the
 // input gain, 0 dB at 5.0 (the capture's level), -20 .. +20 dB, 4 dB a unit; Ch Vol the
-// output level 16 k^2 (0 mute, +12 dB at 5.0: an A2 model sits ~18 dB low).
+// output level 4 k^2 (0 mute, 0 dB at 5.0, +12 dB at 10.0).
 //
 // It sets CBUFEN for its circular buffers: on the unit, rings that did not wrap
 // put a tone at each ring's rate into the output (92, 217, 475 Hz: rings of
@@ -223,9 +223,9 @@ n_own:
     F14 = DM(0, I3);
     F0 = DM(6, I0);
     F0 = F0 * F0;
-    F1 = 16.0;
+    F1 = 4.0;
     F0 = F0 * F1;
-    DM(N_LEVEL) = F0;                   // output level, 16 k^2
+    DM(N_LEVEL) = F0;                   // output level, 4 k^2
     B10 = I1;                           // the block's input and output, through PM
     B11 = I2;
     L0 = 0; L1 = 0; L2 = 0; L3 = 0; L4 = 0; L5 = 0;

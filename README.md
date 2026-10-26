@@ -19,7 +19,7 @@ Watch it on YouTube: https://www.youtube.com/watch?v=zQzj0qahJ6E
   | **Model** | Which capture plays: 1–128 is the User IR slot that holds it. A slot holding anything else (a cab IR, or nothing) is silent. |
   | **Drive** | Input gain into the capture, −20 to +20 dB; 0 dB (the capture's own level) at 5.0 |
   | **Bass / Mid / Treble / Presence** | A tone stack after the model, ±12 dB, flat at 5.0 (100 Hz shelf, 650 Hz peak, 2.5 kHz and 5.5 kHz shelves) |
-  | **Ch Vol** | Output level; +12 dB at 5.0 (A2 captures sit low) |
+  | **Ch Vol** | Output level; 0 dB at 5.0, +12 dB at 10 |
 
 - **A converter** (a web page, `web/index.html`, or `tools/nam2ir.py`) turns a `.nam` file into a `.wav`. HX Edit imports that `.wav` as a User IR. The "IR" is not a sound: it carries the capture's 1,871 weights, and the amp loads them from the slot.
 
