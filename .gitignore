@@ -1,0 +1,9 @@
+build/
+__pycache__/
+*.pyc
+*.hxf
+*.l6ia
+*.bin
+*.nam
+*.wav
+.DS_Store

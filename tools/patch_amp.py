@@ -1,0 +1,1277 @@
+#!/usr/bin/env python3
+"""patch_amp.py - add NAM A2 Lite as a new amp to the stock HX Stomp v3.80.0 firmware.
+
+Works on the stock .hxf (or the L6IA archive inside it) and writes a .hxf
+for Line 6 Updater, or an L6IA; every integrity field (L6IA Fletcher-32 and
+CRC-32, image CRCs, the .hxf's MD5) is recomputed.
+
+Commands:
+  inspect <in> [model]
+      List the amps, or show one: Entry 3 parameters, its Entry 4 blob and
+      composite, and the per-member initial values.
+
+  add-model <in> <out> --name HD2_AmpNAMLite --display-name "NAM A2 Lite" [--folder NAM]
+      Add the NAM host amp: a copy of HD2_AmpLine6Clarity's composite whose amp
+      stage is primitive 0x9c75, with its own seven parameters (Model, Drive,
+      Bass, Mid, Treble, Presence, Ch Vol), listed in the amp browser (Entry 0),
+      the model table (Entry 3) and the DSP graph library (Entry 4); the SHARC's
+      graph buffer is enlarged to fit (Entry 2).
+
+  patch <in> <out> --asm nam_lite.asm
+      Assemble the kernel (tools/sharc/sasm.py), add it to the SHARC boot
+      stream (Entry 2) and point primitive 0x9c75 at it.
+"""
+import argparse
+import collections
+import os
+import re
+import struct
+import sys
+import zlib
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SHARC_DIR = os.path.join(SCRIPT_DIR, 'sharc')
+sys.path.insert(0, SCRIPT_DIR)
+sys.path.insert(0, SHARC_DIR)
+
+import hxf
+import l6ia
+import entry4_blob
+import sasm
+import ssim
+
+
+def u32(b, o):
+    return struct.unpack_from('<I', b, o)[0]
+
+
+def asf(x):
+    return struct.unpack('<f', struct.pack('<I', x & 0xffffffff))[0]
+
+
+def f2u(f):
+    return struct.unpack('<I', struct.pack('<f', float(f)))[0]
+
+
+def load_l6ia_from_any(path):
+    """Return (l6ia_bytes, is_hxf) from either an .hxf container or raw L6IA file."""
+    raw = open(path, 'rb').read()
+    if raw[:4] == b'FORM' and raw[8:12] == b'L6FF':
+        data_chunk = [b for c, p, s, b in hxf._chunks(raw) if c == b'data'][0]
+        return zlib.decompress(data_chunk), True
+    assert raw[:4] == b'L6IA', f'{path}: neither FORM/L6FF (.hxf) nor L6IA archive'
+    return raw, False
+
+
+def save_l6ia_to_any(l6ia_bytes, out_path, donor_hxf=None):
+    """Write l6ia_bytes to out_path: a .hxf (packed by hxf.pack with the stock
+    .hxf of the same unit as donor, which gives HEAD its product) or raw L6IA."""
+    if out_path.endswith('.hxf'):
+        if not donor_hxf or open(donor_hxf, 'rb').read(4) != b'FORM':
+            raise SystemExit('writing a .hxf needs --donor: the stock .hxf of the same unit')
+        tmp = out_path + '.l6ia.tmp'
+        open(tmp, 'wb').write(l6ia_bytes)
+        try:
+            hxf.pack(tmp, out_path, donor_hxf)
+        finally:
+            os.remove(tmp)
+    else:
+        open(out_path, 'wb').write(l6ia_bytes)
+
+
+def get_entry_swapped(l6ia_bytes, idx):
+    entries = l6ia.parse(l6ia_bytes)
+    e = entries[idx]
+    p = l6ia_bytes[e['payload_off']: e['payload_off'] + e['payload_len']]
+    return l6ia.swap32(p)
+
+
+def parse_entry3_full(e3_bytes):
+    magic, ver, tsize, str_off, scrc, str_len, mtab_off, mcnt, gtab_off, gcnt = struct.unpack_from('<10I', e3_bytes, 0)
+    assert magic == 0x4023245e, f'bad Entry 3 magic {magic:#x}'
+    nstr, slen = struct.unpack_from('<2I', e3_bytes, str_off)
+    sdata_base = str_off + 8 + 12 * nstr
+    strings = []
+    str_recs = []
+    for i in range(nstr):
+        roff, crc, ln = struct.unpack_from('<3I', e3_bytes, str_off + 8 + 12 * i)
+        s = e3_bytes[sdata_base + roff: sdata_base + roff + ln].decode('latin1')
+        strings.append(s)
+        str_recs.append((roff, crc, ln))
+
+    models = []
+    for i in range(mcnt):
+        m = list(struct.unpack_from('<14I', e3_bytes, mtab_off + i * 56))
+        meta = {}
+        meta_recs = []
+        for k in range(m[0]):
+            ks, kt, kv = struct.unpack_from('<3I', e3_bytes, m[1] + k * 12)
+            key = strings[ks]
+            val = strings[kv] if (kt == 7 and kv < len(strings)) else kv
+            meta[key] = val
+            meta_recs.append((m[1] + k * 12, key, kt, kv, val))
+        params = []
+        for p in range(m[7]):
+            poff = m[11] + p * 32
+            pm_cnt, pm_off, p_name_idx, p_type, p_slot, p_min, p_max, p_def = struct.unpack_from('<5I3f', e3_bytes, poff)
+            pmeta = {}
+            for k in range(pm_cnt):
+                ks, kt, kv = struct.unpack_from('<3I', e3_bytes, pm_off + k * 12)
+                pmeta[strings[ks]] = strings[kv] if (kt == 7 and kv < len(strings)) else kv
+            params.append({
+                'off': poff,
+                'name': strings[p_name_idx],
+                'type': p_type,
+                'slot': p_slot,
+                'min': p_min,
+                'max': p_max,
+                'default': p_def,
+                'displayName': pmeta.get('displayName', ''),
+                'displayNameShort': pmeta.get('displayNameShort', ''),
+                'meta': pmeta,
+            })
+        models.append({
+            'idx': i,
+            'off': mtab_off + i * 56,
+            'words': m,
+            'model_id': m[3],
+            'name': strings[m[2]],
+            'displayName': meta.get('displayName', ''),
+            'meta': meta,
+            'meta_recs': meta_recs,
+            'params': params,
+            'blob_index': m[13],
+        })
+    return {
+        'header': (magic, ver, tsize, str_off, scrc, str_len, mtab_off, mcnt, gtab_off, gcnt),
+        'strings': strings,
+        'str_recs': str_recs,
+        'sdata_base': sdata_base,
+        'models': models,
+    }
+
+
+def find_model(e3_info, query):
+    for m in e3_info['models']:
+        if m['name'].lower() == query.lower() or m['displayName'].lower() == query.lower():
+            return m
+    if query.isdigit():
+        mid = int(query)
+        for m in e3_info['models']:
+            if m['model_id'] == mid or m['blob_index'] == mid:
+                return m
+    for m in e3_info['models']:
+        if query.lower() in m['name'].lower() or query.lower() in m['displayName'].lower():
+            return m
+    raise SystemExit(f"Model '{query}' not found in Entry 3")
+
+
+def cmd_inspect(args):
+    l6ia_bytes, _ = load_l6ia_from_any(args.input)
+    e3_bytes = get_entry_swapped(l6ia_bytes, 3)
+    e4_bytes = get_entry_swapped(l6ia_bytes, 4)
+    e3_info = parse_entry3_full(e3_bytes)
+
+    if not args.model:
+        amps = [m for m in e3_info['models'] if m['name'].startswith('HD2_Amp')]
+        print(f"Found {len(amps)} HD2_Amp* models in Entry 3 (out of {len(e3_info['models'])} total models):")
+        w4 = entry4_blob.load_bytes(e4_bytes) if hasattr(entry4_blob, 'load_bytes') else struct.unpack('<%dI' % (len(e4_bytes) // 4), e4_bytes)
+        for m in amps:
+            bi = m['blob_index']
+            b = entry4_blob.blob(w4, bi)
+            tt = entry4_blob.top_type(b)
+            print(f"  id={m['model_id']:3d} blob={bi:3d} comp={tt:#08x}  {m['name']:32s} ({m['displayName']})")
+        return
+
+    m = find_model(e3_info, args.model)
+    w4 = struct.unpack('<%dI' % (len(e4_bytes) // 4), e4_bytes)
+    b0 = entry4_blob.blob(w4, 0)
+    bi = m['blob_index']
+    b = entry4_blob.blob(w4, bi)
+    tt = entry4_blob.top_type(b)
+
+    print(f"=== Model: {m['name']} ({m['displayName']}) ===")
+    print(f"  Entry 3 Model ID : {m['model_id']} (descriptor @ {m['off']:#x})")
+    print(f"  Metadata         : {m['meta']}")
+    print(f"  Entry 4 Blob ID  : {bi} (m[13] = {bi}, len = {len(b)} words)")
+    print(f"  Top-Level Type   : {tt:#08x}" if tt else "  Top-Level Type   : None")
+    print(f"\n--- Entry 3 Parameters ({len(m['params'])}) ---")
+    for p in m['params']:
+        disp = p['displayName'] or p['name']
+        print(f"  slot={p['slot']:2d} type={p['type']} {p['name']:14s} ({disp:12s}) "
+              f"min={p['min']:8.3f} max={p['max']:8.3f} default={p['default']:8.3f}  meta={p['meta']}")
+
+    if tt and 0x600000 <= tt < 0x601000:
+        comp = entry4_blob.parse_composite(b0, tt)
+        prims = entry4_blob.expand_composite_primitives(b0, tt)
+        counts = collections.Counter(f"0x{p:x}" for p in prims)
+        print(f"\n--- Entry 4 Blob 0 Composite {tt:#x} ---")
+        print(f"  ports: in={comp['n_in']} out={comp['n_out']} | members={comp['n_members']} | audio_bufs={comp['n_buffers']}")
+        print(f"  leaf primitives ({len(prims)}): {dict(counts)}")
+
+        pinit_off, pinit_cnt = b[10], b[11]
+        by_member = collections.defaultdict(list)
+        for k in range(pinit_cnt):
+            soff, pid, voff, cnt = b[pinit_off + 4 * k: pinit_off + 4 * (k + 1)]
+            raw_midx = b[soff + 1]
+            midx = raw_midx - 1
+            val = b[voff + 1]
+            by_member[midx].append((k, pid, voff + 1, val, asf(val)))
+
+        print(f"\n--- Entry 4 Blob {bi} Per-Member Initializations ({pinit_cnt} records @ word {pinit_off:#x}) ---")
+        for midx, plist in sorted(by_member.items()):
+            if midx < 0:
+                tid_str = "ROOT_COMPOSITE"
+            elif midx < len(comp['members']):
+                tid_str = f"type={comp['members'][midx]['type_id']:#06x}"
+            else:
+                tid_str = "type=?"
+            preview = []
+            for _, pid, _, val, fval in plist[:10]:
+                if 1e-4 <= abs(fval) < 1e7:
+                    preview.append(f"p{pid}={fval:.4g}")
+                else:
+                    preview.append(f"p{pid}={val:#x}")
+            more = f" ... (+{len(plist) - 10} more)" if len(plist) > 10 else ""
+            print(f"  member[{midx:3d}] ({tid_str:14s}, {len(plist):3d} params): {', '.join(preview)}{more}")
+
+
+def pack_init_l48(addr48, insn_words):
+    """Build an ADSP-21469 LDR INIT_L48 (tag=5) block as little-endian 32-bit words."""
+    ins = list(insn_words)
+    if len(ins) & 1:
+        ins.append(0)  # pad to even instruction count with NOP
+    raw = b''.join(int(w).to_bytes(6, 'little') for w in ins)
+    w32 = list(struct.unpack('<%dI' % (len(raw) // 4), raw))
+    return [5, len(ins), addr48] + w32
+
+
+def pack_init_l32(addr32, data_words):
+    """Build an ADSP-21469 LDR INIT_L32 (tag=4) block as little-endian 32-bit words."""
+    dw = [int(x) & 0xffffffff for x in data_words]
+    return [4, len(dw), addr32] + dw
+
+
+def inject_sharc_ldr_blocks(e2_raw_bytes, new_blocks_words):
+    """Insert LDR blocks right before the FINAL_INIT (tag=0) block in Entry 2."""
+    w = list(struct.unpack('<%dI' % (len(e2_raw_bytes) // 4), e2_raw_bytes))
+    TAGS = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
+
+    def nwords(tag, cnt):
+        return {5: ((cnt + 1) & ~1) * 3 // 2, 4: cnt, 3: (cnt + 1) // 2,
+                6: cnt * 2, 0: 384, 10: cnt, 9: cnt}.get(tag, 0)
+
+    i = 384
+    final_init_idx = None
+    while i + 3 <= len(w):
+        tag, cnt, addr = w[i:i + 3]
+        assert tag in TAGS, f'Entry 2 LDR desync at word {i}: tag={tag:#x}'
+        if tag == 0:
+            final_init_idx = i
+            break
+        i += 3 + nwords(tag, cnt)
+
+    assert final_init_idx is not None, 'Entry 2 FINAL_INIT (tag=0) not found'
+    patched_w = w[:final_init_idx] + list(new_blocks_words) + w[final_init_idx:]
+    assert len(patched_w) * 4 <= 0x80000, f'Entry 2 size {len(patched_w)*4} exceeds 512 KiB eMMC partition'
+    return struct.pack('<%dI' % len(patched_w), *patched_w)
+
+
+# 24 registered primitives in Entry 2 (0x200000..0x20060f) that are unreferenced by any stock model/composite:
+UNUSED_SHARC_PRIMS = (
+    (0x9c75, 0x200590),
+    (0x2aa8, 0x200018),
+    (0x2aaa, 0x200020),
+    (0x2aab, 0x200030),
+    (0x0128, 0x200050),
+    (0x012e, 0x200058),
+    (0x0100, 0x2000a0),
+    (0x0838, 0x2000b0),
+    (0x2392, 0x200120),
+    (0x238f, 0x2001a8),
+    (0x000e, 0x2001b0),
+    (0x0205, 0x2001b8),
+    (0x045e, 0x2001d0),
+    (0x0207, 0x2002a8),
+    (0x2ab6, 0x2002c8),
+    (0x261a, 0x2002e0),
+    (0x021f, 0x200318),
+    (0x012c, 0x200348),
+    (0x012d, 0x2003d0),
+    (0x0130, 0x2003d8),
+    (0x0087, 0x2004b8),
+    (0x020d, 0x200540),
+    (0x0105, 0x200550),
+    (0x0104, 0x200558),
+)
+
+
+def _scan_e2_injected(e2_raw_bytes):
+    """Return (used_pm_end_in_block2, hooked_prim_addrs) from already-injected LDR blocks in Entry 2."""
+    w = struct.unpack('<%dI' % (len(e2_raw_bytes) // 4), e2_raw_bytes)
+    TAGS = {5: lambda c: ((c + 1) & ~1) * 3 // 2, 4: lambda c: c, 3: lambda c: (c + 1) // 2,
+            6: lambda c: c * 2, 0: lambda c: 384, 10: lambda c: c, 9: lambda c: c}
+    pm_end = 0x0c4ef8
+    hooked_addrs = set()
+    i = 384
+    while i + 3 <= len(w):
+        tag, cnt, addr = w[i:i + 3]
+        if tag == 0:
+            break
+        nw = TAGS.get(tag, lambda c: 0)(cnt)
+        if tag == 5 and 0x0c4ef8 <= addr < 0x0c5554:
+            pm_end = max(pm_end, (addr + cnt + 1) & ~1)
+        elif tag == 4 and cnt == 8 and 0x200000 <= addr < 0x200610:
+            hooked_addrs.add(addr)
+        i += 3 + nw
+    return pm_end, hooked_addrs
+
+
+SHARC_BLOB0_MAX_WORDS = 0x0008ee00  # Expanded Blob 0 buffer @ 0x21c400..0x2ab200 (585,216 words)
+HEAP6_MOVED = (0x0030d100, 0x00324497)  # where expand_sharc_blob0_buffer puts SHARC Heap 6
+
+
+# Heap 6 is set up as [start, end, current] and cleared from its start; all three
+# loads are patched. Its new place, 0x30d100..0x324497, lies between the 0x800-word
+# block pool (0x2ab5ee..0x2eb5ee) and Heap 4 (from 0x328000); no SHARC code names
+# any address there. The enlarged buffer ends at 0x2ab200, before Heap 7 (0x2ab244).
+def expand_sharc_blob0_buffer(e2_raw_bytes):
+    """Expand the SHARC DSP's Blob 0 buffer in Entry 2 from 0x77aac (490,156 words) to 0x8ee00
+    (585,216 words, covering 0x0021c400..0x002ab200) so the SHARC accepts an expanded
+    Blob 0 at boot, and move SHARC Heap 6 (0x17397 words), which the enlarged buffer
+    would overlap, from 0x00293eac..0x002ab243 to free DDR2 at 0x0030d100..0x00324497."""
+    w = list(struct.unpack('<%dI' % (len(e2_raw_bytes) // 4), e2_raw_bytes))
+
+    # 1. the buffer size: R0 = 0x00077aac -> R0 = 0x0008ee00
+    pair_6384 = (w[37192], w[37193])
+    assert pair_6384 in ((0x0f000007, 0x7aac1901), (0x0f000008, 0xee001901)), \
+        f'unexpected buffer size words at w[37192..37193]: {pair_6384[0]:#010x}, {pair_6384[1]:#010x}'
+    changed = (pair_6384 == (0x0f000007, 0x7aac1901) or w[41966] == 0x00293eac)
+    w[37192] = 0x0f000008
+    w[37193] = 0xee001901
+
+    # 2. Heap 6 0x293eac..0x2ab243 -> 0x30d100..0x324497
+    #    w[41966]: R23 = 0x00293eac (its start and current pointer)
+    #    w[41971]: R19 = 0x002ab243 (its end)
+    #    w[41975..41976]: R4 = 0x00293eac (the start of the clear)
+    tup_87c1 = (w[41966], w[41971], w[41975], w[41976])
+    assert tup_87c1 in (
+        (0x00293eac, 0x002ab243, 0x0f040029, 0x3eac727e),
+        (0x00293eac, 0x002c3397, 0x0f04002a, 0xc000727e),
+        (0x0030d100, 0x00324497, 0x0f040030, 0xd100727e),
+    ), f'unexpected Heap 6 words at w[41966,41971,41975..41976]: {[hex(x) for x in tup_87c1]}'
+    w[41966] = 0x0030d100
+    w[41971] = 0x00324497
+    w[41975] = 0x0f040030
+    w[41976] = 0xd100727e
+
+    return struct.pack('<%dI' % len(w), *w), changed
+
+
+def cmd_patch(args):
+    """Entry 2: the kernel assembled from args.asm (its .section pm and dm as LDR
+    INIT blocks, booted before the stock FINAL_INIT) and an unused primitive slot
+    (0x9c75 first) pointed at its entry, the primitive add-model's NAM host calls."""
+    l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
+    entries = l6ia.parse(l6ia_bytes)
+    e2_raw = l6ia_bytes[entries[2]['payload_off']: entries[2]['payload_off'] + entries[2]['payload_len']]
+    used_pm_end, hooked_addrs = _scan_e2_injected(e2_raw)
+    ldr_words = []
+
+    asm_src = open(args.asm).read()
+    if used_pm_end > 0x0c4ef8:
+        asm_src = re.sub(r'(\.section\s+pm\s+)0x0*c4ef8\b', f'\\g<1>{used_pm_end:#08x}', asm_src, flags=re.I)
+    secs, syms = sasm.assemble(asm_src, os.path.basename(args.asm))
+    pm_secs = [s for s in secs if s.kind == 'pm']
+    entry_addr = syms.get('CUSTOM_AMP_ENTRY', pm_secs[0].addr if pm_secs else secs[0].addr)
+    for s in secs:
+        if s.kind == 'pm':
+            assert s.addr + len(s.words) <= 0x0c5554, f'PM kernel at {s.addr:#x} exceeds Block 2 tail 0x0c5554'
+            ldr_words += pack_init_l48(s.addr, s.words)
+            print(f"[+] Entry 2: assembled {len(s.words)} 48-bit instructions from {os.path.basename(args.asm)} @ PM {s.addr:#x}")
+        elif s.kind == 'dm':
+            ldr_words += pack_init_l32(s.addr, s.words)
+            print(f"[+] Entry 2: assembled {len(s.words)} 32-bit DM words @ DM {s.addr:#x}")
+
+    chosen = next(((pid, paddr) for pid, paddr in UNUSED_SHARC_PRIMS if paddr not in hooked_addrs), None)
+    if chosen is None:
+        raise SystemExit('All 24 unused SHARC primitive slots in Entry 2 are already hooked')
+    prim_id, prim_addr = chosen
+    ldr_words += pack_init_l32(prim_addr, [prim_id, 0x611e90, 0x0, 0x611ef4, 0x611ddd, entry_addr, 0x91, 0x0d])
+    print(f"[+] Entry 2: hooked unused primitive {prim_id:#06x} @ {prim_addr:#x} -> kernel {entry_addr:#x} (dm=145, pm=13)")
+
+    replaced = {2: l6ia.swap32(inject_sharc_ldr_blocks(e2_raw, ldr_words))}
+    new_l6ia, old_end, new_end = l6ia.rebuild_archive(l6ia_bytes, replaced)
+    donor = args.input if is_hxf else args.donor
+    save_l6ia_to_any(new_l6ia, args.output, donor_hxf=donor)
+    print(f"[+] Wrote patched firmware to {args.output} (L6IA {old_end:#x} -> {new_end:#x} bytes, delta {new_end - old_end:+d} B)")
+
+
+E0_MAX = 0x8000 * 512 - 512         # Entry 0's partition, less the sub-header sector
+E3_MAX = 0x800 * 512 - 512          # Entry 3's partition, less the sub-header sector
+E4_MAX = (0x11005 - 0x940d) * 512   # Entry 4's partition (15.5 MiB)
+
+# HX Stomp v3.80.0 Entry 0 (the Cortex-M4 application) addresses:
+E0_TAB1_BASE_PTRS = (0x28e01c08, 0x28e01c6c, 0x28e01c88, 0x28e01d2c, 0x28e01e80)
+E0_TAB1_END_PTR = 0x28e01c70
+E0_TAB1_CNT_M1_INSNS = (0x28e01c52, 0x28e01ca2, 0x28e01d78, 0x28e01e02)
+E0_TAB1_CNT_INSN = 0x28e01c74
+
+E0_TAB2_BASE_PTR = 0x28de8fd4
+E0_TAB2_P5_PTR = 0x28de8fd8
+E0_TAB2_CNT_INSN = 0x28de8f30
+
+E0_BLIST_PTR_TAB = 0x28e3e00c
+E0_BLIST_CNT_TAB = 0x28e3e13c
+E0_BLIST_SLOTS = 76
+E0_SUBCAT_CNT = 0x28e3e26c       # u32[19]: subcategories (browser folders) a category has
+E0_SUBCAT_NAMES = 0x28e3e2b8     # char[19][4][26]: their names (getter 0x28e011d0)
+
+
+def _align(n, a):
+    return (n + a - 1) & ~(a - 1)
+
+
+def _decode_thumb_movw(b4):
+    """Decode a 32-bit Thumb-2 `movw Rd, #imm16` instruction into (rd, imm16)."""
+    hw1, hw2 = struct.unpack_from('<2H', b4, 0)
+    assert (hw1 & 0xfbf0) == 0xf240 and (hw2 & 0x8000) == 0, f'not a Thumb-2 movw instruction: {hw1:#06x} {hw2:#06x}'
+    imm4 = hw1 & 0xf
+    i_bit = (hw1 >> 10) & 1
+    imm3 = (hw2 >> 12) & 0x7
+    rd = (hw2 >> 8) & 0xf
+    imm8 = hw2 & 0xff
+    imm16 = (imm4 << 12) | (i_bit << 11) | (imm3 << 8) | imm8
+    return rd, imm16
+
+
+def _encode_thumb_movw(rd, imm16):
+    """Encode a 32-bit Thumb-2 `movw Rd, #imm16` instruction as 4 bytes."""
+    assert 0 <= rd <= 15 and 0 <= imm16 <= 0xffff
+    hw1 = 0xf240 | (((imm16 >> 11) & 1) << 10) | ((imm16 >> 12) & 0xf)
+    hw2 = (((imm16 >> 8) & 0x7) << 12) | ((rd & 0xf) << 8) | (imm16 & 0xff)
+    return struct.pack('<2H', hw1, hw2)
+
+
+def _parse_e0_segments(e0_buf):
+    """Return list of (hdr_off, payload_off, slen, dst, next_off) for Entry 0."""
+    magic, size, icrc, ver, nsegs = struct.unpack_from('<5I', e0_buf, 0)
+    assert magic == 0x230b0c5e and ver == 2 and nsegs == 7, f'unexpected Entry 0 header: magic={magic:#x} ver={ver} nsegs={nsegs}'
+    assert size == len(e0_buf), f'Entry 0 header size {size:#x} != len {len(e0_buf):#x}'
+    segs = []
+    off = 0x34
+    for _ in range(nsegs):
+        slen, dst, next_off = struct.unpack_from('<3I', e0_buf, off)
+        assert next_off == off + 12 + slen, f'Entry 0 segment desync at {off:#x}'
+        segs.append((off, off + 12, slen, dst, next_off))
+        off = next_off
+    return segs
+
+
+def _e0_vaddr_to_foff(segs, vaddr, length=4):
+    for _, poff, slen, dst, _ in segs:
+        if dst <= vaddr and vaddr + length <= dst + slen:
+            return poff + (vaddr - dst)
+    raise SystemExit(
+        f'Entry 0 address {vaddr:#x} (+{length}) not mapped in HX Stomp segments; '
+        f'make sure input is HX Stomp v3.80.0 (HX_Stomp_v3.80.0_0x103966115.hxf)'
+    )
+
+
+def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=None, preset_id=None, dsp_cost=None,
+                     n_params=None, folder=None):
+    """Update the Cortex-M4 main application (Entry 0, HX Stomp v3.80.0) for a new model:
+      1. Static Model Table (823 x 12 B @ 0x28017994 -> 824 x 12 B):
+         appends {new_name_idx, preset_id, 0, src_dsp_cost}, choosing a free
+         preset_id <= 832 (default 147), and patches all 6 table pointers
+         (including quicksort @ 0x28e01c08) and 5 movw count immediates.
+      2. UI Model Info Table (825 x 44 B @ 0x280023bc -> 826 x 44 B):
+         searched linearly when a block or preset loads; clones
+         src's 44-byte row with new_name_idx and 16-byte shortDisplayName, and
+         patches the 2 literal pointers (0x28de8fd4/d8) and movw count (0x28de8f30).
+      3. UI Browser Lists (48-byte items via 0x28e3e00c ptrs and 0x28e3e13c counts):
+         for every browser list containing src_name_idx (e.g. (11,0), (11,2), (12,0)),
+         relocates the list with a cloned 48-byte entry appended and increments its count.
+         With `folder` (category, name), the model goes not into that category's
+         lists but into a new browser folder (subcategory) of its own there, as
+         Preamp's one-item "Mic": the category's subcategory count + 1, the name,
+         a one-item list (data only, no code changes).
+      All relocated tables are appended to the end of seg[6] (at 0x28e3fadc+), which is
+      unused SDRAM well below the bootloader's 0x29f00000 ceiling."""
+    e0 = bytearray(e0)
+    segs = _parse_e0_segments(e0)
+
+    def vread(va, ln):
+        fo = _e0_vaddr_to_foff(segs, va, ln)
+        return bytes(e0[fo: fo + ln])
+
+    def vwrite(va, data):
+        fo = _e0_vaddr_to_foff(segs, va, len(data))
+        e0[fo: fo + len(data)] = data
+
+    def vu32(va):
+        return struct.unpack_from('<I', e0, _e0_vaddr_to_foff(segs, va, 4))[0]
+
+    def vu16(va):
+        return struct.unpack_from('<H', e0, _e0_vaddr_to_foff(segs, va, 2))[0]
+
+    # --- 1. Static Model Table (12-byte rows: <IHHI = {name_idx, preset_id, 0, dsp_cost}) ---
+    tab1_addr = vu32(E0_TAB1_BASE_PTRS[0])
+    for pva in E0_TAB1_BASE_PTRS[1:]:
+        assert vu32(pva) == tab1_addr, f'Entry 0 Table 1 pointer mismatch at {pva:#x}: {vu32(pva):#x} != {tab1_addr:#x}'
+    rd_cnt, tab1_cnt = _decode_thumb_movw(vread(E0_TAB1_CNT_INSN, 4))
+    assert vu32(E0_TAB1_END_PTR) == tab1_addr + 12 * tab1_cnt, 'Entry 0 Table 1 end pointer mismatch'
+    for iva in E0_TAB1_CNT_M1_INSNS:
+        _, c_m1 = _decode_thumb_movw(vread(iva, 4))
+        assert c_m1 == tab1_cnt - 1, f'Entry 0 Table 1 count-1 mismatch at {iva:#x}: {c_m1} != {tab1_cnt - 1}'
+
+    tab1_raw = bytearray(vread(tab1_addr, 12 * tab1_cnt))
+    used_pids = set()
+    src_tab1_row = None
+    for i in range(tab1_cnt):
+        m_idx, pid, z, cost = struct.unpack_from('<IHHI', tab1_raw, 12 * i)
+        used_pids.add(pid)
+        if m_idx == new_name_idx:
+            raise SystemExit(f'Entry 0 Table 1 already has string index {new_name_idx}')
+        if m_idx == src_name_idx:
+            src_tab1_row = (m_idx, pid, z, cost)
+    if src_tab1_row is None:
+        raise SystemExit(f'Source model (name_idx={src_name_idx}) not found in Entry 0 Table 1')
+
+    free_pids = sorted(set(range(1, 833)) - used_pids)
+    if not free_pids:
+        raise SystemExit('No free preset model IDs <= 832 left in Entry 0 Table 1')
+    new_pid = preset_id if preset_id is not None else free_pids[0]
+    if new_pid <= 0 or new_pid > 832 or new_pid in used_pids:
+        raise SystemExit(f'Invalid or already-used --preset-id {new_pid}; free IDs <= 832: {free_pids}')
+
+    src_dsp_cost = src_tab1_row[3] if dsp_cost is None else dsp_cost
+    tab1_raw += struct.pack('<IHHI', new_name_idx, new_pid, 0, src_dsp_cost)
+    new_tab1_cnt = tab1_cnt + 1
+
+    # --- 2. UI Model Info Table (44-byte rows, searched linearly) ---
+    tab2_addr = vu32(E0_TAB2_BASE_PTR)
+    assert vu32(E0_TAB2_P5_PTR) == tab2_addr + 5, 'Entry 0 Table 2 +5 pointer mismatch'
+    rd_t2, tab2_cnt = _decode_thumb_movw(vread(E0_TAB2_CNT_INSN, 4))
+    tab2_raw = bytearray(vread(tab2_addr, 44 * tab2_cnt))
+    src_tab2_row = None
+    for i in range(tab2_cnt):
+        row = tab2_raw[44 * i: 44 * (i + 1)]
+        m_idx = struct.unpack_from('<I', row, 0)[0]
+        if m_idx == src_name_idx:
+            src_tab2_row = bytearray(row)
+            break
+    if src_tab2_row is None:
+        raise SystemExit(f'Source model (name_idx={src_name_idx}) not found in Entry 0 44-byte UI table')
+
+    sname_bytes = (short_name if short_name is not None else display_name).encode('latin1')[:16].ljust(16, b'\x00')  # 16 as stock ('Transient Shaper'): byte 20 is a 0
+    struct.pack_into('<I', src_tab2_row, 0, new_name_idx)
+    src_tab2_row[4:20] = sname_bytes
+    if n_params is not None:
+        # bytes 24..35: three parameter counts (Entry 3's count for every stock row
+        # but a few with hidden ones, e.g. HD2_ChorusMono 7, 9, 9 of 9)
+        counts = struct.unpack_from('<3I', src_tab2_row, 24)
+        assert len(set(counts)) == 1, f'the source row has counts {counts}'
+        struct.pack_into('<3I', src_tab2_row, 24, n_params, n_params, n_params)
+    tab2_raw += src_tab2_row
+    new_tab2_cnt = tab2_cnt + 1
+
+    # --- 3. UI Browser Lists (19 x 4 = 76 lists of 48-byte items) ---
+    dname_bytes = display_name.encode('latin1')[:25].ljust(26, b'\x00')
+    reloc_lists = []  # (slot_idx, cat, sub, new_cnt, new_bytes)
+    btype_folder = None
+    for idx in range(E0_BLIST_SLOTS):
+        lptr = vu32(E0_BLIST_PTR_TAB + 4 * idx)
+        lcnt = vu32(E0_BLIST_CNT_TAB + 4 * idx)
+        if not lptr or not lcnt:
+            continue
+        lraw = bytearray(vread(lptr, 48 * lcnt))
+        matched_item = None
+        for k in range(lcnt):
+            item = lraw[48 * k: 48 * (k + 1)]
+            btype, m_idx, c_idx, u12 = struct.unpack_from('<IIiH', item, 0)
+            if m_idx == src_name_idx:
+                matched_item = bytearray(item)
+                # When c_idx == -1, u12 is the amp's preset_model_id; when c_idx != -1, u12 is the companion cab's preset_model_id
+                new_u12 = new_pid if c_idx == -1 else u12
+                struct.pack_into('<IIiH', matched_item, 0, btype, new_name_idx, c_idx, new_u12)
+                matched_item[14:40] = dname_bytes
+                struct.pack_into('<2I', matched_item, 40, 1, 0)
+                break
+        if matched_item is not None and folder and idx // 4 == folder[0]:
+            if btype_folder is None and c_idx == -1:
+                btype_folder = bytes(matched_item)
+        elif matched_item is not None:
+            lraw += matched_item
+            reloc_lists.append((idx, idx // 4, idx % 4, lcnt + 1, bytes(lraw)))
+    if folder:
+        cat, fname = folder
+        assert btype_folder is not None, f'the source model is in no list of category {cat}'
+        nsub = vu32(E0_SUBCAT_CNT + 4 * cat)
+        fbytes = fname.encode('latin1')[:25].ljust(26, b'\x00')
+        have = [s for s in range(nsub) if vread(E0_SUBCAT_NAMES + 104 * cat + 26 * s, 26) == fbytes]
+        if have:                                    # the folder exists (an earlier add-model): append
+            sub = have[0]
+            lptr = vu32(E0_BLIST_PTR_TAB + 4 * (4 * cat + sub))
+            lcnt = vu32(E0_BLIST_CNT_TAB + 4 * (4 * cat + sub))
+            reloc_lists.append((4 * cat + sub, cat, sub, lcnt + 1, vread(lptr, 48 * lcnt) + btype_folder))
+        else:
+            sub = nsub
+            assert sub < 4 and not vu32(E0_BLIST_PTR_TAB + 4 * (4 * cat + sub)), f'category {cat} has no free folder'
+            assert not any(vread(E0_SUBCAT_NAMES + 104 * cat + 26 * sub, 26)), 'the folder name slot is not empty'
+            vwrite(E0_SUBCAT_CNT + 4 * cat, struct.pack('<I', sub + 1))
+            vwrite(E0_SUBCAT_NAMES + 104 * cat + 26 * sub, fbytes)
+            reloc_lists.append((4 * cat + sub, cat, sub, 1, btype_folder))
+
+    if not reloc_lists:
+        raise SystemExit(f'Source model (name_idx={src_name_idx}) not found in any Entry 0 UI browser list')
+
+    # --- 4. Append relocated tables to the end of seg[6] and patch references ---
+    s6_hdr_off, s6_poff, s6_slen, s6_dst, s6_next_off = segs[6]
+    assert s6_slen % 4 == 0, f'Entry 0 seg[6] length {s6_slen:#x} is not 4-byte aligned'
+    cur_va = s6_dst + s6_slen
+    appended = bytearray()
+
+    new_tab1_addr = cur_va + len(appended)
+    appended += tab1_raw
+
+    new_tab2_addr = cur_va + len(appended)
+    appended += tab2_raw
+
+    blist_addrs = []
+    for idx, cat, sub, new_cnt, lbytes in reloc_lists:
+        l_va = cur_va + len(appended)
+        appended += lbytes
+        blist_addrs.append((idx, cat, sub, new_cnt, l_va))
+
+    assert len(appended) % 4 == 0
+
+    # Patch Table 1 pointers & counts
+    for pva in E0_TAB1_BASE_PTRS:
+        vwrite(pva, struct.pack('<I', new_tab1_addr))
+    vwrite(E0_TAB1_END_PTR, struct.pack('<I', new_tab1_addr + len(tab1_raw)))
+    vwrite(E0_TAB1_CNT_INSN, _encode_thumb_movw(rd_cnt, new_tab1_cnt))
+    for iva in E0_TAB1_CNT_M1_INSNS:
+        rd_i, _ = _decode_thumb_movw(vread(iva, 4))
+        vwrite(iva, _encode_thumb_movw(rd_i, new_tab1_cnt - 1))
+
+    # Patch Table 2 pointers & count
+    vwrite(E0_TAB2_BASE_PTR, struct.pack('<I', new_tab2_addr))
+    vwrite(E0_TAB2_P5_PTR, struct.pack('<I', new_tab2_addr + 5))
+    vwrite(E0_TAB2_CNT_INSN, _encode_thumb_movw(rd_t2, new_tab2_cnt))
+
+    # Patch UI Browser List pointers & counts
+    for idx, cat, sub, new_cnt, l_va in blist_addrs:
+        vwrite(E0_BLIST_PTR_TAB + 4 * idx, struct.pack('<I', l_va))
+        vwrite(E0_BLIST_CNT_TAB + 4 * idx, struct.pack('<I', new_cnt))
+
+    # Splice `appended` at the end of seg[6], update seg[6] header and Entry 0 size + CRC32
+    new_s6_slen = s6_slen + len(appended)
+    new_s6_next_off = s6_poff + new_s6_slen
+    out_e0 = bytearray(e0[:s6_next_off]) + appended
+    pad_len = (-len(out_e0)) & 3
+    out_e0 += b'\x00' * pad_len
+    struct.pack_into('<3I', out_e0, s6_hdr_off, new_s6_slen, s6_dst, new_s6_next_off)
+    struct.pack_into('<I', out_e0, 4, len(out_e0))
+    out_e0 = bytearray(l6ia.fix_internal_crcs(out_e0))
+    if len(out_e0) > E0_MAX:
+        raise SystemExit(f'Entry 0 would be {len(out_e0):#x} bytes; its partition holds {E0_MAX:#x}')
+    return bytes(out_e0), new_pid, src_dsp_cost, blist_addrs
+
+
+# Blob 0 must keep its stock length: the SHARC loads it into a buffer of exactly
+# 0x77aac words at 0x21c400 (the stock Blob 0 ends at 0x77aac, its last composite's
+# end) unless expand_sharc_blob0_buffer enlarges it. A longer Blob 0 stops the unit
+# at the splash once the loading bar is full.
+SHARC_BLOB0_WORDS = 0x77aac
+# Blob 0 has no unused composite to clone over: 0x6001ba..0x6001be, once thought unused,
+# are the Line 6 Aristocrat, Clarity, Voltage, Kinetic and Oblivion amps, referenced from
+# inside blobs 802..813 (overwriting them froze the UI on the unit). So a
+# clone is appended and Blob 0 grows (clone_composite_in_blob0, expand_sharc_blob0_buffer).
+SHARC_BLOB0_BASE = 0x21c400
+
+
+def sharc_blob0_check(b0, max_words=SHARC_BLOB0_WORDS):
+    """None if the SHARC would take this Blob 0, else why not. Models the SHARC's
+    relocation of Blob 0 at boot: every offset is checked (offset + length <= size) and then turned into a pointer
+    in place, for the header, the root member table, and every composite header with
+    its member records and their connection records. A failed check returns -42 and
+    the unit stops at the splash (as with members shared by two composite
+    headers: the second header finds pointers where offsets were)."""
+    if len(b0) > max_words:
+        return f'{len(b0):#x} words, the SHARC buffer holds {max_words:#x}'
+    w, size, base = list(b0), len(b0), SHARC_BLOB0_BASE
+    rel = lambda a: a - base                    # a relocated pointer back to an offset
+
+    def members(tab, n, where):
+        for m in range(n):
+            r = rel(tab) + 20 * m
+            for ln, off in ((w[r + 7], 8), (w[r + 9], 10), (2 * w[r + 11], 12)):
+                if w[r + off] + ln > size:
+                    return f'{where} member {m}: field {off} {w[r + off]:#x} + {ln:#x} past the end'
+                w[r + off] += base
+            k = w[r + 1] >> 1
+            if 3 * k + w[r + 2] > size:
+                return f'{where} member {m}: connection list {w[r + 2]:#x} past the end'
+            w[r + 2] += base
+            for j in range(k):
+                c = rel(w[r + 2]) + 3 * j
+                if (w[c] & ~1) + w[c + 1] > size:
+                    return f'{where} member {m} connection {j}: {w[c + 1]:#x} past the end'
+                w[c + 1] += base
+        return None
+
+    if w[1] + w[2] > size:
+        return 'header field 2 past the end'
+    w[2] += base
+    if 7 * w[0xf] + w[0x10] > size:
+        return 'composite table past the end'
+    w[0x10] += base
+    if 20 * w[0xa] + w[0xb] > size:
+        return 'root member table past the end'
+    w[0xb] += base
+    err = members(w[0xb], w[0xa], 'root')
+    if err:
+        return err
+    if 4 * w[0xc] + w[0xd] > size:
+        return 'table at field 0xd past the end'
+    w[0xd] += base
+    for i in range(w[0xf]):
+        h = rel(w[0x10]) + 7 * i
+        if 20 * w[h + 2] + w[h + 3] > size:
+            return f'composite {0x600000 + i:#x}: members past the end (shared with another header?)'
+        w[h + 3] += base
+        err = members(w[h + 3], w[h + 2], f'composite {0x600000 + i:#x}')
+        if err:
+            return err + ' (shared with another header?)'
+        if 4 * w[h + 4] + w[h + 5] > size:
+            return f'composite {0x600000 + i:#x}: ports past the end'
+        w[h + 5] += base
+    return None
+
+
+def clone_composite_in_blob0(b0, src_comp_id):
+    """Append a relocated copy of composite `src_comp_id` (e.g. 0x600189) to Blob 0 as a
+    new composite (0x600000 + n_comp: 0x6001c6, 0x6001c7, ...), with a copy of the
+    composite table one entry longer after it; no existing composite changes. Blob 0
+    grows past the stock SHARC buffer, so this needs Entry 2 patched by
+    expand_sharc_blob0_buffer (add-model does both); the result must pass
+    sharc_blob0_check with the enlarged size."""
+    b0 = list(b0)
+    n_comp = b0[0xf]
+    ctab = b0[0x10]
+    src_idx = src_comp_id - 0x600000
+    assert 0 <= src_idx < n_comp, f'invalid source composite {src_comp_id:#x}'
+
+    src_hdr = b0[ctab + 7 * src_idx: ctab + 7 * (src_idx + 1)]
+    src_start = src_hdr[3]
+    src_end = src_hdr[5] + 4 * src_hdr[4]
+
+    dst_idx = n_comp
+    new_ctab = len(b0)
+    dst_start = new_ctab + 7 * (n_comp + 1)
+    delta = dst_start - src_start
+
+    slice_w = list(b0[src_start: src_end])
+    for m in range(src_hdr[2]):
+        rbase = 20 * m
+        c_rel = slice_w[rbase + 2] - src_start
+        for j in range(slice_w[rbase + 1] >> 1):     # as many connection records as the SHARC walks
+            assert src_start <= slice_w[c_rel + 3 * j + 1] <= src_end
+            slice_w[c_rel + 3 * j + 1] += delta
+        for col in (2, 8, 10, 12):
+            assert src_start <= slice_w[rbase + col] <= src_end
+            slice_w[rbase + col] += delta
+
+    new_hdr = [src_hdr[0], src_hdr[1], src_hdr[2], src_hdr[3] + delta, src_hdr[4], src_hdr[5] + delta, src_hdr[6]]
+    b0.extend(b0[ctab: ctab + 7 * n_comp])
+    b0.extend(new_hdr)
+    b0.extend(slice_w)
+    b0[0xf] = n_comp + 1
+    b0[0x10] = new_ctab
+    err = sharc_blob0_check(b0, SHARC_BLOB0_MAX_WORDS)
+    assert err is None, f'the SHARC (with its Blob 0 buffer enlarged) would refuse this Blob 0: {err}'
+    return b0, 0x600000 + dst_idx
+
+
+# NAM Lite (tools/sharc/nam_lite_kernel.asm): an amp whose whole audio path is
+# graph input -> primitive 0x9c75 -> graph output, on a clone of the source amp's
+# composite (HD2_AmpLine6Clarity's). Its parameters are its own, consistent in
+# all three places that count them: Entry 3 (parameters and states), the blob's
+# parameter map (one input node per slot) and Entry 0 Table 2 (three counts).
+# A parameter map with slots Entry 3 had no parameter for showed the wrong
+# model name on the unit, and Table 2's counts changed alone crashed the
+# browser; all three must change together.
+NAM_HOST_COMPOSITE = 0x6001a9   # Line 6 Clarity & co.: in port, the amp (one sub-composite), out port
+# (slot, source model, source parameter, pid, displayName or None, default or None):
+# 0x611ddd puts pid 5..11 in DM(5..11, I0). Model, the first knob, is the IR block's
+# IR Select (an integer 1..128; on an amp the unit shows the number, not the IR's
+# name); Bass..Presence are a tone stack, flat at 0.5; Drive 0 dB and Ch Vol +12 dB at 0.5.
+NAM_PARAMS = ((1, 'HD2_ImpulseResponse2048Mono', 'Index', 7, 'Model', None),
+              (2, 'HD2_AmpLine6Clarity', 'Drive', 5, None, 0.5),
+              (3, 'HD2_AmpLine6Clarity', 'Bass', 8, None, 0.5),
+              (4, 'HD2_AmpLine6Clarity', 'Mid', 9, None, 0.5),
+              (5, 'HD2_AmpLine6Clarity', 'Treble', 10, None, 0.5),
+              (6, 'HD2_AmpLine6Clarity', 'Presence', 11, None, 0.5),
+              (7, 'HD2_AmpLine6Clarity', 'ChVol', 6, None, 0.5))
+NAM_INPUT_OP = {3: 0x0a, 2: 0x0b, 1: 0x0d}   # parameter type (float, int, bool) -> pmap input node op
+
+
+def nam_params(e3, info):
+    """NAM_PARAMS resolved against Entry 3: per slot a dict with the source
+    parameter's record, its meta bytes (displayName replaced when asked) and
+    its state record's name, the pid and the input op. States are one per
+    input node of a model's parameter map, in node order (every stock model)."""
+    S = info['strings']
+    out = []
+    for slot, mname, pname, pid, disp, dflt in NAM_PARAMS:
+        m = find_model(info, mname)
+        p = next(p for p in m['params'] if p['name'] == pname)
+        d = m['words']
+        st = None
+        for k in range(d[6]):
+            _, _, ni, _, _ = struct.unpack_from('<5I', e3, d[10] + 20 * k)
+            if S[ni].split('.')[0] == pname + 'State':
+                st = S[ni]
+        assert st, f'{mname} has no state for {pname}'
+        pm_cnt, pm_off = struct.unpack_from('<2I', e3, p['off'])
+        meta = []                                   # (key, record type, value: a string when type 7)
+        for k in range(pm_cnt):
+            ks, kt, kv = struct.unpack_from('<3I', e3, pm_off + 12 * k)
+            v = S[kv] if kt == 7 else kv
+            if disp and S[ks] in ('displayName', 'displayNameShort'):
+                v = disp
+            meta.append((S[ks], kt, v))
+        if disp and 'displayName' not in [k for k, _, _ in meta]:
+            meta.append(('displayName', 7, disp))
+        raw = list(struct.unpack_from('<5I3I', e3, p['off']))
+        if dflt is not None:
+            raw[7] = f2u(dflt)
+        raw[4] = slot
+        out.append({'slot': slot, 'pid': pid, 'name': pname, 'type': p['type'], 'op': NAM_INPUT_OP[p['type']],
+                    'raw': raw, 'meta': meta, 'state': st, 'default_word': raw[7]})
+    return out
+
+
+def nam_host_member(b0, comp_id):
+    """Make member 1 of composite `comp_id` (a clone of NAM_HOST_COMPOSITE) the
+    primitive 0x9c75 (dm 145, pm 13), keeping its ports (1 in, 1 out)."""
+    ct = b0[0x10]
+    hdr = b0[ct + 7 * (comp_id - 0x600000): ct + 7 * (comp_id - 0x600000) + 7]
+    assert hdr[2] == 3, f'{comp_id:#x} has {hdr[2]} members, the NAM host wants 3'
+    r = hdr[3] + 20
+    assert 0x600000 <= b0[r + 6] < 0x601000 and b0[r + 7] == 1 and b0[r + 9] == 1, 'member 1 is not a 1-in 1-out composite'
+    b0[r + 6] = 0x9c75
+    b0[r + 11] = 0                  # no static init parameters
+    b0[r + 13], b0[r + 14] = 0x91, 0x0d
+    for k in range(15, 20):         # sub-arena sizes: 0 for a primitive, as stock primitive members have
+        b0[r + k] = 0
+
+
+def nam_host_blob(comp_id, params):
+    """A model blob for the NAM host composite `comp_id`: no node-tree changes,
+    a parameter map of one input node per parameter (node k for params[k]: op
+    0xa float, 0xb int, 0xd bool) and one node per parameter writing member [2]
+    (path {1, 2}: the composite's member 1) as its pid.
+    The layout, as every stock blob has it:
+      pmap header: offsets of tables A (nodes, 10 words), B, C (edges), D (slot
+      map), E, F (child graphs), then nA nB nC nD nE nF, then sizes H[12..17]:
+      H12 = sum of state words, H13 = nA, H14 = nD + sum n_out + inputs,
+      H15 = nC + nD + inputs, H16 = nD, H17 = nE.
+      node {data_off, 0, id, op, n_out, state_words, data_len, data_len, is_input, 0};
+      op 0xa/0xb/0xd inputs, op 1 write a member param, data {path_off, pid, mode 1 = child}.
+      D {node, j, slot, 0} by slot; E {node, j, j, 0} by node (j: the state index).
+      pinit {path_off, pid, value_off, kind}: kind 1 on the root feeds slot pid,
+      kind 2 calls the member's fn_ctrl. init list {1, word_off}: every word that
+      holds a path offset, so the loader turns it into a pointer."""
+    n = len(params)
+    a_off = 0x18
+    data_off = a_off + 10 * 2 * n
+    c_off = data_off + 3 * n
+    d_off = c_off + 4 * n
+    e_off = d_off + 4 * n
+    end = e_off + 4 * n
+    pm = [a_off, 0, c_off, 0, c_off, 0, d_off, 0, e_off, 0, end, 0]
+    pm += [5 * n, 2 * n, 3 * n, 3 * n, n, n]
+    pm += [2 * n, 0, n, n, n, 0]
+    for k, p in enumerate(params):                  # inputs, nodes 0 .. n-1
+        pm += [data_off, 0, k, p['op'], 1, 2, 0, 0, 1, 0]
+    for k in range(n):                              # writers, nodes n .. 2n-1
+        pm += [data_off + 3 * k, 0, n + k, 1, 0, 3, 3, 3, 0, 0]
+    for p in params:
+        pm += [0x0e, p['pid'], 1]
+    for k in range(n):                              # C: input k -> writer k
+        pm += [k, n + k, 0, 0]
+    for k, p in sorted(enumerate(params), key=lambda kp: kp[1]['slot']):
+        pm += [k, k, p['slot'], 0]
+    for k in range(n):
+        pm += [k, k, k, 0]
+    assert len(pm) == end
+
+    v0 = 0x10
+    tree = v0 + 2 * 2 * n
+    pmo = tree + 4
+    pin = pmo + len(pm)
+    ini = pin + 4 * 2 * n
+    sub = ini + 2 * 3 * n
+    b = [3, 2, tree, 1, ini, 3 * n, pmo, len(pm), sub, 0, pin, 2 * n]
+    b += [1, 0, 1, 2]                               # paths [0] (the root) and [2] (member 1)
+    for p in params + params:
+        b += [1, p['default_word']]
+    b += [0, comp_id, 0, 0]                         # node tree: the root only
+    b += pm
+    for k, p in enumerate(params):
+        b += [0x0c, p['slot'], v0 + 2 * k, 1]
+    for k, p in enumerate(params):
+        b += [0x0e, p['pid'], v0 + 2 * (n + k), 2]
+    for k in range(n):
+        b += [1, pmo + data_off + 3 * k]
+    for k in range(2 * n):
+        b += [1, pin + 4 * k]
+    assert len(b) == sub
+    return b
+
+
+def pmap_slots_without_param(e4, blob_index, params):
+    """Slots in blob `blob_index`'s parameter map (pmap Table 3) with no parameter in
+    `params` (parse_entry3_full records). Empty for every stock model."""
+    w4 = struct.unpack('<%dI' % (len(e4) // 4), e4)
+    d = w4[3]
+    ln, off = w4[d + 2 * blob_index], w4[d + 2 * blob_index + 1]
+    bw = w4[off: off + ln]
+    if not bw or bw[0] != 3 or ln < 12:
+        return []
+    po = bw[6]
+    t3, t4 = bw[po + 6], bw[po + 8]
+    slots = {bw[po + t3 + 4 * j + 2] for j in range((t4 - t3) // 4)}
+    return sorted(slots - {p['slot'] for p in params})
+
+
+def add_model_entry4(e4, src_blob_index, nam):
+    """Entry 4 with one more blob, the NAM host: a copy of the model's composite
+    (NAM_HOST_COMPOSITE) appended to Blob 0 (0x6001c6, 0x6001c7, ...;
+    clone_composite_in_blob0) with its amp member made primitive 0x9c75
+    (nam_host_member), and a new blob for it (nam_host_blob) at the end of Entry 4,
+    the directory relocated. Blob 0 then moves to the tail; Entry 2 must be patched
+    to match (expand_sharc_blob0_buffer; cmd_add_model does it).
+    Rebuilds the tail region (directory and added blobs) when called repeatedly."""
+    w4 = list(struct.unpack('<%dI' % (len(e4) // 4), e4))
+    assert w4[0] == 0x28267e5e and w4[1] == 4, f'bad Entry 4 header: {w4[:6]}'
+    nblobs, dir_off, b0_off, total_words = w4[2], w4[3], w4[4], w4[5]
+    assert total_words == len(w4)
+    assert 0 <= src_blob_index < nblobs
+    dir_pairs = [(w4[dir_off + 2 * k], w4[dir_off + 2 * k + 1]) for k in range(nblobs)]
+    src_ln, src_off = dir_pairs[src_blob_index]
+    src_blob_words = list(w4[src_off: src_off + src_ln])
+
+    b0_ln, b0_cur_off = dir_pairs[0]
+    b0_words = list(w4[b0_cur_off: b0_cur_off + b0_ln])
+    added_blobs = [list(w4[off: off + ln]) for (ln, off) in dir_pairs[864:]]
+
+    tl = src_blob_words[2]
+    src_comp_id = src_blob_words[tl + 1]
+    assert src_comp_id == NAM_HOST_COMPOSITE, \
+        f'the NAM host wants a model on composite {NAM_HOST_COMPOSITE:#x} (HD2_AmpLine6Clarity), not {src_comp_id:#x}'
+    b0_words, new_comp_id = clone_composite_in_blob0(b0_words, src_comp_id)
+    nam_host_member(b0_words, new_comp_id)
+    err = sharc_blob0_check(b0_words, SHARC_BLOB0_MAX_WORDS)
+    assert err is None, err
+    src_blob_words = nam_host_blob(new_comp_id, nam)
+
+    added_blobs.append(src_blob_words)
+    if dir_off > 6:
+        w4 = w4[:dir_off]
+
+    new_blob_idx = nblobs
+    new_nblobs = nblobs + 1
+    new_dir_off = len(w4)
+    cur_end = new_dir_off + 2 * new_nblobs
+    dir_pairs[0] = (len(b0_words), cur_end)
+    w4[4] = cur_end
+    cur_end += len(b0_words)
+
+    dir_pairs = dir_pairs[:864]
+    for ab in added_blobs:
+        dir_pairs.append((len(ab), cur_end))
+        cur_end += len(ab)
+
+    for ln, off in dir_pairs:
+        w4.extend((ln, off))
+    w4.extend(b0_words)
+    for ab in added_blobs:
+        w4.extend(ab)
+
+    w4[2] = new_nblobs
+    w4[3] = new_dir_off
+    w4[5] = len(w4)
+    out = struct.pack('<%dI' % len(w4), *w4)
+    if len(out) > E4_MAX:
+        raise SystemExit(f'Entry 4 would be {len(out):#x} bytes; its partition holds {E4_MAX:#x}')
+    return out, new_blob_idx, new_comp_id
+
+
+def add_model_entry3(e3, src, new_name, display_name, blob_index, nam):
+    """Entry 3 with one more model: a copy of `src` (a parse_entry3_full model)
+    under a new internal name and displayName, with the next model ID and the
+    parameters `nam` (nam_params).
+
+    Nothing in stock Entry 3 (0..0xcadb4) moves. The string section and the
+    descriptor table are written in the tail region from 0xcae00 (the stock
+    size rounded up to 512), and when called repeatedly, the tail region is
+    rebuilt in place so each additional model adds only ~680 bytes."""
+    e3 = bytearray(e3)
+    h = list(struct.unpack_from('<10I', e3, 0))
+    magic, ver, tsize, str_off, scrc, str_len, mtab_off, mcnt, gtab_off, gcnt = h
+    assert tsize == len(e3), 'Entry 3 size field does not match its length'
+
+    # strings: [nstr][len] records(12 B) data; rel_off is from the data start
+    nstr, slen = struct.unpack_from('<2I', e3, str_off)
+    assert slen == str_len
+    recs = e3[str_off + 8: str_off + 8 + 12 * nstr]
+    data = bytes(e3[str_off + 8 + 12 * nstr: str_off + slen])
+    names = {}
+    for i in range(nstr):
+        roff, crc, ln = struct.unpack_from('<3I', recs, 12 * i)
+        names.setdefault(data[roff:roff + ln].decode('latin1'), i)
+    if new_name in names:
+        raise SystemExit(f'a string {new_name!r} already exists: pick another internal name')
+    added = []
+
+    def string(sv):
+        nonlocal data
+        if sv in names:
+            return names[sv]
+        raw = sv.encode('latin1')
+        added.append(struct.pack('<3I', len(data), zlib.crc32(raw) & 0xffffffff, len(raw)))
+        data += raw + b'\x00'
+        names[sv] = nstr + len(added) - 1
+        return names[sv]
+
+    def extract_model_tail_items(dm):
+        m_meta = bytes(e3[dm[1]: dm[1] + 12 * dm[0]])
+        m_states = bytes(e3[dm[10]: dm[10] + 20 * dm[6]]) if (dm[6] and dm[10] >= base_end) else None
+        p_items = []
+        for p_i in range(dm[7]):
+            poff = dm[11] + 32 * p_i
+            pm_cnt, pm_off, p_name_idx, p_type, p_slot, p_min, p_max, p_def = struct.unpack_from('<5I3f', e3, poff)
+            pmeta_b = bytes(e3[pm_off: pm_off + 12 * pm_cnt]) if (pm_cnt and pm_off >= base_end) else None
+            p_items.append((pm_cnt, pm_off, p_name_idx, p_type, p_slot, p_min, p_max, p_def, pmeta_b))
+        return (dm, m_meta, m_states, p_items)
+
+    # Preserve any already-added models (864..mcnt-1) and slot lists before rebuilding the tail at 0xcae00+
+    base_end = str_off if str_off > 0x200 else _align(len(e3), 0x200)
+    extra_models = [extract_model_tail_items(list(struct.unpack_from('<14I', e3, mtab_off + 56 * m_i)))
+                    for m_i in range(864, mcnt)]
+
+    i_name = string(new_name)
+    i_disp = string(display_name)
+    i_key = names['displayName']
+
+    new_id = mcnt
+    d = list(struct.unpack_from('<14I', e3, src['off']))
+    meta = bytearray(e3[d[1]: d[1] + 12 * d[0]])
+    for k in range(d[0]):
+        ks, kt, kv = struct.unpack_from('<3I', meta, 12 * k)
+        if ks == i_key:
+            assert kt == 7, 'displayName is not a string record'
+            struct.pack_into('<3I', meta, 12 * k, ks, kt, i_disp)
+
+    # one state per parameter map input node (nam_host_blob: node k for nam[k])
+    m_states = b''.join(struct.pack('<5I', 0, 0x80b98, string(p['state']), p['type'], k)
+                        for k, p in enumerate(nam))
+    d[6] = len(nam)
+    p_items = []
+    for p in nam:
+        pmeta_b = b''.join(struct.pack('<3I', string(k), t, string(v) if t == 7 else v) for k, t, v in p['meta'])
+        _, _, _, ty, sl, mn, mx, df = p['raw']
+        p_items.append((len(p['meta']), 0, string(p['name']), ty, sl, mn, mx, df, pmeta_b))
+    p_items = [(c, o, ni, t, sl, *struct.unpack('<3f', struct.pack('<3I', mn, mx, df)), mb)
+               for c, o, ni, t, sl, mn, mx, df, mb in p_items]
+    d[7] = len(nam)
+
+    d[2] = i_name
+    d[3] = new_id
+    d[13] = blob_index
+    extra_models.append((d, bytes(meta), m_states, p_items))
+
+    n_new = nstr + len(added)
+    section = struct.pack('<2I', n_new, 8 + 12 * n_new + len(data)) + bytes(recs) + b''.join(added) + data
+
+    saved_slots = []
+    for k in range(gcnt):
+        rec = gtab_off + 32 * k
+        lc, lo = struct.unpack_from('<2I', e3, rec + 20)
+        lst = list(struct.unpack_from(f'<{lc}I', e3, lo)) if lc else []
+        saved_slots.append((k, lc, lo, lst))
+
+    new_str_off = base_end
+    new_mtab = _align(new_str_off + len(section), 0x200)
+    cur_off = new_mtab + 56 * (mcnt + 1)
+    tail_blobs = bytearray()
+    desc_tail = bytearray()
+    for dm, m_meta, m_states, p_items in extra_models:
+        dm[1] = cur_off + len(tail_blobs)
+        tail_blobs += m_meta
+        tail_blobs += bytes(_align(len(tail_blobs), 4) - len(tail_blobs))
+        if m_states is not None:
+            dm[10] = cur_off + len(tail_blobs)
+            tail_blobs += m_states
+            tail_blobs += bytes(_align(len(tail_blobs), 4) - len(tail_blobs))
+        if p_items:
+            resolved_p = []
+            for pm_cnt, pm_off, p_name_idx, p_type, p_slot, p_min, p_max, p_def, pmeta_b in p_items:
+                if pmeta_b is not None:
+                    pm_off = cur_off + len(tail_blobs)
+                    tail_blobs += pmeta_b
+                    tail_blobs += bytes(_align(len(tail_blobs), 4) - len(tail_blobs))
+                resolved_p.append(struct.pack('<5I3f', pm_cnt, pm_off, p_name_idx, p_type, p_slot, p_min, p_max, p_def))
+            dm[11] = cur_off + len(tail_blobs)
+            tail_blobs += b''.join(resolved_p)
+            tail_blobs += bytes(_align(len(tail_blobs), 4) - len(tail_blobs))
+        desc_tail += struct.pack('<14I', *dm)
+
+    table = bytes(e3[mtab_off: mtab_off + 56 * 864]) + bytes(desc_tail)
+    out = bytearray(e3[:base_end])
+    if len(out) < base_end:
+        out += bytes(base_end - len(out))
+    out += section
+    out += bytes(new_mtab - len(out)) + table + tail_blobs
+    out += bytes(_align(len(out), 4) - len(out))
+
+    slots = []
+    for k, lc, lo, lst in saved_slots:
+        rec = gtab_off + 32 * k
+        if src['model_id'] in lst:
+            lst = lst + [new_id]
+            slots.append(k)
+        if src['model_id'] in lst or lo >= base_end:
+            struct.pack_into('<2I', out, rec + 20, len(lst), len(out))
+            out += struct.pack(f'<{len(lst)}I', *lst)
+    h[2], h[3], h[5], h[6], h[7] = len(out), new_str_off, len(section), new_mtab, mcnt + 1
+    h[4] = zlib.crc32(out[new_str_off:new_str_off + len(section)]) & 0xffffffff
+    struct.pack_into('<10I', out, 0, *h)
+    if len(out) > E3_MAX:
+        raise SystemExit(f'Entry 3 would be {len(out):#x} bytes; its partition holds {E3_MAX:#x}')
+    return bytes(out), new_id, slots
+
+
+def cmd_add_model(args):
+    l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
+    e0 = get_entry_swapped(l6ia_bytes, 0)
+    e3 = get_entry_swapped(l6ia_bytes, 3)
+    info = parse_entry3_full(e3)
+    src = find_model(info, args.clone)
+    src_name_idx = src['words'][2]
+
+    nam = nam_params(e3, info)
+    e4 = get_entry_swapped(l6ia_bytes, 4)
+    new_e4, blob, new_comp_id = add_model_entry4(e4, src['blob_index'], nam)
+    replaced = {4: new_e4}
+    print(f"[+] Entry 4: NAM host blob {blob} on composite {new_comp_id:#x} (a copy of {src['name']}'s); "
+          f"{len(e4):#x} -> {len(new_e4):#x} bytes")
+    entries = l6ia.parse(l6ia_bytes)                # Blob 0 grew: the SHARC's buffer must grow with it
+    e2_raw = l6ia_bytes[entries[2]['payload_off']: entries[2]['payload_off'] + entries[2]['payload_len']]
+    e2_exp_raw, e2_changed = expand_sharc_blob0_buffer(e2_raw)
+    replaced[2] = l6ia.swap32(e2_exp_raw)
+    if e2_changed:
+        print(f"[+] Entry 2: SHARC Blob 0 buffer 0x77aac -> {SHARC_BLOB0_MAX_WORDS:#x} words, "
+              f"Heap 6 moved to {HEAP6_MOVED[0]:#x}..{HEAP6_MOVED[1]:#x}")
+
+    new_e3, new_id, slots = add_model_entry3(e3, src, args.name, args.display_name, blob, nam)
+    replaced[3] = new_e3
+    orphans = pmap_slots_without_param(replaced.get(4, None) or get_entry_swapped(l6ia_bytes, 4), blob,
+                                       parse_entry3_full(new_e3)['models'][new_id]['params'])
+    if orphans:
+        raise SystemExit(f'blob {blob} maps slots {orphans} that the new model has no parameter for '
+                         f'(no stock model does that; the unit then shows the wrong model name)')
+
+    # Check Entry 3 by parsing the result the way inspect does.
+    chk = parse_entry3_full(new_e3)
+    m = chk['models'][new_id]
+    new_name_idx = m['words'][2]
+    assert (m['name'], m['displayName'], m['model_id'], m['blob_index']) == (args.name, args.display_name, new_id, blob)
+    assert [(p['name'], p['slot'], p['type']) for p in m['params']] == [(p['name'], p['slot'], p['type']) for p in nam]
+    assert [struct.unpack_from('<5I3I', new_e3, p['off'])[3:] for p in m['params']] == [tuple(p['raw'][3:]) for p in nam]
+    assert [list(p['meta'].items()) for p in m['params']] == \
+           [[(k, v) for k, _, v in p['meta']] for p in nam]
+    assert all(a['name'] == b['name'] and a['displayName'] == b['displayName'] and a['words'][1:] == b['words'][1:]
+               for a, b in zip(info['models'][:864], chk['models'][:864])), 'a stock model changed'
+    assert all((a['name'], a['displayName'], a['model_id'], a['blob_index'],
+                [(p['name'], p['slot'], p['min'], p['max'], p['default']) for p in a['params']]) ==
+               (b['name'], b['displayName'], b['model_id'], b['blob_index'],
+                [(p['name'], p['slot'], p['min'], p['max'], p['default']) for p in b['params']])
+               for a, b in zip(info['models'][864:], chk['models'][864:-1])), 'an existing added model changed'
+    for k in slots:
+        lc, lo = struct.unpack_from('<2I', new_e3, chk['header'][8] + 32 * k + 20)
+        lst = struct.unpack_from(f'<{lc}I', new_e3, lo)
+        old_lc, old_lo = struct.unpack_from('<2I', e3, chk['header'][8] + 32 * k + 20)
+        assert lst[:-1] == struct.unpack_from(f'<{old_lc}I', e3, old_lo) and lst[-1] == new_id
+    blob_note = f"blob {blob}"
+    print(f"[+] Entry 3: {args.name} ({args.display_name}) = model {new_id} (str_idx={new_name_idx}), a copy of {src['name']} "
+          f"({blob_note}), added to slots {slots}; {len(e3):#x} -> {len(new_e3):#x} bytes")
+
+    new_e0, new_pid, dsp_cost, blist_addrs = add_model_entry0(
+        e0, src_name_idx, new_name_idx, args.display_name,
+        short_name=args.short_name, preset_id=args.preset_id, dsp_cost=args.dsp_cost,
+        n_params=len(nam),
+        folder=(12, args.folder) if args.folder else None
+    )
+    replaced[0] = new_e0
+
+    # Verify Entry 0 tables, pointers, and instruction counts
+    segs_chk = _parse_e0_segments(new_e0)
+    t1_addr = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, E0_TAB1_BASE_PTRS[0]))[0]
+    _, t1_cnt = _decode_thumb_movw(new_e0[_e0_vaddr_to_foff(segs_chk, E0_TAB1_CNT_INSN):][:4])
+    last_t1 = struct.unpack_from('<IHHI', new_e0, _e0_vaddr_to_foff(segs_chk, t1_addr + 12 * (t1_cnt - 1), 12))
+    assert last_t1 == (new_name_idx, new_pid, 0, dsp_cost)
+    t2_addr = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, E0_TAB2_BASE_PTR))[0]
+    _, t2_cnt = _decode_thumb_movw(new_e0[_e0_vaddr_to_foff(segs_chk, E0_TAB2_CNT_INSN):][:4])
+    last_t2_idx = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, t2_addr + 44 * (t2_cnt - 1), 44))[0]
+    assert last_t2_idx == new_name_idx
+    menus_str = ', '.join(f'({cat},{sub})->{cnt}' for _, cat, sub, cnt, _ in blist_addrs)
+    print(f"[+] Entry 0: preset_id={new_pid} (<= 832), dsp_cost={dsp_cost}, "
+          f"Table 1 ({t1_cnt} rows @ {t1_addr:#x}), Table 2 ({t2_cnt} rows @ {t2_addr:#x}), "
+          f"UI browser lists [{menus_str}]; {len(e0):#x} -> {len(new_e0):#x} bytes")
+
+    new_l6ia, old_end, new_end = l6ia.rebuild_archive(l6ia_bytes, replaced)
+    donor = args.input if is_hxf else args.donor
+    save_l6ia_to_any(new_l6ia, args.output, donor_hxf=donor)
+    print(f"[+] Wrote {args.output} (L6IA {old_end:#x} -> {new_end:#x} bytes, delta {new_end - old_end:+d} B)")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest='cmd', required=True)
+
+    p_ins = sub.add_parser('inspect', help='List the amps, or show one amp across Entry 3 and Entry 4')
+    p_ins.add_argument('input', help='Path to .hxf or L6IA')
+    p_ins.add_argument('model', nargs='?', help='Model name (e.g. HD2_AmpNAMLite), displayName, or ID')
+
+    p_add = sub.add_parser('add-model', help='Add the NAM host amp to Entry 0, 2, 3 and 4')
+    p_add.add_argument('input', help='Input .hxf or L6IA (the stock HX Stomp v3.80.0 firmware)')
+    p_add.add_argument('output', help='Output .hxf or L6IA')
+    p_add.add_argument('--clone', default='HD2_AmpLine6Clarity',
+                       help='Model whose composite and list entries the new amp copies (default HD2_AmpLine6Clarity)')
+    p_add.add_argument('--name', required=True, help='New internal name (e.g. HD2_AmpNAMLite)')
+    p_add.add_argument('--display-name', required=True, help='Name shown on the unit (e.g. "NAM A2 Lite")')
+    p_add.add_argument('--folder', help='list the model in a new folder of this name under Amp '
+                       '(e.g. NAM) instead of Amp > Guitar')
+    p_add.add_argument('--short-name', help='16-char short display name in Entry 0 Table 2 (defaults to --display-name)')
+    p_add.add_argument('--preset-id', type=int, help='Preset model ID <= 832 in Entry 0 Table 1 (default: first free ID, 147)')
+    p_add.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
+    p_add.add_argument('--dsp-cost', type=int,
+                       help="DSP cost for Entry 0 Table 1 (default: the source's; stock amps 775..3700, "
+                            "apparently hundredths of a per cent of the SHARC)")
+
+    p_pat = sub.add_parser('patch', help='Inject the SHARC kernel into Entry 2 and hook primitive 0x9c75 to it')
+    p_pat.add_argument('input', help='Input .hxf or L6IA')
+    p_pat.add_argument('output', help='Output .hxf or L6IA')
+    p_pat.add_argument('--asm', required=True, help='SHARC assembly file (tools/sharc/nam_lite.py -o ...)')
+    p_pat.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
+
+    args = ap.parse_args()
+    {'add-model': cmd_add_model, 'inspect': cmd_inspect, 'patch': cmd_patch}[args.cmd](args)
+
+
+if __name__ == '__main__':
+    main()
