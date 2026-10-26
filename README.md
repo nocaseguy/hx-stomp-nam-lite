@@ -15,7 +15,7 @@ This repository adds **Neural Amp Modeler (NAM) A2 Lite** to the stock Line 6 HX
   | **Bass / Mid / Treble / Presence** | A tone stack after the model, ±12 dB, flat at 5.0 (100 Hz shelf, 650 Hz peak, 2.5 kHz and 5.5 kHz shelves) |
   | **Ch Vol** | Output level; +12 dB at 5.0 (A2 captures sit low) |
 
-- **`tools/nam2ir.py`** converts a `.nam` file into a `.wav`. HX Edit imports that `.wav` as a User IR. The "IR" is not a sound: it carries the capture's 1,871 weights, and the amp loads them from the slot.
+- **A converter** (a web page, `web/index.html`, or `tools/nam2ir.py`) turns a `.nam` file into a `.wav`. HX Edit imports that `.wav` as a User IR. The "IR" is not a sound: it carries the capture's 1,871 weights, and the amp loads them from the slot.
 
 Everything else in the firmware stays stock 3.80.0.
 
@@ -66,10 +66,11 @@ Only 4 of the 15 parts of the firmware change: the main application's model tabl
 
 ## Use
 
-1. Convert a capture:
+1. Convert a capture. Either open **`web/index.html`** in a browser and drop your `.nam` files on it, or run:
    ```sh
    python3 tools/nam2ir.py "My Amp.nam" -o "My Amp NAM.wav"
    ```
+   The web page converts several files at once and can number them by slot. It runs entirely in your browser, uploads nothing, and writes the same bytes as `nam2ir.py`.
 2. In HX Edit, import the `.wav` into a User IR slot, for example slot 5.
 3. On the Stomp, add **Amp → NAM → NAM A2 Lite** and set **Model** to 5.
 
@@ -112,6 +113,7 @@ This has been done on a real unit after a modified firmware hung at the splash, 
 ```
 build.py                      one-step build from the stock .hxf
 tools/nam2ir.py               .nam -> User IR .wav
+web/index.html                the same in a browser (web/nam2ir-core.js)
 tools/patch_amp.py            inspect / add-model / patch
 tools/hxf.py, l6ia.py         .hxf container and L6IA archive
 tools/l6ia_verify.py          checks every checksum in an archive

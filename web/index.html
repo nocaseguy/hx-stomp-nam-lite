@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NAM to HX Stomp IR</title>
+<meta name="description" content="Convert NAM A2 Lite captures into User IR files for NAM A2 Lite on the HX Stomp. Runs in your browser; nothing is uploaded.">
+<style>
+  /* Layout: one narrow column, a tool panel on top (drop area + options), the converted files as a list of rows under it, the three steps beside on wide screens. */
+  :root {
+    --bg: #f3f4f6;
+    --panel: #ffffff;
+    --ink: #1b1e24;
+    --muted: #5d6470;
+    --line: #d9dce2;
+    --accent: #c24a12;
+    --accent-ink: #ffffff;
+    --accent-soft: #fbe9df;
+    --ok: #1d7a46;
+    --ok-soft: #e1f3e8;
+    --bad: #b3261e;
+    --bad-soft: #fbe5e3;
+    --warn: #8a5a00;
+    --warn-soft: #fbf0d5;
+    --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --r: 10px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121418; --panel: #1b1e24; --ink: #eceef2; --muted: #a0a7b3; --line: #2e333c;
+      --accent: #f07a3c; --accent-ink: #1b0d05; --accent-soft: #3a2014;
+      --ok: #5fcf8d; --ok-soft: #143222; --bad: #ff8a80; --bad-soft: #3b1715; --warn: #f2c050; --warn-soft: #362a0f;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121418; --panel: #1b1e24; --ink: #eceef2; --muted: #a0a7b3; --line: #2e333c;
+    --accent: #f07a3c; --accent-ink: #1b0d05; --accent-soft: #3a2014;
+    --ok: #5fcf8d; --ok-soft: #143222; --bad: #ff8a80; --bad-soft: #3b1715; --warn: #f2c050; --warn-soft: #362a0f;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 var(--font-ui);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 32px 48px;
+  }
+  [hidden] { display: none !important; }
+  .wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 24px; }
+
+  header { display: grid; gap: 6px; }
+  .eyebrow { font: 600 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  h1 { margin: 0; font-size: clamp(26px, 4vw, 34px); line-height: 1.15; letter-spacing: -.01em; text-wrap: balance; }
+  .lede { margin: 0; color: var(--muted); max-width: 62ch; }
+
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
+  @media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+  .tool { display: grid; gap: 16px; min-width: 0; }
+
+  .drop {
+    position: relative; display: grid; place-items: center; gap: 8px; text-align: center;
+    padding: 36px 20px; border: 2px dashed var(--line); border-radius: var(--r);
+    background: var(--panel); cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .drop strong { font-size: 17px; }
+  .drop small { color: var(--muted); }
+  .jack { width: 44px; height: 44px; color: var(--accent); }
+
+  .opts {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+  }
+  .opts label { display: inline-flex; align-items: center; gap: 8px; }
+  .opts input[type="number"] {
+    width: 4.5em; padding: 4px 6px; font: inherit; font-variant-numeric: tabular-nums;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink);
+  }
+  .opts .hint { color: var(--muted); font-size: 13px; flex: 1 1 220px; min-width: 0; }
+
+  .list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .list-head h2 { margin: 0; font-size: 15px; }
+  .list { display: grid; gap: 8px; }
+
+  .row {
+    display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 4px 14px; align-items: center;
+    padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+  }
+  .row.bad { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+  .slot {
+    grid-row: span 2; display: grid; place-items: center; align-self: stretch;
+    border-radius: 8px; background: var(--bg); border: 1px solid var(--line);
+    font: 700 20px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink);
+  }
+  .slot small { display: block; font: 600 9px/1 var(--font-mono); letter-spacing: .08em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  .row.bad .slot { color: var(--bad); }
+  .name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+  .name .out { display: block; font: 400 13px/1.4 var(--font-mono); color: var(--muted); }
+  .meta { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+  .chip { font: 600 11.5px/1 var(--font-mono); padding: 5px 7px; border-radius: 999px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .err { grid-column: 2 / -1; color: var(--bad); background: var(--bad-soft); padding: 8px 10px; border-radius: 8px; font-size: 14px; }
+  .actions { grid-row: span 2; display: flex; gap: 6px; align-items: center; }
+  @media (max-width: 520px) {
+    .row { grid-template-columns: 48px minmax(0, 1fr); }
+    .meta, .err { order: 1; }
+    .actions { grid-column: 1 / -1; grid-row: auto; order: 2; }
+    .actions .btn.primary { flex: 1; }
+  }
+
+  .btn {
+    font: 600 14px/1 var(--font-ui); padding: 9px 14px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.icon { padding: 8px 10px; color: var(--muted); }
+  .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  .empty {
+    padding: 20px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
+    color: var(--muted); font-size: 14px;
+  }
+
+  aside { display: grid; gap: 16px; min-width: 0; }
+  .card { padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
+  .card h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  ol.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; counter-reset: s; }
+  ol.steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; counter-increment: s; font-size: 14px; }
+  ol.steps li::before {
+    content: counter(s); display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font: 700 13px/1 var(--font-mono);
+  }
+  .knob { font: 600 13px/1 var(--font-mono); padding: 2px 6px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); }
+  .card p { margin: 0; font-size: 14px; color: var(--muted); }
+  .card p + p { margin-top: 8px; }
+
+  footer { color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+  footer a { color: inherit; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">HX Stomp · NAM A2 Lite</span>
+    <h1>NAM to HX Stomp IR</h1>
+    <p class="lede">Turn NAM A2 Lite captures into User IR files. Import them into the Stomp with HX Edit and pick them with the Model knob of the NAM A2 Lite amp. Your files stay in this browser; nothing is uploaded.</p>
+  </header>
+
+  <div class="main">
+    <section class="tool" aria-label="Converter">
+      <label class="drop" id="drop">
+        <svg class="jack" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M24 6v20"/><path d="M16 18l8 8 8-8"/><rect x="8" y="32" width="32" height="10" rx="3"/>
+        </svg>
+        <strong>Drop .nam files here</strong>
+        <small>or click to choose · several at once is fine</small>
+        <input id="pick" type="file" accept=".nam,application/json" multiple>
+      </label>
+
+      <div class="opts">
+        <label for="number"><input id="number" type="checkbox" checked> Number the files from slot</label>
+        <input id="start" type="number" min="1" max="128" value="1" aria-label="First slot number">
+        <span class="hint">The Model knob shows slot numbers, not names. A number in front of each file name tells you which slot to import it into.</span>
+      </div>
+
+      <div class="list-head">
+        <h2 id="count">No captures yet</h2>
+        <div style="display:flex; gap:8px">
+          <button class="btn" id="clear" type="button" hidden>Clear</button>
+          <button class="btn primary" id="all" type="button" hidden>Download all</button>
+        </div>
+      </div>
+      <div class="list" id="list">
+        <div class="empty" id="empty">Converted captures appear here, each with the slot number to import it into. Only the 3-channel <b>A2 Lite</b> size works. A .nam with several sizes in one file works too; its A2 Lite model is used.</div>
+      </div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2>On the Stomp</h2>
+        <ol class="steps">
+          <li><span>Drop your <b>.nam</b> captures here and download the <b>.wav</b> files.</span></li>
+          <li><span>In HX Edit, open the Impulses list and drag each .wav onto the slot number in front of its name.</span></li>
+          <li><span>Add <b>Amp › NAM › NAM A2 Lite</b> and turn <span class="knob">Model</span> to that slot number.</span></li>
+        </ol>
+      </div>
+      <div class="card">
+        <h2>Good to know</h2>
+        <p>The .wav is not a sound. It carries the capture's 1,871 weights, so don't load it into an IR block.</p>
+        <p>A slot that holds a normal cab IR is silent when Model points at it.</p>
+        <p>Needs the HX Stomp firmware with NAM A2 Lite built from the hx-stomp-nam-lite project.</p>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    <span>Unofficial. Not affiliated with or endorsed by Line 6 or Yamaha Guitar Group. Neural Amp Modeler is the work of its own authors.</span>
+    <span>The same conversion as <code>tools/nam2ir.py</code>; GPL-3.0-or-later.</span>
+  </footer>
+</div>
+
+<script src="nam2ir-core.js"></script>
+<script>
+(function () {
+  "use strict";
+  var items = [];                 // { file, ok, wav, info, error }
+  var $ = function (id) { return document.getElementById(id); };
+  var list = $("list"), empty = $("empty");
+
+  function base(name) { return name.replace(/\.nam$/i, ""); }
+  function clean(name) { return name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "capture"; }
+  function slotFor(i) {
+    var start = Math.min(128, Math.max(1, parseInt($("start").value, 10) || 1));
+    var n = start;
+    for (var k = 0; k < i; k++) if (items[k].ok) n++;
+    return n <= 128 ? n : null;
+  }
+  function outName(i) {
+    var it = items[i], s = slotFor(i), b = clean(base(it.file.name));
+    if ($("number").checked && s) return String(s).padStart(2, "0") + " " + b + " NAM.wav";
+    return b + " NAM.wav";
+  }
+  function save(i) {
+    var blob = new Blob([items[i].wav], { type: "audio/wav" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = outName(i);
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function render() {
+    list.querySelectorAll(".row").forEach(function (r) { r.remove(); });
+    empty.hidden = items.length > 0;
+    var good = items.filter(function (x) { return x.ok; }).length;
+    $("count").textContent = items.length
+      ? good + " of " + items.length + " converted"
+      : "No captures yet";
+    $("all").hidden = good < 2;
+    $("clear").hidden = !items.length;
+
+    items.forEach(function (it, i) {
+      var row = el("div", "row" + (it.ok ? "" : " bad"));
+      var slot = el("div", "slot");
+      var s = it.ok ? slotFor(i) : null;
+      if (it.ok) slot.appendChild(el("small", null, "Slot"));
+      slot.appendChild(document.createTextNode(it.ok ? (s && $("number").checked ? s : "·") : "✕"));
+      row.appendChild(slot);
+
+      var name = el("div", "name", it.info && it.info.name ? it.info.name : base(it.file.name));
+      name.appendChild(el("span", "out", it.ok ? outName(i) : it.file.name));
+      row.appendChild(name);
+
+      var actions = el("div", "actions");
+      if (it.ok) {
+        var dl = el("button", "btn primary", "Download");
+        dl.type = "button";
+        dl.addEventListener("click", function () { save(i); });
+        actions.appendChild(dl);
+      }
+      var rm = el("button", "btn icon", "✕");
+      rm.type = "button";
+      rm.setAttribute("aria-label", "Remove " + it.file.name);
+      rm.addEventListener("click", function () { items.splice(i, 1); render(); });
+      actions.appendChild(rm);
+      row.appendChild(actions);
+
+      if (it.ok) {
+        var meta = el("div", "meta");
+        meta.appendChild(el("span", "chip ok", "A2 Lite · 1,871 weights"));
+        if (it.info.slimmable) meta.appendChild(el("span", "chip", "from a multi-size .nam"));
+        if (it.info.exponent) meta.appendChild(el("span", "chip", "scaled ÷" + Math.pow(2, it.info.exponent)));
+        if (it.info.modeledBy) meta.appendChild(el("span", "chip", "by " + it.info.modeledBy));
+        if (it.info.gear) meta.appendChild(el("span", "chip", it.info.gear));
+        it.info.warnings.forEach(function (w) { meta.appendChild(el("span", "chip warn", w)); });
+        row.appendChild(meta);
+      } else {
+        row.appendChild(el("div", "err", it.error));
+      }
+      list.appendChild(row);
+    });
+  }
+
+  function add(files) {
+    var todo = Array.prototype.slice.call(files);
+    var left = todo.length;
+    if (!left) return;
+    todo.forEach(function (file) {
+      var it = { file: file, ok: false };
+      items.push(it);
+      file.text().then(function (text) {
+        try {
+          var r = NAM2IR.convert(text);
+          it.ok = true; it.wav = r.wav; it.info = r.info;
+        } catch (e) {
+          it.error = e.message;
+        }
+      }, function () {
+        it.error = "The file could not be read.";
+      }).then(function () { if (--left === 0) render(); });
+    });
+  }
+
+  $("pick").addEventListener("change", function (e) { add(e.target.files); e.target.value = ""; });
+  var drop = $("drop");
+  ["dragenter", "dragover"].forEach(function (t) {
+    drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add("over"); });
+  });
+  ["dragleave", "drop"].forEach(function (t) {
+    drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove("over"); });
+  });
+  drop.addEventListener("drop", function (e) { add(e.dataTransfer.files); });
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("drop", function (e) { e.preventDefault(); });
+
+  $("number").addEventListener("change", render);
+  $("start").addEventListener("input", render);
+  $("clear").addEventListener("click", function () { items = []; render(); });
+  $("all").addEventListener("click", function () {
+    var k = 0;
+    (function next() {
+      while (k < items.length && !items[k].ok) k++;
+      if (k >= items.length) return;
+      save(k++);
+      setTimeout(next, 350);       // browsers drop downloads that come too fast
+    })();
+  });
+  render();
+})();
+</script>
+</body>
+</html>
