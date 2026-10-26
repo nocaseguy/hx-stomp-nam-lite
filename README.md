@@ -70,7 +70,7 @@ Only 4 of the 15 parts of the firmware change: the main application's model tabl
    ```sh
    python3 tools/nam2ir.py "My Amp.nam" -o "My Amp NAM.wav"
    ```
-   The web page converts several files at once and can number them by slot. It runs entirely in your browser, uploads nothing, and writes the same bytes as `nam2ir.py`.
+   The web page converts several files at once. It runs entirely in your browser, uploads nothing, and writes the same bytes as `nam2ir.py`.
 2. In HX Edit, import the `.wav` into a User IR slot, for example slot 5.
 3. On the Stomp, add **Amp → NAM → NAM A2 Lite** and set **Model** to 5.
 

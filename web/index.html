@@ -76,33 +76,20 @@
   .drop small { color: var(--muted); }
   .jack { width: 44px; height: 44px; color: var(--accent); }
 
-  .opts {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
-    padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
-  }
-  .opts label { display: inline-flex; align-items: center; gap: 8px; }
-  .opts input[type="number"] {
-    width: 4.5em; padding: 4px 6px; font: inherit; font-variant-numeric: tabular-nums;
-    border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink);
-  }
-  .opts .hint { color: var(--muted); font-size: 13px; flex: 1 1 220px; min-width: 0; }
-
   .list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
   .list-head h2 { margin: 0; font-size: 15px; }
   .list { display: grid; gap: 8px; }
 
   .row {
-    display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 4px 14px; align-items: center;
+    display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 4px 14px; align-items: center;
     padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
   }
   .row.bad { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
-  .slot {
-    grid-row: span 2; display: grid; place-items: center; align-self: stretch;
-    border-radius: 8px; background: var(--bg); border: 1px solid var(--line);
-    font: 700 20px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink);
+  .mark {
+    grid-row: span 2; align-self: start; display: grid; place-items: center; width: 32px; height: 32px;
+    border-radius: 50%; background: var(--ok-soft); color: var(--ok); font: 700 15px/1 var(--font-ui);
   }
-  .slot small { display: block; font: 600 9px/1 var(--font-mono); letter-spacing: .08em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
-  .row.bad .slot { color: var(--bad); }
+  .row.bad .mark { background: var(--bad-soft); color: var(--bad); }
   .name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
   .name .out { display: block; font: 400 13px/1.4 var(--font-mono); color: var(--muted); }
   .meta { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
@@ -112,7 +99,7 @@
   .err { grid-column: 2 / -1; color: var(--bad); background: var(--bad-soft); padding: 8px 10px; border-radius: 8px; font-size: 14px; }
   .actions { grid-row: span 2; display: flex; gap: 6px; align-items: center; }
   @media (max-width: 520px) {
-    .row { grid-template-columns: 48px minmax(0, 1fr); }
+    .row { grid-template-columns: 32px minmax(0, 1fr); }
     .meta, .err { order: 1; }
     .actions { grid-column: 1 / -1; grid-row: auto; order: 2; }
     .actions .btn.primary { flex: 1; }
@@ -171,12 +158,6 @@
         <input id="pick" type="file" accept=".nam,application/json" multiple>
       </label>
 
-      <div class="opts">
-        <label for="number"><input id="number" type="checkbox" checked> Number the files from slot</label>
-        <input id="start" type="number" min="1" max="128" value="1" aria-label="First slot number">
-        <span class="hint">The Model knob shows slot numbers, not names. A number in front of each file name tells you which slot to import it into.</span>
-      </div>
-
       <div class="list-head">
         <h2 id="count">No captures yet</h2>
         <div style="display:flex; gap:8px">
@@ -185,7 +166,7 @@
         </div>
       </div>
       <div class="list" id="list">
-        <div class="empty" id="empty">Converted captures appear here, each with the slot number to import it into. Only the 3-channel <b>A2 Lite</b> size works. A .nam with several sizes in one file works too; its A2 Lite model is used.</div>
+        <div class="empty" id="empty">Converted captures appear here. Only the 3-channel <b>A2 Lite</b> size works. A .nam with several sizes in one file works too; its A2 Lite model is used.</div>
       </div>
     </section>
 
@@ -194,7 +175,7 @@
         <h2>On the Stomp</h2>
         <ol class="steps">
           <li><span>Drop your <b>.nam</b> captures here and download the <b>.wav</b> files.</span></li>
-          <li><span>In HX Edit, open the Impulses list and drag each .wav onto the slot number in front of its name.</span></li>
+          <li><span>In HX Edit, open the Impulses list and drag each .wav onto a free slot. Note its number.</span></li>
           <li><span>Add <b>Amp › NAM › NAM A2 Lite</b> and turn <span class="knob">Model</span> to that slot number.</span></li>
         </ol>
       </div>
@@ -223,16 +204,8 @@
 
   function base(name) { return name.replace(/\.nam$/i, ""); }
   function clean(name) { return name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "capture"; }
-  function slotFor(i) {
-    var start = Math.min(128, Math.max(1, parseInt($("start").value, 10) || 1));
-    var n = start;
-    for (var k = 0; k < i; k++) if (items[k].ok) n++;
-    return n <= 128 ? n : null;
-  }
   function outName(i) {
-    var it = items[i], s = slotFor(i), b = clean(base(it.file.name));
-    if ($("number").checked && s) return String(s).padStart(2, "0") + " " + b + " NAM.wav";
-    return b + " NAM.wav";
+    return clean(base(items[i].file.name)) + " NAM.wav";
   }
   function save(i) {
     var blob = new Blob([items[i].wav], { type: "audio/wav" });
@@ -262,11 +235,9 @@
 
     items.forEach(function (it, i) {
       var row = el("div", "row" + (it.ok ? "" : " bad"));
-      var slot = el("div", "slot");
-      var s = it.ok ? slotFor(i) : null;
-      if (it.ok) slot.appendChild(el("small", null, "Slot"));
-      slot.appendChild(document.createTextNode(it.ok ? (s && $("number").checked ? s : "·") : "✕"));
-      row.appendChild(slot);
+      var mark = el("div", "mark", it.ok ? "✓" : "✕");
+      mark.setAttribute("aria-label", it.ok ? "Converted" : "Not converted");
+      row.appendChild(mark);
 
       var name = el("div", "name", it.info && it.info.name ? it.info.name : base(it.file.name));
       name.appendChild(el("span", "out", it.ok ? outName(i) : it.file.name));
@@ -334,8 +305,6 @@
   window.addEventListener("dragover", function (e) { e.preventDefault(); });
   window.addEventListener("drop", function (e) { e.preventDefault(); });
 
-  $("number").addEventListener("change", render);
-  $("start").addEventListener("input", render);
   $("clear").addEventListener("click", function () { items = []; render(); });
   $("all").addEventListener("click", function () {
     var k = 0;
