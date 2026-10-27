@@ -85,7 +85,7 @@ Only 4 of the 15 parts of the firmware change: the main application's model tabl
 
 The XL's firmware 3.80.0 is the Stomp's with another build of the main application: the DSP program, the model list and the DSP graph library, the three parts the patch changes besides the application, are byte for byte the same. `tools/patch_amp.py` holds the XL's own addresses for the application's model tables, and checks each one against the table it points to. The XL image passes the same checks as the Stomp's, and every byte it changes in the application corresponds to one the Stomp build changes.
 
-**It has not run on an XL.** The Stomp build is the one tested on a unit. If you try it on an XL, have the stock XL file ready for recovery, and use the XL's own update-mode procedure from Line 6 in place of the Stomp's Page Right.
+**It has not run on an XL.** The Stomp build is the one tested on a unit. If you try it on an XL, have the stock XL file ready for recovery. The XL has the same Page Right button, so holding it while powering on should give update mode as on the Stomp, but that has not been tried on an XL either.
 
 ## Use
 
