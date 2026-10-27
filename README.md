@@ -2,6 +2,8 @@
 
 This repository adds **Neural Amp Modeler (NAM) A2 Lite** to the stock Line 6 HX Stomp firmware, version 3.80.0, as a new amp model. NAM captures then run on the Stomp's own DSP, like any other amp block.
 
+**Not a programmer? Use the setup page: [nocaseguy.github.io/hx-stomp-nam-lite/web/](https://nocaseguy.github.io/hx-stomp-nam-lite/web/).** It builds the firmware from your own Line 6 file, converts your captures and guides you through every step, all in your browser, with nothing to install and nothing uploaded. See [The setup page](#the-setup-page-no-install).
+
 ## Demo
 
 [![NAM A2 Lite running on an HX Stomp (YouTube)](https://img.youtube.com/vi/zQzj0qahJ6E/hqdefault.jpg)](https://www.youtube.com/watch?v=zQzj0qahJ6E)
@@ -21,7 +23,7 @@ Watch it on YouTube: https://www.youtube.com/watch?v=zQzj0qahJ6E
   | **Bass / Mid / Treble / Presence** | A tone stack after the model, ±12 dB, flat at 5.0 (100 Hz shelf, 650 Hz peak, 2.5 kHz and 5.5 kHz shelves) |
   | **Ch Vol** | Output level; 0 dB at 5.0, +12 dB at 10 |
 
-- **A converter** (a web page, `web/index.html`, or `tools/nam2ir.py`) turns a `.nam` file into a `.wav`. HX Edit imports that `.wav` as a User IR. The "IR" is not a sound: it carries the capture's 1,871 weights, and the amp loads them from the slot.
+- **A converter** (on the [setup page](https://nocaseguy.github.io/hx-stomp-nam-lite/web/), or `tools/nam2ir.py`) turns a `.nam` file into a `.wav`. HX Edit imports that `.wav` as a User IR. The "IR" is not a sound: it carries the capture's 1,871 weights, and the amp loads them from the slot.
 
 Everything else in the firmware stays stock 3.80.0.
 
@@ -87,7 +89,7 @@ The XL's firmware 3.80.0 is the Stomp's with another build of the main applicati
 
 ## Use
 
-1. Convert a capture. Either open **`web/index.html`** in a browser and drop your `.nam` files on it, or run:
+1. Convert a capture. Either open the **[setup page](https://nocaseguy.github.io/hx-stomp-nam-lite/web/)** (step 4) and drop your `.nam` files on it, or run:
    ```sh
    python3 tools/nam2ir.py "My Amp.nam" -o "My Amp NAM.wav"
    ```
