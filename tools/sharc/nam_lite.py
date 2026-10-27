@@ -320,18 +320,20 @@ def eq_ref(words, knobs=EQ_TEST):
     return out
 
 
-def fade_in(words, g0=0.0):
-    """The kernel's fade on blocks of 16, from gain g0 up 1/64 a block (to 1), in float32."""
+def fade_in(words, p0=0.0):
+    """The kernel's fade on blocks of 16, its phase from p0 up 1/8 a block (to 1), the gain
+    p^2 (3 - 2p) at each block's ends and in a line between, in float32."""
     f = lambda x: ssim.b2f(ssim.f2b(x))
-    out, g_block = [], g0
+    smooth = lambda p: f(f(p * p) * f(3.0 - f(p + p)))
+    out, p = [], p0
     for b in range(0, len(words), 16):
-        g1 = min(1.0, g_block + 0.015625)
-        dg = f(f(g1 - g_block) * 0.0625)
-        g = g_block
+        p1 = min(1.0, p + 0.125)
+        g = smooth(p)
+        dg = f(f(smooth(p1) - g) * 0.0625)
         for wd in words[b: b + 16]:
             out.append(ssim.f2b(f(ssim.b2f(wd) * g)))
             g = f(g + dg)
-        g_block = g1
+        p = p1
     return out
 
 
@@ -424,7 +426,7 @@ def check(asm, w, nblk):
             break
     else:
         sys.exit("the slot-3 model never loaded")
-    if k > 16:
+    if k > 4:
         sys.exit(f"fading out took {k} blocks")
     got2 = []
     for b in range(4):
@@ -443,7 +445,7 @@ def check(asm, w, nblk):
             break
     else:
         sys.exit("after a cab IR in the chosen slot, not silence")
-    if k > 17:
+    if k > 5:
         sys.exit(f"fading out took {k} blocks")
     for b in range(3):
         if call(PB, blocks[b], f"B cab IR block {b}") != zero:

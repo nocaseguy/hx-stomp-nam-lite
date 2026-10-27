@@ -55,9 +55,12 @@
 .equ N_T0,     0xe4894          // EMUCLK at entry (nam_lite.py --meter)
 .equ N_MCNT,   0xe4895          // --meter: blocks so far
 .equ N_SIG,    0xe4896          // the loaded model: its top address + its first 16 words
-.equ N_GAIN,   0xe4897          // the output's fade gain at the start of a block, 0 .. 1
-.equ N_G1,     0xe4898          // and at its end: a model change fades out over 16 blocks
-                                // (5 ms), the new one fades in over 64 (21 ms): no pop
+.equ N_GAIN,   0xe4897          // the output fade's phase p at the start of a block, 0 .. 1
+.equ N_G1,     0xe4898          // and at its end; the gain is p^2 (3 - 2p). A model change
+                                // fades out over 4 blocks (1.3 ms), loads in a silent one,
+                                // and the new model, from cleared rings, fades in over 8
+                                // (2.7 ms): no pop. (Keeping the rings for the new model is
+                                // worse: its weights on the old one's activations burst.)
 .equ EQ_C,     0xe7fe0          // the tone stack: 4 bands x {b0, b1, b2, -a1, -a2}
 .equ EQ_S,     0xe7ff4          // its state, 4 x {s1, s2} (cleared with the rings)
 .equ EQ_IDX,   0xe7ffc          // each band's knob step 0..100 now (-1 at boot: load)
@@ -237,8 +240,8 @@ n_own:
     // (tools/nam2ir.py: its first words 0.5, -0.5, 3.0, scale, 1871 / 1024), else
     // (a cab IR, an empty slot) silence. 0 (a model with no Model parameter,
     // whose DM(7) fn_reset left 0) is the built-in one. A
-    // float (an older blob) is truncated. A change, or new contents, loads it: that block is silent, the
-    // next clears the rings.
+    // float (an older blob) is truncated. A change, or new contents, fades out and loads it: that
+    // block is silent, the next clears the rings.
     R8 = DM(MODEL + H_BUILTIN);
     R0 = DM(7, I0);
     R1 = 0x800000;
@@ -291,7 +294,7 @@ n_sigw: R5 = R5 + R6;
     F0 = DM(N_GAIN);                    // another model: first fade this one out
     F0 = PASS F0;
     IF LE JUMP n_load;
-    F1 = 0.0625;
+    F1 = 0.25;
     F0 = F0 - F1;
     F1 = 0.0;
     F0 = MAX(F0, F1);
@@ -299,7 +302,7 @@ n_sigw: R5 = R5 + R6;
     JUMP n_have;
 n_same:
     F0 = DM(N_GAIN);                    // the same model: fade in, or stay at 1
-    F1 = 0.015625;
+    F1 = 0.125;
     F0 = F0 + F1;
     F1 = 1.0;
     F0 = MIN(F0, F1);
@@ -309,7 +312,7 @@ n_none:
     F0 = DM(N_GAIN);                    // no model in that slot: fade out, then silence
     F0 = PASS F0;
     IF LE JUMP n_none0;
-    F1 = 0.0625;
+    F1 = 0.25;
     F0 = F0 - F1;
     F1 = 0.0;
     F0 = MAX(F0, F1);
@@ -700,8 +703,17 @@ n_hpair: NOP;
 
     // ---- the tone stack on the block's output: four biquads (transposed
     // direct form II: y = b0 x + s1, s1 = b1 x - a1 y + s2, s2 = b2 x - a2 y)
-    F2 = DM(N_GAIN);                    // with the fade: gain from N_GAIN to N_G1 over the block
+    F2 = DM(N_GAIN);                    // with the fade: the gain p^2 (3 - 2p) at N_GAIN, to
+    F1 = 3.0;                           // that at N_G1, in a line over the block
+    F4 = F2 + F2;
+    F4 = F1 - F4;
+    F2 = F2 * F2;
+    F2 = F2 * F4;
     F3 = DM(N_G1);
+    F4 = F3 + F3;
+    F4 = F1 - F4;
+    F3 = F3 * F3;
+    F3 = F3 * F4;
     F3 = F3 - F2;
     F1 = 0.0625;
     F3 = F3 * F1;
