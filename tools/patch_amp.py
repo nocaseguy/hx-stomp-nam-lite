@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""patch_amp.py - add NAM A2 Lite as a new amp to the stock HX Stomp v3.80.0 firmware.
+"""patch_amp.py - add NAM A2 Lite as a new amp to the stock HX Stomp (or XL) v3.80.0 firmware.
 
 Works on the stock .hxf (or the L6IA archive inside it) and writes a .hxf
 for Line 6 Updater, or an L6IA; every integrity field (L6IA Fletcher-32 and
@@ -27,6 +27,7 @@ import os
 import re
 import struct
 import sys
+import types
 import zlib
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -411,21 +412,43 @@ E0_MAX = 0x8000 * 512 - 512         # Entry 0's partition, less the sub-header s
 E3_MAX = 0x800 * 512 - 512          # Entry 3's partition, less the sub-header sector
 E4_MAX = (0x11005 - 0x940d) * 512   # Entry 4's partition (15.5 MiB)
 
-# HX Stomp v3.80.0 Entry 0 (the Cortex-M4 application) addresses:
-E0_TAB1_BASE_PTRS = (0x28e01c08, 0x28e01c6c, 0x28e01c88, 0x28e01d2c, 0x28e01e80)
-E0_TAB1_END_PTR = 0x28e01c70
-E0_TAB1_CNT_M1_INSNS = (0x28e01c52, 0x28e01ca2, 0x28e01d78, 0x28e01e02)
-E0_TAB1_CNT_INSN = 0x28e01c74
-
-E0_TAB2_BASE_PTR = 0x28de8fd4
-E0_TAB2_P5_PTR = 0x28de8fd8
-E0_TAB2_CNT_INSN = 0x28de8f30
-
-E0_BLIST_PTR_TAB = 0x28e3e00c
-E0_BLIST_CNT_TAB = 0x28e3e13c
+# Entry 0 (the Cortex-M4 application) addresses for each unit's v3.80.0, keyed by
+# where its code segment seg[6] loads. Every entry the build changes (2, 3, 4) is
+# byte-identical between the HX Stomp and the HX Stomp XL; Entry 0 is a different
+# build of the same code. The
+# XL's were found by matching 80 bytes around each Stomp address; every one is
+# checked again below by the table it points to.
+E0_DEVICES = {
+    0x28d8fa80: types.SimpleNamespace(
+        NAME='HX Stomp',
+        TAB1_BASE_PTRS=(0x28e01c08, 0x28e01c6c, 0x28e01c88, 0x28e01d2c, 0x28e01e80),
+        TAB1_END_PTR=0x28e01c70,
+        TAB1_CNT_M1_INSNS=(0x28e01c52, 0x28e01ca2, 0x28e01d78, 0x28e01e02),
+        TAB1_CNT_INSN=0x28e01c74,
+        TAB2_BASE_PTR=0x28de8fd4, TAB2_P5_PTR=0x28de8fd8, TAB2_CNT_INSN=0x28de8f30,
+        BLIST_PTR_TAB=0x28e3e00c, BLIST_CNT_TAB=0x28e3e13c,
+        SUBCAT_CNT=0x28e3e26c,      # u32[19]: subcategories (browser folders) a category has
+        SUBCAT_NAMES=0x28e3e2b8),   # char[19][4][26]: their names (getter 0x28e011d0)
+    0x28d92230: types.SimpleNamespace(
+        NAME='HX Stomp XL',
+        TAB1_BASE_PTRS=(0x28e07d28, 0x28e07d8c, 0x28e07da8, 0x28e07e4c, 0x28e07fa0),
+        TAB1_END_PTR=0x28e07d90,
+        TAB1_CNT_M1_INSNS=(0x28e07d72, 0x28e07dc2, 0x28e07e98, 0x28e07f22),
+        TAB1_CNT_INSN=0x28e07d94,
+        TAB2_BASE_PTR=0x28def014, TAB2_P5_PTR=0x28def018, TAB2_CNT_INSN=0x28deef70,
+        BLIST_PTR_TAB=0x28e44774, BLIST_CNT_TAB=0x28e448a4,
+        SUBCAT_CNT=0x28e449d4, SUBCAT_NAMES=0x28e44a20),
+}
 E0_BLIST_SLOTS = 76
-E0_SUBCAT_CNT = 0x28e3e26c       # u32[19]: subcategories (browser folders) a category has
-E0_SUBCAT_NAMES = 0x28e3e2b8     # char[19][4][26]: their names (getter 0x28e011d0)
+
+
+def e0_device(segs):
+    """The E0_DEVICES entry of an Entry 0 (stock, or already changed by add-model)."""
+    dev = E0_DEVICES.get(segs[6][3])
+    if dev is None:
+        raise SystemExit(f'Entry 0 code segment at {segs[6][3]:#x} is neither the HX Stomp\'s nor the XL\'s '
+                         f'v3.80.0; use HX_Stomp_v3.80.0_0x103966115.hxf or HX_Stomp_XL_v3.80.0_0x103966115.hxf')
+    return dev
 
 
 def _align(n, a):
@@ -473,14 +496,14 @@ def _e0_vaddr_to_foff(segs, vaddr, length=4):
         if dst <= vaddr and vaddr + length <= dst + slen:
             return poff + (vaddr - dst)
     raise SystemExit(
-        f'Entry 0 address {vaddr:#x} (+{length}) not mapped in HX Stomp segments; '
-        f'make sure input is HX Stomp v3.80.0 (HX_Stomp_v3.80.0_0x103966115.hxf)'
+        f'Entry 0 address {vaddr:#x} (+{length}) not mapped in the Entry 0 segments; '
+        f'make sure input is HX Stomp or XL v3.80.0'
     )
 
 
 def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=None, preset_id=None, dsp_cost=None,
                      n_params=None, folder=None):
-    """Update the Cortex-M4 main application (Entry 0, HX Stomp v3.80.0) for a new model:
+    """Update the Cortex-M4 main application (Entry 0, HX Stomp or XL v3.80.0; addresses below are the Stomp's) for a new model:
       1. Static Model Table (823 x 12 B @ 0x28017994 -> 824 x 12 B):
          appends {new_name_idx, preset_id, 0, src_dsp_cost}, choosing a free
          preset_id <= 832 (default 147), and patches all 6 table pointers
@@ -500,6 +523,7 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
       unused SDRAM well below the bootloader's 0x29f00000 ceiling."""
     e0 = bytearray(e0)
     segs = _parse_e0_segments(e0)
+    A = e0_device(segs)
 
     def vread(va, ln):
         fo = _e0_vaddr_to_foff(segs, va, ln)
@@ -516,12 +540,12 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
         return struct.unpack_from('<H', e0, _e0_vaddr_to_foff(segs, va, 2))[0]
 
     # --- 1. Static Model Table (12-byte rows: <IHHI = {name_idx, preset_id, 0, dsp_cost}) ---
-    tab1_addr = vu32(E0_TAB1_BASE_PTRS[0])
-    for pva in E0_TAB1_BASE_PTRS[1:]:
+    tab1_addr = vu32(A.TAB1_BASE_PTRS[0])
+    for pva in A.TAB1_BASE_PTRS[1:]:
         assert vu32(pva) == tab1_addr, f'Entry 0 Table 1 pointer mismatch at {pva:#x}: {vu32(pva):#x} != {tab1_addr:#x}'
-    rd_cnt, tab1_cnt = _decode_thumb_movw(vread(E0_TAB1_CNT_INSN, 4))
-    assert vu32(E0_TAB1_END_PTR) == tab1_addr + 12 * tab1_cnt, 'Entry 0 Table 1 end pointer mismatch'
-    for iva in E0_TAB1_CNT_M1_INSNS:
+    rd_cnt, tab1_cnt = _decode_thumb_movw(vread(A.TAB1_CNT_INSN, 4))
+    assert vu32(A.TAB1_END_PTR) == tab1_addr + 12 * tab1_cnt, 'Entry 0 Table 1 end pointer mismatch'
+    for iva in A.TAB1_CNT_M1_INSNS:
         _, c_m1 = _decode_thumb_movw(vread(iva, 4))
         assert c_m1 == tab1_cnt - 1, f'Entry 0 Table 1 count-1 mismatch at {iva:#x}: {c_m1} != {tab1_cnt - 1}'
 
@@ -550,9 +574,9 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
     new_tab1_cnt = tab1_cnt + 1
 
     # --- 2. UI Model Info Table (44-byte rows, searched linearly) ---
-    tab2_addr = vu32(E0_TAB2_BASE_PTR)
-    assert vu32(E0_TAB2_P5_PTR) == tab2_addr + 5, 'Entry 0 Table 2 +5 pointer mismatch'
-    rd_t2, tab2_cnt = _decode_thumb_movw(vread(E0_TAB2_CNT_INSN, 4))
+    tab2_addr = vu32(A.TAB2_BASE_PTR)
+    assert vu32(A.TAB2_P5_PTR) == tab2_addr + 5, 'Entry 0 Table 2 +5 pointer mismatch'
+    rd_t2, tab2_cnt = _decode_thumb_movw(vread(A.TAB2_CNT_INSN, 4))
     tab2_raw = bytearray(vread(tab2_addr, 44 * tab2_cnt))
     src_tab2_row = None
     for i in range(tab2_cnt):
@@ -581,8 +605,8 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
     reloc_lists = []  # (slot_idx, cat, sub, new_cnt, new_bytes)
     btype_folder = None
     for idx in range(E0_BLIST_SLOTS):
-        lptr = vu32(E0_BLIST_PTR_TAB + 4 * idx)
-        lcnt = vu32(E0_BLIST_CNT_TAB + 4 * idx)
+        lptr = vu32(A.BLIST_PTR_TAB + 4 * idx)
+        lcnt = vu32(A.BLIST_CNT_TAB + 4 * idx)
         if not lptr or not lcnt:
             continue
         lraw = bytearray(vread(lptr, 48 * lcnt))
@@ -607,20 +631,20 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
     if folder:
         cat, fname = folder
         assert btype_folder is not None, f'the source model is in no list of category {cat}'
-        nsub = vu32(E0_SUBCAT_CNT + 4 * cat)
+        nsub = vu32(A.SUBCAT_CNT + 4 * cat)
         fbytes = fname.encode('latin1')[:25].ljust(26, b'\x00')
-        have = [s for s in range(nsub) if vread(E0_SUBCAT_NAMES + 104 * cat + 26 * s, 26) == fbytes]
+        have = [s for s in range(nsub) if vread(A.SUBCAT_NAMES + 104 * cat + 26 * s, 26) == fbytes]
         if have:                                    # the folder exists (an earlier add-model): append
             sub = have[0]
-            lptr = vu32(E0_BLIST_PTR_TAB + 4 * (4 * cat + sub))
-            lcnt = vu32(E0_BLIST_CNT_TAB + 4 * (4 * cat + sub))
+            lptr = vu32(A.BLIST_PTR_TAB + 4 * (4 * cat + sub))
+            lcnt = vu32(A.BLIST_CNT_TAB + 4 * (4 * cat + sub))
             reloc_lists.append((4 * cat + sub, cat, sub, lcnt + 1, vread(lptr, 48 * lcnt) + btype_folder))
         else:
             sub = nsub
-            assert sub < 4 and not vu32(E0_BLIST_PTR_TAB + 4 * (4 * cat + sub)), f'category {cat} has no free folder'
-            assert not any(vread(E0_SUBCAT_NAMES + 104 * cat + 26 * sub, 26)), 'the folder name slot is not empty'
-            vwrite(E0_SUBCAT_CNT + 4 * cat, struct.pack('<I', sub + 1))
-            vwrite(E0_SUBCAT_NAMES + 104 * cat + 26 * sub, fbytes)
+            assert sub < 4 and not vu32(A.BLIST_PTR_TAB + 4 * (4 * cat + sub)), f'category {cat} has no free folder'
+            assert not any(vread(A.SUBCAT_NAMES + 104 * cat + 26 * sub, 26)), 'the folder name slot is not empty'
+            vwrite(A.SUBCAT_CNT + 4 * cat, struct.pack('<I', sub + 1))
+            vwrite(A.SUBCAT_NAMES + 104 * cat + 26 * sub, fbytes)
             reloc_lists.append((4 * cat + sub, cat, sub, 1, btype_folder))
 
     if not reloc_lists:
@@ -647,23 +671,23 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
     assert len(appended) % 4 == 0
 
     # Patch Table 1 pointers & counts
-    for pva in E0_TAB1_BASE_PTRS:
+    for pva in A.TAB1_BASE_PTRS:
         vwrite(pva, struct.pack('<I', new_tab1_addr))
-    vwrite(E0_TAB1_END_PTR, struct.pack('<I', new_tab1_addr + len(tab1_raw)))
-    vwrite(E0_TAB1_CNT_INSN, _encode_thumb_movw(rd_cnt, new_tab1_cnt))
-    for iva in E0_TAB1_CNT_M1_INSNS:
+    vwrite(A.TAB1_END_PTR, struct.pack('<I', new_tab1_addr + len(tab1_raw)))
+    vwrite(A.TAB1_CNT_INSN, _encode_thumb_movw(rd_cnt, new_tab1_cnt))
+    for iva in A.TAB1_CNT_M1_INSNS:
         rd_i, _ = _decode_thumb_movw(vread(iva, 4))
         vwrite(iva, _encode_thumb_movw(rd_i, new_tab1_cnt - 1))
 
     # Patch Table 2 pointers & count
-    vwrite(E0_TAB2_BASE_PTR, struct.pack('<I', new_tab2_addr))
-    vwrite(E0_TAB2_P5_PTR, struct.pack('<I', new_tab2_addr + 5))
-    vwrite(E0_TAB2_CNT_INSN, _encode_thumb_movw(rd_t2, new_tab2_cnt))
+    vwrite(A.TAB2_BASE_PTR, struct.pack('<I', new_tab2_addr))
+    vwrite(A.TAB2_P5_PTR, struct.pack('<I', new_tab2_addr + 5))
+    vwrite(A.TAB2_CNT_INSN, _encode_thumb_movw(rd_t2, new_tab2_cnt))
 
     # Patch UI Browser List pointers & counts
     for idx, cat, sub, new_cnt, l_va in blist_addrs:
-        vwrite(E0_BLIST_PTR_TAB + 4 * idx, struct.pack('<I', l_va))
-        vwrite(E0_BLIST_CNT_TAB + 4 * idx, struct.pack('<I', new_cnt))
+        vwrite(A.BLIST_PTR_TAB + 4 * idx, struct.pack('<I', l_va))
+        vwrite(A.BLIST_CNT_TAB + 4 * idx, struct.pack('<I', new_cnt))
 
     # Splice `appended` at the end of seg[6], update seg[6] header and Entry 0 size + CRC32
     new_s6_slen = s6_slen + len(appended)
@@ -1220,12 +1244,13 @@ def cmd_add_model(args):
 
     # Verify Entry 0 tables, pointers, and instruction counts
     segs_chk = _parse_e0_segments(new_e0)
-    t1_addr = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, E0_TAB1_BASE_PTRS[0]))[0]
-    _, t1_cnt = _decode_thumb_movw(new_e0[_e0_vaddr_to_foff(segs_chk, E0_TAB1_CNT_INSN):][:4])
+    A = e0_device(segs_chk)
+    t1_addr = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, A.TAB1_BASE_PTRS[0]))[0]
+    _, t1_cnt = _decode_thumb_movw(new_e0[_e0_vaddr_to_foff(segs_chk, A.TAB1_CNT_INSN):][:4])
     last_t1 = struct.unpack_from('<IHHI', new_e0, _e0_vaddr_to_foff(segs_chk, t1_addr + 12 * (t1_cnt - 1), 12))
     assert last_t1 == (new_name_idx, new_pid, 0, dsp_cost)
-    t2_addr = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, E0_TAB2_BASE_PTR))[0]
-    _, t2_cnt = _decode_thumb_movw(new_e0[_e0_vaddr_to_foff(segs_chk, E0_TAB2_CNT_INSN):][:4])
+    t2_addr = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, A.TAB2_BASE_PTR))[0]
+    _, t2_cnt = _decode_thumb_movw(new_e0[_e0_vaddr_to_foff(segs_chk, A.TAB2_CNT_INSN):][:4])
     last_t2_idx = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, t2_addr + 44 * (t2_cnt - 1), 44))[0]
     assert last_t2_idx == new_name_idx
     menus_str = ', '.join(f'({cat},{sub})->{cnt}' for _, cat, sub, cnt, _ in blist_addrs)
@@ -1248,7 +1273,7 @@ def main():
     p_ins.add_argument('model', nargs='?', help='Model name (e.g. HD2_AmpNAMLite), displayName, or ID')
 
     p_add = sub.add_parser('add-model', help='Add the NAM host amp to Entry 0, 2, 3 and 4')
-    p_add.add_argument('input', help='Input .hxf or L6IA (the stock HX Stomp v3.80.0 firmware)')
+    p_add.add_argument('input', help='Input .hxf or L6IA (the stock HX Stomp or HX Stomp XL v3.80.0 firmware)')
     p_add.add_argument('output', help='Output .hxf or L6IA')
     p_add.add_argument('--clone', default='HD2_AmpLine6Clarity',
                        help='Model whose composite and list entries the new amp copies (default HD2_AmpLine6Clarity)')

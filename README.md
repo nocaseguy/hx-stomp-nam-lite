@@ -39,8 +39,10 @@ What is here is our own work:
 
 ## Requirements
 
-- An **HX Stomp** (not the XL or the LT; the patch is for the Stomp's firmware only).
-- `HX_Stomp_v3.80.0_0x103966115.hxf`, Line 6's firmware 3.80.0 for the HX Stomp, MD5 `a2cd8f4ae56f49415380270ebc484bf1`. The build checks the MD5 and refuses any other file.
+- An **HX Stomp**, or an **HX Stomp XL** (see [HX Stomp XL](#hx-stomp-xl): not tried on an XL yet). Not the Helix Floor, LT or Rack: their firmware is a different design.
+- Line 6's firmware 3.80.0 for your unit. The build checks the MD5 and refuses any other file:
+  - HX Stomp: `HX_Stomp_v3.80.0_0x103966115.hxf`, MD5 `a2cd8f4ae56f49415380270ebc484bf1`
+  - HX Stomp XL: `HX_Stomp_XL_v3.80.0_0x103966115.hxf`, MD5 `329e3a26d60d3de1988b6785fa833ee1`
 - Python 3.10 or newer with `numpy`: `pip install numpy`.
 - **Line 6 Updater** to install, and **HX Edit** to import captures.
 - 3-channel **A2 Lite** captures. A `.nam` with several sizes in one file (a SlimmableContainer) works too: its A2 Lite model is used.
@@ -51,7 +53,7 @@ What is here is our own work:
 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
 ```
 
-This writes `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf`. It takes about 20 seconds. The build:
+This writes `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (from the XL's file, `build/HX_Stomp_XL_v3.80.0_NAM_A2_Lite.hxf`). It takes about 20 seconds. The build:
 
 1. Assembles the kernel and runs it in the SHARC simulator. The output must match a reference NAM A2 implementation (`src/sharc/nam_a2.asm`) bit for bit; the check also covers the tone stack, the fades and loading from IR slots. Add `--no-check` to skip this step.
 2. Adds the amp, with the steps below:
@@ -67,8 +69,15 @@ Only 4 of the 15 parts of the firmware change: the main application's model tabl
 ## Install
 
 1. Back up your presets and IRs in HX Edit, then **close HX Edit**.
-2. Open Line 6 Updater, choose **Choose File**, and pick `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf`.
+2. Open Line 6 Updater, choose **Choose File**, and pick `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (on an XL, the `_XL_` file; never the other unit's).
 3. Let it finish and restart the Stomp.
+
+
+### HX Stomp XL
+
+The XL's firmware 3.80.0 is the Stomp's with another build of the main application: the DSP program, the model list and the DSP graph library, the three parts the patch changes besides the application, are byte for byte the same. `tools/patch_amp.py` holds the XL's own addresses for the application's model tables, and checks each one against the table it points to. The XL image passes the same checks as the Stomp's, and every byte it changes in the application corresponds to one the Stomp build changes.
+
+**It has not run on an XL.** The Stomp build is the one tested on a unit. If you try it on an XL, have the stock XL file ready for recovery, and use the XL's own update-mode procedure from Line 6 in place of the Stomp's Page Right.
 
 ## Use
 

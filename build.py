@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Build HX Stomp firmware 3.80.0 with NAM A2 Lite, from your own copy of the stock firmware.
+"""Build HX Stomp (or HX Stomp XL) firmware 3.80.0 with NAM A2 Lite, from your own copy of the stock firmware.
 
-usage: python3 build.py <HX_Stomp_v3.80.0_0x103966115.hxf> [-o out.hxf] [--no-check]
+usage: python3 build.py <HX_Stomp_v3.80.0_0x103966115.hxf | HX_Stomp_XL_v3.80.0_0x103966115.hxf> [-o out.hxf] [--no-check]
 
-The input is Line 6's own firmware file for the HX Stomp, version 3.80.0
-(Line 6 Updater keeps a copy; see README.md). Nothing of it is in this
+The input is Line 6's own firmware file for your unit, version 3.80.0
+(Line 6 Updater keeps a copy; see README.md). The XL build has not been
+tried on an XL yet. Nothing of it is in this
 repository: the build reads it, adds NAM A2 Lite and writes a new .hxf
-(default build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf) for Line 6 Updater.
+(default build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf, or ..._XL_... for the XL) for Line 6 Updater.
 
 Steps:
   1. tools/sharc/nam_lite.py: the SHARC kernel, checked in the simulator
@@ -21,7 +22,10 @@ import os
 import subprocess
 import sys
 
-STOCK_MD5 = "a2cd8f4ae56f49415380270ebc484bf1"     # HX_Stomp_v3.80.0_0x103966115.hxf
+STOCK_MD5 = {
+    "a2cd8f4ae56f49415380270ebc484bf1": "HX_Stomp",       # HX_Stomp_v3.80.0_0x103966115.hxf
+    "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",    # HX_Stomp_XL_v3.80.0_0x103966115.hxf (untried on a unit)
+}
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -40,12 +44,14 @@ def main():
     if not argv or argv[0].startswith("-"):
         sys.exit(__doc__)
     stock = os.path.abspath(argv[0])
-    out = os.path.abspath(argv[argv.index("-o") + 1]) if "-o" in argv else \
-        os.path.join(HERE, "build", "HX_Stomp_v3.80.0_NAM_A2_Lite.hxf")
     md5 = hashlib.md5(open(stock, "rb").read()).hexdigest()
-    if md5 != STOCK_MD5:
-        sys.exit(f"{stock}: MD5 {md5}, not the HX Stomp 3.80.0 firmware ({STOCK_MD5}). "
-                 "The patch is made for that file only.")
+    if md5 not in STOCK_MD5:
+        sys.exit(f"{stock}: MD5 {md5}, not the HX Stomp or HX Stomp XL 3.80.0 firmware. "
+                 "The patch is made for those files only.")
+    unit = STOCK_MD5[md5]
+    print(f"stock firmware: {unit.replace('_', ' ')} 3.80.0")
+    out = os.path.abspath(argv[argv.index("-o") + 1]) if "-o" in argv else \
+        os.path.join(HERE, "build", f"{unit}_v3.80.0_NAM_A2_Lite.hxf")
     build = os.path.join(HERE, "build")
     os.makedirs(build, exist_ok=True)
     asm = os.path.join(build, "nam_lite.asm")
