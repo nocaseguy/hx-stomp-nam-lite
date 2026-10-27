@@ -25,7 +25,8 @@
 // table and the rings that fit; the layer weights after this code in Block 2
 // (to 0xc7fff) when they fit, where the ring reads of the same instructions
 // are not; DDR2 from 0x324500 (after Heap 6 as patch_amp moves it) for the
-// other rings. The rings are cleared on the first call (N_INIT, 0 at boot).
+// other rings. The rings are filled with the model's silence state on the first call
+// (N_INIT, 0 at boot) and after a load.
 // One instance at a time has this memory: see n_own.
 //
 // Knobs: Drive in DM(5, I0), Ch Vol in DM(6, I0), Model in DM(7, I0) (an integer:
@@ -92,9 +93,9 @@
 .equ H_HB1,    6
 .equ H_HB2,    7
 .equ H_HW,     8                // their write offset
-.equ H_LMAP,   9                // where a model's 1,871 words go: count, then (address, length)
+.equ H_LMAP,   9                // where a model's 1,943 words go: count, then (address, length)
 .equ H_BUILTIN, 10              // the built-in model, laid out as an IR slot (its top word)
-.equ H_CLR,    11               // what to clear: count, then (address, length) pairs (in DDR2,
+.equ H_CLR,    11               // the rings: count, then (address, length, silence value / 16) (in DDR2,
                                 // as H_LMAP's list: both are read only on a load or a clear)
 
 .equ T_B0,     0                // layer table: channel 0's ring; channel j's at T_B0 + j T_STRIDE
@@ -190,8 +191,7 @@ CUSTOM_AMP_ENTRY:
     R3 = DM(P_SEEN, I0);
     DM(P_SEEN, I0) = R2;
     R4 = DM(P_MET, I0);
-    R5 = 1;
-    DM(P_MET, I0) = R5;
+    DM(P_MET, I0) = R0;                 // (I0: not 0)
     COMP(R2, R3);
     IF NE JUMP n_pass;
     R4 = PASS R4;
@@ -372,20 +372,22 @@ n_eqs:
       NOP;
 n_eqk: NOP;
 
-    R0 = DM(N_INIT);                    // first call: clear every ring and guard
-    R0 = PASS R0;
+    R0 = DM(N_INIT);                    // first call: every ring and guard to the model's
+    R0 = PASS R0;                       // silence state (a constant per ring)
     IF NE JUMP n_go;
     I4 = DM(MODEL + H_CLR);
-    R0 = 0;
     R2 = DM(0, I4);
     MODIFY(I4, 1);
+    F5 = 16.0;                          // (the values are kept / 16: HX Edit's +-15.8)
     LCNTR = R2, DO n_clr UNTIL LCE;
       I3 = DM(0, I4);
       R1 = DM(1, I4);
+      F0 = DM(2, I4);
+      F0 = F0 * F5;
       LCNTR = R1, DO n_clrw UNTIL LCE;
 n_clrw: DM(I3, 1) = R0;
       NOP;
-n_clr: MODIFY(I4, 2);
+n_clr: MODIFY(I4, 3);
     R0 = 1;
     DM(N_INIT) = R0;
 

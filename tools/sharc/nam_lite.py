@@ -55,6 +55,7 @@ HIST_N = 512
 EQ_BANDS = (("low", 100.0), ("peak", 650.0), ("high", 2500.0), ("high", 5500.0))   # Bass Mid Treble Presence
 IR_LIMIT = 15.8489                # HX Edit refuses a sample beyond +-24 dB (error -8317)
 HEAD_L = nam_pack.HEAD_TAPS - 1 + 16
+N_WEIGHTS = 1871                  # a model's weights (then its silence state, 72 words)
 
 
 def layer_weights(w):
@@ -85,10 +86,41 @@ def layer_weights(w):
 
 
 def stream(w):
-    """The 1,871 words a model is loaded as, in the kernel's order: rechannel (3),
-    head (bias + 48), head scale, then each layer's weights (layer_weights)."""
+    """The words a model is loaded as, in the kernel's order: rechannel (3), head
+    (bias + 48), head scale, each layer's weights (layer_weights): 1,871; then its
+    silence state (silence(): 72, each / 16, as the kernel keeps them)."""
     blocks, head, rech, scale = layer_weights(w)
-    return list(rech) + list(head) + [scale] + [x for b in blocks for x in b]
+    hs, xs = silence(w)
+    return list(rech) + list(head) + [scale] + [x for b in blocks for x in b] + [v / 16 for v in hs + [v for x in xs for v in x]]
+
+
+def silence(w):
+    """What the rings hold after silence, in float32 op for op as the kernel adds:
+    the head's input (3) and each layer's input x (23 x 3). With 0 in, every
+    layer's input is a constant, so the state is that constant in every word. A
+    change of model fills the rings with it (zeros swing the output by up to
+    0.1 for the first 130 ms: a pop, even with nothing played)."""
+    f = lambda x: ssim.b2f(ssim.f2b(x))
+    blocks, head, rech, scale = layer_weights([f(v) for v in w])
+    x = [f(r * 0.0) for r in rech]
+    hs, xs = [0.0] * C, []
+    for k, blk in zip(nam_pack.KERNEL, blocks):
+        xs.append(list(x))
+        a = []
+        for i in range(C):
+            v = f(f(blk[2 * i] + f(blk[2 * i + 1] * 0.0)) + 0.0)
+            for t in range(k):
+                for j in range(C):
+                    v = f(v + f(blk[2 * C + (t * C + j) * C + i] * x[j]))
+            a.append(max(v, f(v * f(0.01))))
+        hs = [f(h + v) for h, v in zip(hs, a)]
+        o = 2 * C + k * C * C
+        for i in range(C):
+            u = blk[o + 4 * i]
+            for j in range(C):
+                u = f(u + f(a[j] * blk[o + 4 * i + 1 + j]))
+            x[i] = f(x[i] + u)
+    return hs, xs
 
 
 def placeholder():
@@ -96,7 +128,7 @@ def placeholder():
     without a .nam: it fills the built-in model's place, which NAM A2 Lite's
     Model knob (1 .. 128) never selects, and drives --check."""
     rnd = random.Random(2026)
-    n = len(stream([0.0] * 1871))
+    n = N_WEIGHTS
     return [ssim.b2f(nam_pack.f2b(rnd.uniform(-0.3, 0.3))) for _ in range(n)]
 
 
@@ -111,10 +143,11 @@ def ir_samples(w):
     e = 0
     while peak / 2.0 ** e > 15.5:
         e += 1
-    head = [0.5, -0.5, float(C), 2.0 ** e, len(st) / 1024.0, 0.0, 0.0, 0.0]
+    head = [0.5, -0.5, float(C), 2.0 ** e, N_WEIGHTS / 1024.0, 0.0, 0.0, 0.0]
     out = head + [x / 2.0 ** e for x in st]
     assert len(out) < IR_SAMPLES
     assert max(abs(x) for x in out) < IR_LIMIT, "a sample HX Edit would refuse"
+    # (a slot made before the silence state has 0 there: its rings start at 0)
     return [nam_pack.f2b(x) for x in out] + [0] * (IR_SAMPLES - len(out))
 
 
@@ -173,7 +206,7 @@ def model_words(w, n_code, layers=None):
     # Block 3: header (9 + the clear list), table, rechannel, weights that did not fit, rings
     for n_ddr in range(0, 4):
         far = [i for i, (k, d) in enumerate(zip(nam_pack.KERNEL, nam_pack.DILATION)) if d == 239][:n_ddr]
-        n_clr = 1 + (n - len(far)) + len(far) * 3              # head rings, inner layers, far rings
+        n_clr = C * (1 + n)                                     # each channel's head ring and layer rings
         n_load = 3 + n                                          # rechannel, head, scale, layers
         a = MODEL + 12
         table = a
@@ -194,9 +227,9 @@ def model_words(w, n_code, layers=None):
             a += len(blk)
         put(wt[i], [nam_pack.f2b(x) for x in blk])
     put(a_rech, [nam_pack.f2b(x) for x in rech])
-    clr = []
+    clr = []                                        # (address, length), filled with the silence state
     hb = [a + j * (HEAD_L + 1) for j in range(C)]
-    clr.append((a, 3 * (HEAD_L + 1)))
+    clr += [(b, HEAD_L + 1) for b in hb]
     a += 3 * (HEAD_L + 1)
     far_a = DDR2
     tab = []
@@ -210,7 +243,7 @@ def model_words(w, n_code, layers=None):
             s = 16
         else:
             bases = [a + j * (L + 1) for j in range(C)]
-            clr.append((a, C * (L + 1)))
+            clr += [(b, L + 1) for b in bases]
             a += C * (L + 1)
             s = d
         steps = [-(k - 1) * s, 2 - 2 * s, 2 - s]
@@ -219,9 +252,14 @@ def model_words(w, n_code, layers=None):
                 1 if i in far else 0, (d - 16) & 0xFFFFFFFF, steps[0] & 0xFFFFFFFF]
     assert a <= EQ_C and far_a <= DDR2_END
     assert len(clr) == n_clr, (len(clr), n_clr)
+    # the clear list: (address, length, value) - the value the built-in model's
+    # silence state, replaced by each model's as it loads (the load map's last 72 runs)
+    hs, xs = silence(w)
+    vals = [v / 16 for v in hs + [v for x in xs for v in x]]
+    clr_list = [n_clr] + [x for r, v in zip(clr, vals) for x in (r[0], r[1], nam_pack.f2b(v))]
     runs = [(a_rech, C), (wt[n], len(head)), (MODEL + 4, 1)] + [(wt[i], len(blocks[i])) for i in range(n)]
+    runs += [(LISTS + 3 + 3 * r, 1) for r in range(n_clr)]
     assert sum(ln for _, ln in runs) == len(stream(w))
-    clr_list = [n_clr] + [x for r in clr for x in r]
     load_map = [len(runs)] + [x for r in runs for x in r]
     put(LISTS, clr_list + load_map)
     header = [layers or n, table, a_rech, wt[n], nam_pack.f2b(scale)] + hb + [0, LISTS + len(clr_list),
@@ -292,14 +330,24 @@ def build(w, layers=None, meter=False):
     return src + "\n".join(lines) + "\n", used
 
 
-def reference(w, sig):
-    """src/sharc/nam_a2.asm on `sig`, x1 in (Drive 5.0) and x1 out (Ch Vol 5.0), as words."""
+def reference(w, sig, rings=False):
+    """src/sharc/nam_a2.asm on `sig` from the silence state (its rings filled with
+    silence(), as the kernel fills its own), x1 in (Drive 5.0) and x1 out (Ch Vol
+    5.0), as words. rings: also its ring memory before and after."""
     n = len(sig)
     ref_src = open(os.path.join(root, "src/sharc/nam_a2.asm")).read()
     secs, syms = sasm.assemble(ref_src, "nam_a2.asm")
     ref = ssim.Sim()
     ref.load(secs)
-    for i, v in enumerate(nam_pack.pack(w, C, syms["MODEL"])):
+    words = nam_pack.pack(w, C, syms["MODEL"])
+    hs, xs = silence(w)
+    fill = hs * nam_pack.HEAD_TAPS                  # head ring, then each layer's: [column][channel]
+    for k, d, x in zip(nam_pack.KERNEL, nam_pack.DILATION, xs):
+        fill += x * ((k - 1) * d + 1)
+    a_ring = words[6] - syms["MODEL"]
+    assert len(words) == a_ring + len(fill)
+    words[a_ring:] = [nam_pack.f2b(v) for v in fill]
+    for i, v in enumerate(words):
         ref.wr(syms["MODEL"] + i, v)
     IN, OUT = 0x400000, 0x410000
     for i, x in enumerate(sig):
@@ -308,7 +356,10 @@ def reference(w, sig):
     ref.wr(syms["NAM_OUT"], OUT)
     ref.wr(syms["NAM_N"], n)
     ref.call(syms["NAM_PROCESS"])
-    return [ref.rd(OUT + i) for i in range(n)]   # Level 0.5: x1
+    out = [ref.rd(OUT + i) for i in range(n)]       # Level 0.5: x1
+    if rings:
+        return out, words[a_ring:], [ref.rd(syms["MODEL"] + i) for i in range(a_ring, len(words))]
+    return out
 
 
 EQ_TEST = (0.8, 0.3, 0.6, 0.2)    # Bass, Mid, Treble, Presence in the check
@@ -374,6 +425,10 @@ def check(asm, w, nblk):
     sig = [0.3 * math.sin(0.031 * i) * math.exp(-i / 300) + 0.1 * math.sin(0.41 * i) + (0.5 if i == 7 else 0)
            for i in range(n)]
     ref = reference(w, sig)
+    # silence() is nam_a2.asm's steady state: zeros in leave its rings as they were
+    _, before, after = reference(w, [0.0] * 32, rings=True)
+    if before != after:
+        sys.exit("silence(): not a fixed point of nam_a2.asm")
 
     secs, syms = sasm.assemble(asm, "nam_lite.asm")
     code = sum(len(s.words) for s in secs if s.kind == "pm")
