@@ -91,7 +91,7 @@ The XL's firmware 3.80.0 is the Stomp's with another build of the main applicati
 
 Notes:
 - The Model knob shows slot numbers, not IR names.
-- Changing Model fades the old capture out and the new one in, with no pop.
+- Changing Model (by hand or in a snapshot) crossfades with no gap: the new capture fades in over about 5 ms while the last few milliseconds of the old one play backwards and fade out.
 - Presets store the slot number. If you move a capture to another slot, update the presets that use it.
 
 ## Limits

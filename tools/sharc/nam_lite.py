@@ -49,6 +49,9 @@ EQ_C, EQ_S, EQ_IDX = 0xE7FE0, 0xE7FF4, 0xE7FFC   # nam_lite_kernel.asm's tone st
 EQ_TAB = 0x326A00                 # DDR2, after the built-in model
 LISTS = 0x327200                  # DDR2: the clear list and the load map (read on a load or a clear)
 DRIVE_TAB = 0x327400              # DDR2: Drive's gain per step, 0 dB at 5.0, -20 .. +20 dB (linear in dB)
+FADE_TAB = 0x327480               # DDR2: the crossfade's gains, sin(pi/2 k/16), k = 0 .. 16, then 1.0
+HIST = 0x327500                   # DDR2: the last 512 outputs (the crossfade's tail plays them back)
+HIST_N = 512
 EQ_BANDS = (("low", 100.0), ("peak", 650.0), ("high", 2500.0), ("high", 5500.0))   # Bass Mid Treble Presence
 IR_LIMIT = 15.8489                # HX Edit refuses a sample beyond +-24 dB (error -8317)
 HEAD_L = nam_pack.HEAD_TAPS - 1 + 16
@@ -170,7 +173,7 @@ def model_words(w, n_code, layers=None):
     # Block 3: header (9 + the clear list), table, rechannel, weights that did not fit, rings
     for n_ddr in range(0, 4):
         far = [i for i, (k, d) in enumerate(zip(nam_pack.KERNEL, nam_pack.DILATION)) if d == 239][:n_ddr]
-        n_clr = 1 + (n - len(far)) + len(far) * 3 + 1          # head rings, inner layers, far rings, EQ state
+        n_clr = 1 + (n - len(far)) + len(far) * 3              # head rings, inner layers, far rings
         n_load = 3 + n                                          # rechannel, head, scale, layers
         a = MODEL + 12
         table = a
@@ -214,7 +217,6 @@ def model_words(w, n_code, layers=None):
         assert all(abs(x) < L for x in steps + [-(k - 1) * d]), "a step as long as the ring"
         tab += [bases[0], bases[1] - bases[0], L, 0, k, s, wt[i], -(k - 1) * d & 0xFFFFFFFF,
                 1 if i in far else 0, (d - 16) & 0xFFFFFFFF, steps[0] & 0xFFFFFFFF]
-    clr.append((EQ_S, 8))
     assert a <= EQ_C and far_a <= DDR2_END
     assert len(clr) == n_clr, (len(clr), n_clr)
     runs = [(a_rech, C), (wt[n], len(head)), (MODEL + 4, 1)] + [(wt[i], len(blocks[i])) for i in range(n)]
@@ -231,12 +233,24 @@ def model_words(w, n_code, layers=None):
     put(EQ_TAB, eq_table())
     assert EQ_TAB > BUILTIN_TOP and EQ_TAB + 4 * 101 * 5 <= LISTS
     put(EQ_IDX, [0xFFFFFFFF] * 4)                  # no step yet: the first call loads them
+    put(EQ_C, [nam_pack.f2b(x) for x in [1.0, 0.0, 0.0, 0.0, 0.0] * 4])   # flat until then
+    put(EQ_S, [0] * 8)                             # the tone stack's state: 0 at boot, never cleared
+    put(FADE_TAB, fade_table())
+    put(HIST, [0] * HIST_N)
+    assert DRIVE_TAB + 101 <= FADE_TAB and FADE_TAB + 18 <= HIST and HIST + HIST_N <= DDR2_END
     assert LISTS + len(clr_list) + len(load_map) <= DRIVE_TAB
     put(DRIVE_TAB, [nam_pack.f2b(10.0 ** ((step - 50) * 0.4 / 20)) for step in range(101)])   # 0.4 dB a step
     put(MODEL, header)
     put(table, tab)
     used = {"block 2 to": b2, "block 3 to": a, "DDR2 to": far_a, "layers in DDR2": far}
     return mem, used
+
+
+METER_ENTRY = '''    DM(N_SAVE + 63) = R0;               // --meter: EMUCLK at entry
+    R0 = EMUCLK;
+    DM(N_T0) = R0;
+    R0 = DM(N_SAVE + 63);
+'''
 
 
 METER = '''    R0 = EMUCLK;                        // --meter: a 187.5 Hz square wave (16 blocks a period)
@@ -264,6 +278,7 @@ def build(w, layers=None, meter=False):
     src = open(os.path.join(here, "nam_lite_kernel.asm")).read()
     if meter:
         src = src.replace("    // METER (nam_lite.py --meter puts code here)\n", METER)
+        src = src.replace("    // METER ENTRY (nam_lite.py --meter puts code here)\n", METER_ENTRY)
     secs, _ = sasm.assemble(src, "nam_lite_kernel.asm")
     n_code = sum(len(s.words) for s in secs if s.kind == "pm")
     mem, used = model_words(w, n_code, layers)
@@ -299,49 +314,66 @@ def reference(w, sig):
 EQ_TEST = (0.8, 0.3, 0.6, 0.2)    # Bass, Mid, Treble, Presence in the check
 
 
-def eq_ref(words, knobs=EQ_TEST):
-    """The kernel's tone stack in float32, op for op, from a cleared state."""
-    f = lambda x: ssim.b2f(ssim.f2b(x))
-    tab = eq_table()
-    co = []
-    for band, k in enumerate(knobs):
-        i = min(100, max(0, int(k * 100 + 0.5)))
-        co.append([ssim.b2f(v) for v in tab[(band * 101 + i) * 5: (band * 101 + i) * 5 + 5]])
-    st = [[0.0, 0.0] for _ in co]
-    out = []
-    for wd in words:
-        x = ssim.b2f(wd)
-        for (b0, b1, b2, na1, na2), z in zip(co, st):
-            y = f(f(b0 * x) + z[0])
-            z[0] = f(f(f(b1 * x) + f(na1 * y)) + z[1])
-            z[1] = f(f(b2 * x) + f(na2 * y))
-            x = y
-        out.append(ssim.f2b(x))
-    return out
+def fade_table():
+    """FADE_TAB: the model fades in by sin(pi/2 k/16), the tail out by its mirror: equal power."""
+    return [nam_pack.f2b(math.sin(math.pi / 2 * k / 16)) for k in range(17)] + [nam_pack.f2b(1.0)]
 
 
-def fade_in(words, p0=0.0):
-    """The kernel's fade on blocks of 16, its phase from p0 up 1/8 a block (to 1), the gain
-    p^2 (3 - 2p) at each block's ends and in a line between, in float32."""
-    f = lambda x: ssim.b2f(ssim.f2b(x))
-    smooth = lambda p: f(f(p * p) * f(3.0 - f(p + p)))
-    out, p = [], p0
-    for b in range(0, len(words), 16):
-        p1 = min(1.0, p + 0.125)
-        g = smooth(p)
-        dg = f(f(smooth(p1) - g) * 0.0625)
-        for wd in words[b: b + 16]:
-            out.append(ssim.f2b(f(ssim.b2f(wd) * g)))
-            g = f(g + dg)
-        p = p1
-    return out
+class Pipe:
+    """The kernel after the model, in float32 op for op: the crossfade (the model's
+    output x its fade-in gain + HIST played backwards x the tail's gain, into HIST)
+    and the tone stack, whose state carries on."""
+
+    def __init__(self):
+        self.f = lambda x: ssim.b2f(ssim.f2b(x))
+        self.tab = [ssim.b2f(v) for v in fade_table()]
+        self.hist = [0] * HIST_N
+        self.hw = self.mr = self.mg = self.gain = 0
+        self.co = [[1.0, 0.0, 0.0, 0.0, 0.0] for _ in range(4)]   # flat, as at boot
+        self.st = [[0.0, 0.0] for _ in range(4)]
+
+    def knobs(self, knobs=EQ_TEST):
+        tab = eq_table()
+        self.co = []
+        for band, k in enumerate(knobs):
+            i = min(100, max(0, int(k * 100 + 0.5)))
+            self.co.append([ssim.b2f(v) for v in tab[(band * 101 + i) * 5: (band * 101 + i) * 5 + 5]])
+
+    def cut(self):
+        """A model change: the tail from the last output, the model silent."""
+        self.mg, self.mr, self.gain = 17, (self.hw + HIST_N - 1) % HIST_N, 0
+
+    def block(self, words):
+        """One block: the model's 16 output words (None: no model, the block is 0)."""
+        f, tab = self.f, self.tab
+        g1 = 0 if words is None else min(16, self.gain + 1)
+        words = words or [0] * 16
+        g, m1 = tab[self.gain], max(0, self.mg - 1)
+        dg = f(f(tab[g1] - g) * 0.0625)
+        m = tab[self.mg]
+        dm = f(f(tab[m1] - m) * 0.0625)
+        out = []
+        for wd in words:
+            x = f(f(ssim.b2f(wd) * g) + f(ssim.b2f(self.hist[self.mr]) * m))
+            self.mr = (self.mr - 1) % HIST_N
+            self.hist[self.hw] = ssim.f2b(x)
+            self.hw = (self.hw + 1) % HIST_N
+            for (b0, b1, b2, na1, na2), z in zip(self.co, self.st):
+                y = f(f(b0 * x) + z[0])
+                z[0] = f(f(f(b1 * x) + f(na1 * y)) + z[1])
+                z[1] = f(f(b2 * x) + f(na2 * y))
+                x = y
+            out.append(ssim.f2b(x))
+            g, m = f(g + dg), f(m + dm)
+        self.gain, self.mg = g1, m1
+        return out
 
 
 def check(asm, w, nblk):
     n = 16 * nblk
     sig = [0.3 * math.sin(0.031 * i) * math.exp(-i / 300) + 0.1 * math.sin(0.41 * i) + (0.5 if i == 7 else 0)
            for i in range(n)]
-    want = fade_in(eq_ref(reference(w, sig)))
+    ref = reference(w, sig)
 
     secs, syms = sasm.assemble(asm, "nam_lite.asm")
     code = sum(len(s.words) for s in secs if s.kind == "pm")
@@ -394,78 +426,79 @@ def check(asm, w, nblk):
     blocks = [[ssim.f2b(x) for x in sig[16 * b: 16 * b + 16]] for b in range(nblk)]
     noise = [[ssim.f2b(rnd.uniform(-0.5, 0.5)) for _ in range(16)] for _ in range(nblk)]
     zero = [0] * 16
-    # A: the first call passes through (no owner yet), then A owns the memory;
+    pipe = Pipe()
+
+    def expect(p, block, label, words):
+        """A call whose output must be the pipe's on the model's words (None: no model)."""
+        got = call(p, block, label)
+        want = pipe.block(words)
+        if got != want:
+            sys.exit(f"{label}: not the expected output")
+        return got
+
+    # A: the first call passes through (no owner yet), then A owns the memory and
+    # loads the model (a block with only the tail, of nothing yet);
     # B, called after A every block, passes its input through untouched
     if call(PA, zero, "A first") != zero:
         sys.exit("A's first call (no owner yet) did not pass its input through")
-    if call(PA, zero, "A load") != zero:
+    pipe.cut()
+    if expect(PA, zero, "A load", None) != zero:
         sys.exit("A's first owned call (loading the model) is not silent")
-    got = []
+    pipe.knobs()
+    got, want = [], []
     for b in range(nblk):
+        words = ref[16 * b: 16 * b + 16]
+        want += pipe.block(words)                   # (compared below, with the largest difference)
         got += call(PA, blocks[b], f"A block {b}")
         if call(PB, noise[b], f"B block {b}") != noise[b]:
             sys.exit(f"B block {b}: a second instance did not pass its input through")
     # A removed: B's next call finds the tick where it left it and takes over,
-    # from cleared rings
-    got_b = []
+    # from cleared rings, fading in, with no tail
+    pipe.gain = pipe.mg = 0
+    ref4 = reference(w, sig[:64])
     for b in range(min(nblk, 4)):
-        got_b += call(PB, blocks[b], f"B owner block {b}")
-    if got_b != fade_in(eq_ref(reference(w, sig[:len(got_b)]))):
-        sys.exit("B, after taking over, does not match nam_a2.asm")
-    # another model in User IR slot 3 (Model 3, an integer): loaded (a silent block), then
-    # nam_a2.asm's output for that model from cleared rings
+        expect(PB, blocks[b], f"B owner block {b}", ref4[16 * b: 16 * b + 16])
+    # another model in User IR slot 3 (Model 3, an integer): at once a crossfade, the
+    # loading block with the tail alone, then nam_a2.asm's output for that model from
+    # cleared rings fading in as the tail fades out
     w2 = [x * (1 + 0.05 * math.sin(i)) for i, x in enumerate(w)]
-    want2 = fade_in(eq_ref(reference(w2, sig[:64])))
     top = 0x2ABDED + 2 * 0x800
     for k, v in enumerate(ir_samples(w2)):
         sim.wr(top - k, v)
     sim.wr(0x2AB56E + 2, 1)
     sim.wr(PB + 7, 3)
-    for k in range(20):                         # the old model fades out, then a silent block loads
-        if call(PB, zero, f"B to slot 3, {k}") == zero:
-            break
-    else:
-        sys.exit("the slot-3 model never loaded")
-    if k > 4:
-        sys.exit(f"fading out took {k} blocks")
-    got2 = []
-    for b in range(4):
-        got2 += call(PB, blocks[b], f"B slot-3 block {b}")
-    if got2 != want2:
-        sys.exit("the model from IR slot 3 does not match nam_a2.asm on it")
-    # an ordinary IR in slot 5 (Model 5.0, a float as an older blob sends): the
-    # model fades out to silence
+    pipe.cut()
+    tail = expect(PB, blocks[4 % nblk], "B to slot 3 (load)", None)
+    if tail == zero:
+        sys.exit("no tail while the slot-3 model loads")
+    # (past the test signal's end the input is 0: nam_a2.asm sees the same)
+    sig2 = [ssim.f2b(x) for x in sig[:16 * 20]] + [0] * max(0, 16 * 20 - len(sig))
+    ref2 = reference(w2, [ssim.b2f(v) for v in sig2])
+    for b in range(20):
+        expect(PB, sig2[16 * b: 16 * b + 16], f"B slot-3 block {b}", ref2[16 * b: 16 * b + 16])
+    # an ordinary IR in slot 5 (Model 5.0, a float as an older blob sends): the tail
+    # fades out to silence (the tone stack's own tail after it)
     top = 0x2ABDED + 4 * 0x800
     for k in range(2048):
         sim.wr(top - k, ssim.f2b(rnd.uniform(-1, 1) * math.exp(-k / 300)))
     sim.wr(0x2AB56E + 4, 1)
     sim.wr(PB + 7, ssim.f2b(5.0))
+    pipe.cut()
     for k in range(20):
-        if call(PB, blocks[k % nblk], f"B to a cab IR, {k}") == zero:
-            break
-    else:
-        sys.exit("after a cab IR in the chosen slot, not silence")
-    if k > 5:
-        sys.exit(f"fading out took {k} blocks")
-    for b in range(3):
-        if call(PB, blocks[b], f"B cab IR block {b}") != zero:
-            sys.exit("after a cab IR in the chosen slot, not silence")
-    # Model 0 (a model without the parameter): the built-in model again
+        expect(PB, blocks[k % nblk], f"B to a cab IR, {k}", None)
+    # Model 0 (a model without the parameter): the built-in model again, crossfaded
     sim.wr(PB + 7, 0)
-    if call(PB, zero, "B back to built-in") != zero:
-        sys.exit("loading the built-in model is not silent")
-    got3 = []
+    pipe.cut()
+    expect(PB, zero, "B back to built-in (load)", None)
     for b in range(4):
-        got3 += call(PB, blocks[b], f"B built-in block {b}")
-    if got3 != fade_in(eq_ref(reference(w, sig[:64]))):
-        sys.exit("Model 0: not the built-in model")
+        expect(PB, blocks[b], f"B built-in block {b}", ref4[16 * b: 16 * b + 16])
     worst = state["worst"]
     err = max(abs(ssim.b2f(a) - ssim.b2f(b)) for a, b in zip(want, got))
     same = sum(a == b for a, b in zip(want, got))
     peak = max(abs(ssim.b2f(a)) for a in want)
     print(f"nam_lite: {code} instructions of code; {worst} instructions a block at most (steady) "
           f"= {worst / 1500:.1f}% of 150,000 cycles; {n} samples, peak {peak:.4f}: {same} equal bit for bit, "
-          f"largest difference {err:.3g}; registers kept; a second instance passes through and takes over; models from IR slots load, a cab IR is silence, Model 0 the built-in one; tone stack as in float32; model changes fade out and in")
+          f"largest difference {err:.3g}; registers kept; a second instance passes through and takes over; models from IR slots load, a cab IR is silence, Model 0 the built-in one; tone stack as in float32; model changes crossfade with the reversed tail")
     return same == n and peak > 1e-3
 
 

@@ -55,14 +55,21 @@
 .equ N_T0,     0xe4894          // EMUCLK at entry (nam_lite.py --meter)
 .equ N_MCNT,   0xe4895          // --meter: blocks so far
 .equ N_SIG,    0xe4896          // the loaded model: its top address + its first 16 words
-.equ N_GAIN,   0xe4897          // the output fade's phase p at the start of a block, 0 .. 1
-.equ N_G1,     0xe4898          // and at its end; the gain is p^2 (3 - 2p). A model change
-                                // fades out over 4 blocks (1.3 ms), loads in a silent one,
-                                // and the new model, from cleared rings, fades in over 8
-                                // (2.7 ms): no pop. (Keeping the rings for the new model is
+.equ N_GAIN,   0xe4897          // the model's fade-in step 0 .. 16 at the start of a block
+.equ N_G1,     0xe4898          // and at its end (gain FADE_TAB[step], in a line between)
+.equ N_MG,     0xe4899          // the tail's fade-out step 17 .. 0 at the start of a block
+.equ N_MR,     0xe489a          // where the tail reads in HIST (going back)
+.equ N_HW,     0xe489b          // where the block's output goes in HIST
+                                // A model change crossfades with no gap: the new model, from
+                                // cleared rings, fades in over 16 blocks (5.3 ms) while the
+                                // last output, played backwards from HIST, fades out (sin and
+                                // cos: equal power). The tail starts on the last sample heard,
+                                // so there is no step. (Keeping the rings for the new model is
                                 // worse: its weights on the old one's activations burst.)
+.equ HIST,     0x327500         // DDR2: the last 512 outputs before the tone stack
+.equ FADE_TAB, 0x327480         // DDR2: sin(pi/2 k/16), k = 0 .. 16, then 1.0 (k = 17)
 .equ EQ_C,     0xe7fe0          // the tone stack: 4 bands x {b0, b1, b2, -a1, -a2}
-.equ EQ_S,     0xe7ff4          // its state, 4 x {s1, s2} (cleared with the rings)
+.equ EQ_S,     0xe7ff4          // its state, 4 x {s1, s2} (0 at boot, never cleared)
 .equ EQ_IDX,   0xe7ffc          // each band's knob step 0..100 now (-1 at boot: load)
 .equ EQ_TAB,   0x326a00         // DDR2: 4 bands x 101 steps x 5 coefficients (nam_lite.py)
 .equ DRIVE_TAB, 0x327400        // DDR2: Drive's input gain for each step 0.0 .. 10.0 (-20 .. +20 dB)
@@ -110,10 +117,7 @@
 
 CUSTOM_AMP_ENTRY:
     DM(N_SAVE + 0) = MODE1;
-    DM(N_SAVE + 63) = R0;               // (EMUCLK at entry, for --meter)
-    R0 = EMUCLK;
-    DM(N_T0) = R0;
-    R0 = DM(N_SAVE + 63);
+    // METER ENTRY (nam_lite.py --meter puts code here)
     BIT CLR MODE1 PEYEN | BDCST9;       // (stock kernels leave them off; be sure)
     BIT SET MODE1 CBUFEN;               // the rings wrap: circular buffers on (MODE1 is put back)
     DM(N_SAVE + 1) = R0;
@@ -195,11 +199,11 @@ CUSTOM_AMP_ENTRY:
     DM(N_OWNER) = R0;                   // take over
     R0 = 0;
     DM(N_INIT) = R0;
-    DM(N_GAIN) = R0;                    // and fade in
+    DM(N_GAIN) = R0;                    // and fade in (no tail: that instance is gone)
+    DM(N_MG) = R0;
 n_mine:
     R0 = DM(N_TICK);
-    R1 = 1;
-    R0 = R0 + R1;
+    R0 = R0 + 1;
     DM(N_TICK) = R0;
     JUMP n_own;
 n_pass:
@@ -231,17 +235,18 @@ n_own:
     DM(N_LEVEL) = F0;                   // output level, 4 k^2
     B10 = I1;                           // the block's input and output, through PM
     B11 = I2;
-    L0 = 0; L1 = 0; L2 = 0; L3 = 0; L4 = 0; L5 = 0;
+    L0 = 0; L3 = 0; L4 = 0; L5 = 0;     // (L1, L2 are 0 already)
     L8 = 0; L9 = 0; L10 = 0; L11 = 0;
     M9 = 1; M10 = 2;
 
     // ---- the model: Model (DM(7, I0)), the User IR list as the IR block's IR Select,
     // an integer 1 .. 128: that User IR slot when it holds a NAM Lite model
-    // (tools/nam2ir.py: its first words 0.5, -0.5, 3.0, scale, 1871 / 1024), else
+    // (tools/nam2ir.py: its first words 0.5, -0.5, 3.0, scale, 1871 / 1024; the
+    // -0.5 is not checked), else
     // (a cab IR, an empty slot) silence. 0 (a model with no Model parameter,
     // whose DM(7) fn_reset left 0) is the built-in one. A
-    // float (an older blob) is truncated. A change, or new contents, fades out and loads it: that
-    // block is silent, the next clears the rings.
+    // float (an older blob) is truncated. A change, or new contents, loads it at once: that
+    // block has only the tail (N_MG), the next clears the rings and the model fades in.
     R8 = DM(MODEL + H_BUILTIN);
     R0 = DM(7, I0);
     R1 = 0x800000;
@@ -269,10 +274,6 @@ n_int:
     F3 = 0.5;
     COMP(F2, F3);
     IF NE JUMP n_none;
-    F2 = DM(-1, I3);
-    F3 = -0.5;
-    COMP(F2, F3);
-    IF NE JUMP n_none;
     F2 = DM(-2, I3);
     F3 = 3.0;
     COMP(F2, F3);
@@ -291,39 +292,24 @@ n_sigw: R5 = R5 + R6;
     R6 = DM(N_SIG);
     COMP(R5, R6);
     IF EQ JUMP n_same;
-    F0 = DM(N_GAIN);                    // another model: first fade this one out
-    F0 = PASS F0;
-    IF LE JUMP n_load;
-    F1 = 0.25;
-    F0 = F0 - F1;
-    F1 = 0.0;
-    F0 = MAX(F0, F1);
-    DM(N_G1) = F0;
-    JUMP n_have;
+    DM(N_SIG) = R5;                     // another model: crossfade to it, and load it
+    CALL n_cut;
+    JUMP n_load;
 n_same:
-    F0 = DM(N_GAIN);                    // the same model: fade in, or stay at 1
-    F1 = 0.125;
-    F0 = F0 + F1;
-    F1 = 1.0;
-    F0 = MIN(F0, F1);
-    DM(N_G1) = F0;
+    R0 = DM(N_GAIN);                    // the same model: fade in, or stay at 16
+    R0 = R0 + 1;
+    R1 = 16;
+    R0 = MIN(R0, R1);
+    DM(N_G1) = R0;
     JUMP n_have;
 n_none:
-    F0 = DM(N_GAIN);                    // no model in that slot: fade out, then silence
-    F0 = PASS F0;
-    IF LE JUMP n_none0;
-    F1 = 0.25;
-    F0 = F0 - F1;
-    F1 = 0.0;
-    F0 = MAX(F0, F1);
-    DM(N_G1) = F0;
-    JUMP n_have;
-n_none0:
-    R0 = 0;                             // none loaded: a model in the slot loads, from
-    DM(N_SIG) = R0;                     // cleared rings
-    JUMP n_zero;
-n_load:
-    DM(N_SIG) = R5;                     // load it: each word x the scale, through the map
+    R0 = DM(N_SIG);                     // no model in that slot: silence (after the tail)
+    R0 = PASS R0;
+    IF EQ JUMP n_zero;
+    CALL n_cut;                         // (R0 = 0 after it)
+    DM(N_SIG) = R0;                     // none loaded: a model in the slot loads, from
+    JUMP n_zero;                        // cleared rings
+n_load:                                 // load it: each word x the scale, through the map
     I3 = R8;
     F3 = DM(-3, I3);
     MODIFY(I3, -8);
@@ -338,13 +324,14 @@ n_load:
         F0 = F0 * F3;
 n_ldw:  DM(I5, 1) = F0;
 n_ldr: MODIFY(I4, 2);
-n_zero:
+n_zero:                                 // no model this block: the tail alone
     R0 = 0;
     DM(N_INIT) = R0;
+    DM(N_G1) = R0;
     I11 = B11;
     LCNTR = 16, DO n_ldz UNTIL LCE;
 n_ldz: PM(I11, M9) = R0;
-    JUMP n_back;
+    JUMP n_mix;
 n_have:
     // ---- the tone knobs, Bass, Mid, Treble, Presence (DM(8..11, I0)): each
     // step 0.0 .. 10.0 has its five coefficients in EQ_TAB, copied when it moves
@@ -373,16 +360,10 @@ n_have:
       R1 = R1 + R0;
       R1 = R1 + R9;
       I0 = R1;                          // (I0 is free: the knobs are read)
-      R1 = DM(0, I0);
-      DM(0, I5) = R1;
-      R1 = DM(1, I0);
-      DM(1, I5) = R1;
-      R1 = DM(2, I0);
-      DM(2, I5) = R1;
-      R1 = DM(3, I0);
-      DM(3, I5) = R1;
-      R1 = DM(4, I0);
-      DM(4, I5) = R1;
+      I2 = I5;                          // (I1, I2 are free: B10, B11 hold the block's input, output)
+      LCNTR = 5, DO n_eqw UNTIL LCE;
+        R1 = DM(I0, 1);
+n_eqw:  DM(I2, 1) = R1;
 n_eqs:
       MODIFY(I4, 1);
       MODIFY(I5, 5);
@@ -701,25 +682,46 @@ n_hpair: NOP;
     BIT CLR MODE1 PEYEN | BDCST9;
     NOP;
 
-    // ---- the tone stack on the block's output: four biquads (transposed
-    // direct form II: y = b0 x + s1, s1 = b1 x - a1 y + s2, s2 = b2 x - a2 y)
-    F2 = DM(N_GAIN);                    // with the fade: the gain p^2 (3 - 2p) at N_GAIN, to
-    F1 = 3.0;                           // that at N_G1, in a line over the block
-    F4 = F2 + F2;
-    F4 = F1 - F4;
-    F2 = F2 * F2;
-    F2 = F2 * F4;
-    F3 = DM(N_G1);
-    F4 = F3 + F3;
-    F4 = F1 - F4;
-    F3 = F3 * F3;
-    F3 = F3 * F4;
-    F3 = F3 - F2;
+    // ---- the mix: the model's output x its fade-in gain + the tail x its
+    // fade-out gain (each FADE_TAB at the block's start, in a line to its end),
+    // kept in HIST; then the tone stack (transposed direct form II: y = b0 x + s1,
+    // s1 = b1 x - a1 y + s2, s2 = b2 x - a2 y). Its state is never cleared after
+    // boot: the tail plays through it.
+n_mix:
+    B0 = HIST;
+    L0 = 512;
+    I0 = DM(N_HW);
+    B5 = HIST;
+    L5 = 512;
+    I5 = DM(N_MR);
+    M0 = 1;
+    M1 = -1;
+    I3 = FADE_TAB;
     F1 = 0.0625;
+    M2 = DM(N_GAIN);
+    F2 = DM(M2, I3);
+    M2 = DM(N_G1);
+    F3 = DM(M2, I3);
+    F3 = F3 - F2;
     F3 = F3 * F1;
+    R0 = DM(N_MG);
+    M2 = R0;
+    F6 = DM(M2, I3);
+    R0 = R0 - 1;
+    IF LT R0 = R0 + 1;
+    DM(N_MG) = R0;
+    M2 = R0;
+    F7 = DM(M2, I3);
+    F7 = F7 - F6;
+    F7 = F7 * F1;
     I11 = B11;
     LCNTR = 16, DO n_eqx UNTIL LCE;
       F8 = PM(0, I11);
+      F8 = F8 * F2;
+      F0 = DM(I5, M1);
+      F0 = F0 * F6;
+      F8 = F8 + F0;
+      DM(I0, M0) = F8;
       I3 = EQ_C;
       I4 = EQ_S;
       LCNTR = 4, DO n_eqb UNTIL LCE;
@@ -744,12 +746,14 @@ n_hpair: NOP;
         F8 = PASS F9;
         MODIFY(I3, 5);
 n_eqb:  MODIFY(I4, 2);
-      F8 = F8 * F2;
       F2 = F2 + F3;
+      F6 = F6 + F7;
       PM(I11, M9) = F8;
 n_eqx: NOP;
     R0 = DM(N_G1);
     DM(N_GAIN) = R0;
+    DM(N_HW) = I0;
+    DM(N_MR) = I5;
 
     // METER (nam_lite.py --meter puts code here)
 n_back:
@@ -815,6 +819,22 @@ n_back:
     NOP;
     RTS (LR);
 
+// A crossfade starts: the tail from the last output (full gain, 17: it holds
+// for the load block), the model silent until it has loaded. Leaves R0 = 0.
+n_cut:
+    R0 = 17;
+    DM(N_MG) = R0;
+    R0 = DM(N_HW);
+    R0 = R0 - 1;
+    R1 = HIST;
+    R2 = 512;
+    COMP(R0, R1);
+    IF LT R0 = R0 + R2;
+    DM(N_MR) = R0;
+    R0 = 0;
+    DM(N_GAIN) = R0;
+    RTS;
+
 // The 16 words at I3 (DM, step M0 = 1) into the ring B8 (L8 = its length,
 // already set) from offset M8, then its guard (B8 + M11, M11 = the length) =
 // its first word.
@@ -854,3 +874,4 @@ n_fark: MODIFY(I0, M1);
 .section dm 0xe4890                 // N_INIT: 0 at boot, so the first call clears the rings;
     .word 0, 0, 0, 0                // N_LEVEL; N_OWNER, N_TICK: no owner yet;
     .word 0, 0, 0, 0, 0             // N_T0, N_MCNT, N_SIG (no model loaded), N_GAIN, N_G1
+    .word 0, 0x327500, 0x327500     // N_MG, N_MR, N_HW (HIST)
