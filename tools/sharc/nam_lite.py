@@ -420,141 +420,193 @@ class Pipe:
         return out
 
 
-def check(asm, w, nblk):
-    n = 16 * nblk
-    sig = [0.3 * math.sin(0.031 * i) * math.exp(-i / 300) + 0.1 * math.sin(0.41 * i) + (0.5 if i == 7 else 0)
-           for i in range(n)]
-    ref = reference(w, sig)
-    # silence() is nam_a2.asm's steady state: zeros in leave its rings as they were
-    _, before, after = reference(w, [0.0] * 32, rings=True)
-    if before != after:
-        sys.exit("silence(): not a fixed point of nam_a2.asm")
+MAX_CYCLES = 35000                # a block's cycles at most (steady): a slower kernel fails the check
 
-    secs, syms = sasm.assemble(asm, "nam_lite.asm")
-    code = sum(len(s.words) for s in secs if s.kind == "pm")
-    sim = ssim.Sim()
-    sim.strict_cbufen = True
-    sim.load(secs)
-    rnd = random.Random(1)
-    for a in range(0xE4842, 0xE8000):              # the rings start as whatever was there
-        if a not in sim.dm:
-            sim.wr(a, rnd.getrandbits(32))
-    PA, PB, ST, BI, BO = 0xB3000, 0xB3400, 0x91000, 0xB3100, 0xB3200
-    for p in (PA, PB):
-        sim.wr(p + 5, ssim.f2b(0.5))
-        sim.wr(p + 6, ssim.f2b(0.5))
-        for j, k in enumerate(EQ_TEST):
-            sim.wr(p + 8 + j, ssim.f2b(k))
-    keep = [c for c in range(0x10, 0x40) if c not in (0x11, 0x12)]   # all DAG registers but I1, I2
-    state = {"worst": 0}
 
-    def call(p, block, label):
+class CheckFailed(Exception):
+    pass
+
+
+class KernelCheck:
+    """The kernel in ssim as the stock dispatcher calls it, step by step (STEPS, in
+    order: each carries on from the sim's state the ones before it left). A step
+    raises CheckFailed with what is wrong; tests/test_kernel.py runs one test a step."""
+
+    STEPS = ("silence_fixed_point", "first_call_passes_through", "plays_while_second_passes_through",
+             "bit_exact", "cycle_budget", "second_takes_over", "slot_model_crossfades", "cab_ir_is_silent",
+             "model_0_is_builtin")
+
+    def __init__(self, asm, w, nblk=6):
+        self.w, self.nblk, self.n = w, nblk, 16 * nblk
+        self.sig = [0.3 * math.sin(0.031 * i) * math.exp(-i / 300) + 0.1 * math.sin(0.41 * i) + (0.5 if i == 7 else 0)
+                    for i in range(self.n)]
+        secs, self.syms = sasm.assemble(asm, "nam_lite.asm")
+        self.code = sum(len(s.words) for s in secs if s.kind == "pm")
+        sim = self.sim = ssim.Sim()
+        sim.strict_cbufen = True
+        sim.load(secs)
+        rnd = self.rnd = random.Random(1)
+        for a in range(0xE4842, 0xE8000):              # the rings start as whatever was there
+            if a not in sim.dm:
+                sim.wr(a, rnd.getrandbits(32))
+        self.PA, self.PB, self.ST, self.BI, self.BO = 0xB3000, 0xB3400, 0x91000, 0xB3100, 0xB3200
+        for p in (self.PA, self.PB):
+            sim.wr(p + 5, ssim.f2b(0.5))
+            sim.wr(p + 6, ssim.f2b(0.5))
+            for j, k in enumerate(EQ_TEST):
+                sim.wr(p + 8 + j, ssim.f2b(k))
+        self.keep = [c for c in range(0x10, 0x40) if c not in (0x11, 0x12)]   # all DAG registers but I1, I2
+        self.worst = 0
+        self.blocks = [[ssim.f2b(x) for x in self.sig[16 * b: 16 * b + 16]] for b in range(nblk)]
+        self.noise = [[ssim.f2b(rnd.uniform(-0.5, 0.5)) for _ in range(16)] for _ in range(nblk)]
+        self.zero = [0] * 16
+        self.pipe = Pipe()
+        self.got, self.want = [], []
+
+    def run(self):
+        for name in self.STEPS:
+            getattr(self, name)()
+
+    def call(self, p, block, label):
         """One call as the dispatcher makes it, for the instance whose block is p."""
+        sim, rnd = self.sim, self.rnd
         for k in range(16):
-            sim.wr(BI + k, block[k])
+            sim.wr(self.BI + k, block[k])
         for r in range(16):
             sim.setR(r, rnd.getrandbits(32))
             sim.alt[r] = rnd.getrandbits(32)        # PEy's registers (S0-S15)
         for c in range(0x30, 0x40):                 # L registers 0, as the dispatcher leaves them
             sim.set(c, 0)
-        for c, v in ((0x10, p), (0x18, ST), (0x11, BI), (0x12, BO)):
+        for c, v in ((0x10, p), (0x18, self.ST), (0x11, self.BI), (0x12, self.BO)):
             sim.set(c, v)
         sim.u[ssim.U_MODE1] &= ~0x1000000           # CBUFEN off: the kernel must set it itself
         mode1 = sim.u[ssim.U_MODE1]
         before_s = list(sim.alt[:16])
         before_r = [sim.R(r) for r in range(16)]
-        before_u = {c: sim.get(c) for c in keep}
-        cyc = sim.call(syms["CUSTOM_AMP_ENTRY"])
+        before_u = {c: sim.get(c) for c in self.keep}
+        cyc = sim.call(self.syms["CUSTOM_AMP_ENTRY"])
         if label.startswith("A block") and label != "A block 0":     # steady state: no clearing
-            state["worst"] = max(state["worst"], cyc)
+            self.worst = max(self.worst, cyc)
         bad = [f"R{r}" for r in range(16) if sim.R(r) != before_r[r]]
-        bad += [f"{c:#x}" for c in keep if sim.get(c) != before_u[c] and not (0x30 <= c < 0x40 and sim.get(c) == 0)]
+        bad += [f"{c:#x}" for c in self.keep
+                if sim.get(c) != before_u[c] and not (0x30 <= c < 0x40 and sim.get(c) == 0)]
         bad += [f"S{r}" for r in range(16) if sim.alt[r] != before_s[r]]
         if sim.u[ssim.U_MODE1] != mode1:
             bad.append("MODE1")
         if bad:
-            sys.exit(f"{label}: registers changed: {bad}")
+            raise CheckFailed(f"{label}: registers changed: {bad}")
         if sim.loops or sim.pcstk:
-            sys.exit(f"{label}: returns with the loop or PC stack not empty")
-        return [sim.rd(BO + k) for k in range(16)]
+            raise CheckFailed(f"{label}: returns with the loop or PC stack not empty")
+        return [sim.rd(self.BO + k) for k in range(16)]
 
-    blocks = [[ssim.f2b(x) for x in sig[16 * b: 16 * b + 16]] for b in range(nblk)]
-    noise = [[ssim.f2b(rnd.uniform(-0.5, 0.5)) for _ in range(16)] for _ in range(nblk)]
-    zero = [0] * 16
-    pipe = Pipe()
-
-    def expect(p, block, label, words):
+    def expect(self, p, block, label, words):
         """A call whose output must be the pipe's on the model's words (None: no model)."""
-        got = call(p, block, label)
-        want = pipe.block(words)
-        if got != want:
-            sys.exit(f"{label}: not the expected output")
+        got = self.call(p, block, label)
+        if got != self.pipe.block(words):
+            raise CheckFailed(f"{label}: not the expected output")
         return got
 
-    # A: the first call passes through (no owner yet), then A owns the memory and
-    # loads the model (a block with only the tail, of nothing yet);
-    # B, called after A every block, passes its input through untouched
-    if call(PA, zero, "A first") != zero:
-        sys.exit("A's first call (no owner yet) did not pass its input through")
-    pipe.cut()
-    if expect(PA, zero, "A load", None) != zero:
-        sys.exit("A's first owned call (loading the model) is not silent")
-    pipe.knobs()
-    got, want = [], []
-    for b in range(nblk):
-        words = ref[16 * b: 16 * b + 16]
-        want += pipe.block(words)                   # (compared below, with the largest difference)
-        got += call(PA, blocks[b], f"A block {b}")
-        if call(PB, noise[b], f"B block {b}") != noise[b]:
-            sys.exit(f"B block {b}: a second instance did not pass its input through")
-    # A removed: B's next call finds the tick where it left it and takes over,
-    # from cleared rings, fading in, with no tail
-    pipe.gain = pipe.mg = 0
-    ref4 = reference(w, sig[:64])
-    for b in range(min(nblk, 4)):
-        expect(PB, blocks[b], f"B owner block {b}", ref4[16 * b: 16 * b + 16])
-    # another model in User IR slot 3 (Model 3, an integer): at once a crossfade, the
-    # loading block with the tail alone, then nam_a2.asm's output for that model from
-    # cleared rings fading in as the tail fades out
-    w2 = [x * (1 + 0.05 * math.sin(i)) for i, x in enumerate(w)]
-    top = 0x2ABDED + 2 * 0x800
-    for k, v in enumerate(ir_samples(w2)):
-        sim.wr(top - k, v)
-    sim.wr(0x2AB56E + 2, 1)
-    sim.wr(PB + 7, 3)
-    pipe.cut()
-    tail = expect(PB, blocks[4 % nblk], "B to slot 3 (load)", None)
-    if tail == zero:
-        sys.exit("no tail while the slot-3 model loads")
-    # (past the test signal's end the input is 0: nam_a2.asm sees the same)
-    sig2 = [ssim.f2b(x) for x in sig[:16 * 20]] + [0] * max(0, 16 * 20 - len(sig))
-    ref2 = reference(w2, [ssim.b2f(v) for v in sig2])
-    for b in range(20):
-        expect(PB, sig2[16 * b: 16 * b + 16], f"B slot-3 block {b}", ref2[16 * b: 16 * b + 16])
-    # an ordinary IR in slot 5 (Model 5.0, a float as an older blob sends): the tail
-    # fades out to silence (the tone stack's own tail after it)
-    top = 0x2ABDED + 4 * 0x800
-    for k in range(2048):
-        sim.wr(top - k, ssim.f2b(rnd.uniform(-1, 1) * math.exp(-k / 300)))
-    sim.wr(0x2AB56E + 4, 1)
-    sim.wr(PB + 7, ssim.f2b(5.0))
-    pipe.cut()
-    for k in range(20):
-        expect(PB, blocks[k % nblk], f"B to a cab IR, {k}", None)
-    # Model 0 (a model without the parameter): the built-in model again, crossfaded
-    sim.wr(PB + 7, 0)
-    pipe.cut()
-    expect(PB, zero, "B back to built-in (load)", None)
-    for b in range(4):
-        expect(PB, blocks[b], f"B built-in block {b}", ref4[16 * b: 16 * b + 16])
-    worst = state["worst"]
-    err = max(abs(ssim.b2f(a) - ssim.b2f(b)) for a, b in zip(want, got))
-    same = sum(a == b for a, b in zip(want, got))
-    peak = max(abs(ssim.b2f(a)) for a in want)
-    print(f"nam_lite: {code} instructions of code; {worst} instructions a block at most (steady) "
-          f"= {worst / 1500:.1f}% of 150,000 cycles; {n} samples, peak {peak:.4f}: {same} equal bit for bit, "
-          f"largest difference {err:.3g}; registers kept; a second instance passes through and takes over; models from IR slots load, a cab IR is silence, Model 0 the built-in one; tone stack as in float32; model changes crossfade with the reversed tail")
-    return same == n and peak > 1e-3
+    def silence_fixed_point(self):
+        """silence() is nam_a2.asm's steady state: zeros in leave its rings as they were."""
+        _, before, after = reference(self.w, [0.0] * 32, rings=True)
+        if before != after:
+            raise CheckFailed("silence(): not a fixed point of nam_a2.asm")
+
+    def first_call_passes_through(self):
+        """A's first call passes through (no owner yet); then A owns the memory and
+        loads the model (a block with only the tail, of nothing yet)."""
+        if self.call(self.PA, self.zero, "A first") != self.zero:
+            raise CheckFailed("A's first call (no owner yet) did not pass its input through")
+        self.pipe.cut()
+        if self.expect(self.PA, self.zero, "A load", None) != self.zero:
+            raise CheckFailed("A's first owned call (loading the model) is not silent")
+        self.pipe.knobs()
+
+    def plays_while_second_passes_through(self):
+        """A plays the built-in model; B, called after A every block, passes its input through untouched."""
+        ref = reference(self.w, self.sig)
+        for b in range(self.nblk):
+            self.want += self.pipe.block(ref[16 * b: 16 * b + 16])
+            self.got += self.call(self.PA, self.blocks[b], f"A block {b}")
+            if self.call(self.PB, self.noise[b], f"B block {b}") != self.noise[b]:
+                raise CheckFailed(f"B block {b}: a second instance did not pass its input through")
+
+    def bit_exact(self):
+        """A's output is nam_a2.asm's, then the tone stack in float32, bit for bit."""
+        same = sum(a == b for a, b in zip(self.want, self.got))
+        peak = max(abs(ssim.b2f(a)) for a in self.want)
+        err = max(abs(ssim.b2f(a) - ssim.b2f(b)) for a, b in zip(self.want, self.got))
+        if same != self.n:
+            raise CheckFailed(f"{self.n - same} of {self.n} samples differ, by up to {err:.3g}")
+        if peak <= 1e-3:
+            raise CheckFailed(f"peak {peak:.3g}: the test signal is too quiet to show anything")
+
+    def cycle_budget(self):
+        if self.worst > MAX_CYCLES:
+            raise CheckFailed(f"{self.worst} cycles a block, over MAX_CYCLES {MAX_CYCLES}")
+
+    def second_takes_over(self):
+        """A removed: B's next call finds the tick where it left it and takes over,
+        from the silence state, fading in, with no tail."""
+        self.pipe.gain = self.pipe.mg = 0
+        self.ref4 = reference(self.w, self.sig[:64])
+        for b in range(min(self.nblk, 4)):
+            self.expect(self.PB, self.blocks[b], f"B owner block {b}", self.ref4[16 * b: 16 * b + 16])
+
+    def slot_model_crossfades(self):
+        """Another model in User IR slot 3 (Model 3, an integer): at once a crossfade, the
+        loading block with the tail alone, then nam_a2.asm's output for that model from
+        its silence state fading in as the tail fades out."""
+        sim = self.sim
+        w2 = [x * (1 + 0.05 * math.sin(i)) for i, x in enumerate(self.w)]
+        top = 0x2ABDED + 2 * 0x800
+        for k, v in enumerate(ir_samples(w2)):
+            sim.wr(top - k, v)
+        sim.wr(0x2AB56E + 2, 1)
+        sim.wr(self.PB + 7, 3)
+        self.pipe.cut()
+        if self.expect(self.PB, self.blocks[4 % self.nblk], "B to slot 3 (load)", None) == self.zero:
+            raise CheckFailed("no tail while the slot-3 model loads")
+        # (past the test signal's end the input is 0: nam_a2.asm sees the same)
+        sig2 = [ssim.f2b(x) for x in self.sig[:16 * 20]] + [0] * max(0, 16 * 20 - len(self.sig))
+        ref2 = reference(w2, [ssim.b2f(v) for v in sig2])
+        for b in range(20):
+            self.expect(self.PB, sig2[16 * b: 16 * b + 16], f"B slot-3 block {b}", ref2[16 * b: 16 * b + 16])
+
+    def cab_ir_is_silent(self):
+        """An ordinary IR in slot 5 (Model 5.0, a float as an older blob sends): the tail
+        fades out to silence (the tone stack's own tail after it)."""
+        sim = self.sim
+        top = 0x2ABDED + 4 * 0x800
+        for k in range(2048):
+            sim.wr(top - k, ssim.f2b(self.rnd.uniform(-1, 1) * math.exp(-k / 300)))
+        sim.wr(0x2AB56E + 4, 1)
+        sim.wr(self.PB + 7, ssim.f2b(5.0))
+        self.pipe.cut()
+        for k in range(20):
+            self.expect(self.PB, self.blocks[k % self.nblk], f"B to a cab IR, {k}", None)
+
+    def model_0_is_builtin(self):
+        """Model 0 (a model without the parameter): the built-in model again, crossfaded."""
+        self.sim.wr(self.PB + 7, 0)
+        self.pipe.cut()
+        self.expect(self.PB, self.zero, "B back to built-in (load)", None)
+        for b in range(4):
+            self.expect(self.PB, self.blocks[b], f"B built-in block {b}", self.ref4[16 * b: 16 * b + 16])
+
+
+def check(asm, w, nblk):
+    k = KernelCheck(asm, w, nblk)
+    try:
+        k.run()
+    except CheckFailed as e:
+        sys.exit(str(e))
+    peak = max(abs(ssim.b2f(a)) for a in k.want)
+    print(f"nam_lite: {k.code} instructions of code; {k.worst} instructions a block at most (steady) "
+          f"= {k.worst / 1500:.1f}% of 150,000 cycles; {k.n} samples, peak {peak:.4f}: {k.n} equal bit for bit; "
+          f"registers kept; a second instance passes through and takes over; models from IR slots load, a cab IR "
+          f"is silence, Model 0 the built-in one; tone stack as in float32; model changes crossfade with the reversed tail")
+    return True
 
 
 def main():

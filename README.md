@@ -123,6 +123,21 @@ This has been done on a real unit after a modified firmware hung at the splash, 
 - **The amp.** `tools/patch_amp.py` builds the amp's DSP graph, parameter map and menu entries. A parameter count has to agree in three places (the model table, the graph's parameter map and the menu's info row), or the Stomp shows the wrong name or crashes.
 - **The container.** `tools/hxf.py` and `tools/l6ia.py` read and write the `.hxf` container and the archive inside it. These use checksums only; there is no encryption or signature.
 
+## Tests
+
+```sh
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pytest -m "not slow and not firmware"   # about 1 s: the model data, the converters, the helpers
+.venv/bin/pytest -m slow                          # about 20 s: the kernel in the simulator
+HX_STOMP_HXF=path/to/HX_Stomp_v3.80.0_0x103966115.hxf .venv/bin/pytest -m firmware
+```
+
+GitHub Actions runs the first two on every push and pull request. The firmware tests need your own stock file (`HX_STOMP_HXF`, `HX_STOMP_XL_HXF`) and are skipped without one. They build the whole `.hxf` and compare its MD5 with the one pinned in `tests/test_firmware.py`: the build is deterministic, so a changed byte anywhere in the firmware fails until the pin is updated on purpose.
+
+Write the test first, watch it fail, then change the code:
+- **Kernel behaviour:** add a step to `KernelCheck` in `tools/sharc/nam_lite.py` and its name to `STEPS`. `tests/test_kernel.py` runs one test per step, and `build.py` runs the same steps.
+- **The converters:** `tests/test_web_parity.py` checks that `web/nam2ir-core.js` writes the same bytes as `nam2ir.py` and refuses the same captures, so a change to one fails until the other matches.
+
 ## Layout
 
 ```
@@ -138,6 +153,7 @@ tools/sharc/nam_pack.py       .nam loader, layer order
 tools/sharc/entry4_blob.py    DSP graph library parser
 tools/sharc/sasm.py, ssim.py  SHARC assembler and simulator
 src/sharc/nam_a2.asm          reference NAM A2 implementation for the check
+tests/                        pytest: unit, web parity, kernel (slow), firmware (needs a stock .hxf)
 ```
 
 ## Licence
