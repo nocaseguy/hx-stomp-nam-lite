@@ -8,8 +8,9 @@ be = lambda o: struct.unpack_from('>I', A, o)[0]
 def fletcher_words(buf):                      # a += w ; b += a   (mod 2^32), BE words
     w = np.frombuffer(buf, dtype='>u4').astype(np.uint64)
     n = len(w)
-    a = int(w.sum() & 0xffffffff)
-    b = int((w * np.arange(n, 0, -1, dtype=np.uint64) & 0xffffffff).sum() & 0xffffffff)
+    m = np.uint64(0xffffffff)                  # typed: a plain int fails on 32-bit numpy (Pyodide)
+    a = int(w.sum() & m)
+    b = int((w * np.arange(n, 0, -1, dtype=np.uint64) & m).sum() & m)
     return a, b
 
 off, ok = 0x1c, True

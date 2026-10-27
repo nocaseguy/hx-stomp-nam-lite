@@ -47,6 +47,12 @@ What is here is our own work:
 - **Line 6 Updater** to install, and **HX Edit** to import captures.
 - 3-channel **A2 Lite** captures. A `.nam` with several sizes in one file (a SlimmableContainer) works too: its A2 Lite model is used.
 
+## The setup page (no install)
+
+**[NAM A2 Lite Setup](https://nocaseguy.github.io/hx-stomp-nam-lite/web/)** walks you through everything below in your browser: it builds the firmware from your stock `.hxf`, tells you how to install it, converts your `.nam` captures and shows how to load them. Nothing is uploaded: the page runs this repository's own Python tools in the browser (with [Pyodide](https://pyodide.org)), the same commands as `build.py` without the simulator check, and then compares the result with the tested build's MD5 (the one pinned in `tests/test_firmware.py`). It says **Verified** only when every byte matches.
+
+The page is `web/index.html`; GitHub Pages publishes it with `tools/` (`.github/workflows/pages.yml`). The build step needs the page served over http, so to run it from a copy of the repository: `python3 -m http.server`, then open `http://localhost:8000/web/`. The capture converter also works from the file itself.
+
 ## Build
 
 ```sh
@@ -143,7 +149,7 @@ Write the test first, watch it fail, then change the code:
 ```
 build.py                      one-step build from the stock .hxf
 tools/nam2ir.py               .nam -> User IR .wav
-web/index.html                the same in a browser (web/nam2ir-core.js)
+web/index.html                the setup page: firmware build (web/firmware-worker.js) and converter (web/nam2ir-core.js)
 tools/patch_amp.py            inspect / add-model / patch
 tools/hxf.py, l6ia.py         .hxf container and L6IA archive
 tools/l6ia_verify.py          checks every checksum in an archive

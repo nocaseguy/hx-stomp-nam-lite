@@ -1,0 +1,38 @@
+name: pages
+
+# Publishes the setup page (web/) with the Python tools the in-browser build
+# runs (tools/), in the repository's own layout: the page is at /web/.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}web/
+    steps:
+      - uses: actions/checkout@v4
+      - name: site
+        run: |
+          mkdir -p _site
+          cp -r web tools LICENSE NOTICE _site/
+          find _site -name __pycache__ -prune -exec rm -rf {} +
+          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=web/"><title>NAM A2 Lite Setup</title><a href="web/">NAM A2 Lite Setup</a>\n' > _site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

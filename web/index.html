@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>NAM to HX Stomp IR</title>
-<meta name="description" content="Convert NAM A2 Lite captures into User IR files for NAM A2 Lite on the HX Stomp. Runs in your browser; nothing is uploaded.">
+<title>NAM A2 Lite Setup</title>
+<meta name="description" content="Put NAM A2 Lite on your HX Stomp or HX Stomp XL: build the firmware from your own Line 6 file, install it, and convert your NAM captures. Runs in your browser; nothing is uploaded.">
 <style>
-  /* Layout: one narrow column, a tool panel on top (drop area + options), the converted files as a list of rows under it, the three steps beside on wide screens. */
+  /* Layout: one column of numbered steps (a step nav on top), each a card; the firmware builder and the
+     capture converter live inside their steps. Recovery is its own card after the steps. */
   :root {
     --bg: #f3f4f6;
     --panel: #ffffff;
@@ -43,43 +44,110 @@
   }
 
   * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.5 var(--font-ui);
+    font: 16px/1.55 var(--font-ui);
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px));
-    padding-block: 32px 48px;
+    padding-block: 32px 56px;
   }
   [hidden] { display: none !important; }
-  .wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 24px; }
+  .wrap { max-width: 780px; margin: 0 auto; display: grid; gap: 20px; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--font-mono); font-size: .9em; }
+  code { overflow-wrap: anywhere; }
 
-  header { display: grid; gap: 6px; }
+  header { display: grid; gap: 8px; }
   .eyebrow { font: 600 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
-  h1 { margin: 0; font-size: clamp(26px, 4vw, 34px); line-height: 1.15; letter-spacing: -.01em; text-wrap: balance; }
-  .lede { margin: 0; color: var(--muted); max-width: 62ch; }
+  h1 { margin: 0; font-size: clamp(28px, 5vw, 38px); line-height: 1.12; letter-spacing: -.01em; text-wrap: balance; }
+  .lede { margin: 0; color: var(--muted); max-width: 62ch; font-size: 17px; }
 
-  .main { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
-  @media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); } }
+  .warning {
+    padding: 12px 14px; border-radius: var(--r); background: var(--warn-soft); color: var(--ink);
+    border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); font-size: 14.5px;
+  }
+  .warning b { color: var(--warn); }
 
-  .tool { display: grid; gap: 16px; min-width: 0; }
+  nav.steps-nav { position: sticky; top: 0; z-index: 2; margin-inline: -4px; padding: 8px 4px; background: var(--bg); }
+  nav.steps-nav ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  nav.steps-nav a {
+    display: grid; justify-items: center; gap: 4px; padding: 8px 4px; border-radius: 8px; text-decoration: none;
+    color: var(--muted); font-size: 12.5px; line-height: 1.2; text-align: center; border: 1px solid var(--line); background: var(--panel);
+  }
+  nav.steps-nav a:hover { border-color: var(--accent); color: var(--ink); }
+  nav.steps-nav .n {
+    display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font: 700 12px/1 var(--font-mono);
+  }
+  nav.steps-nav a.done .n { background: var(--ok-soft); color: var(--ok); }
+  @media (max-width: 560px) { nav.steps-nav .t { display: none; } }
+
+  section.step {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 22px 22px 24px; display: grid; gap: 14px; scroll-margin-top: 72px;
+  }
+  @media (max-width: 520px) { section.step { padding: 18px 16px 20px; } }
+  .step-head { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 4px 12px; align-items: center; }
+  .step-head .n {
+    display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-ink); font: 700 16px/1 var(--font-mono);
+  }
+  .step.done .step-head .n { background: var(--ok); color: var(--panel); }
+  .step-head h2 { margin: 0; font-size: 21px; line-height: 1.25; }
+  .step-head p { grid-column: 2; margin: 0; color: var(--muted); font-size: 15px; }
+  .step p { margin: 0; }
+  h3 { margin: 6px 0 0; font-size: 15px; }
+
+  ol.how { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+  ol.how li::marker { color: var(--accent); font-weight: 700; }
+  ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+
+  .checks { display: grid; gap: 8px; }
+  .checks label {
+    display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; cursor: pointer;
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  }
+  .checks label:hover { border-color: var(--muted); }
+  .checks input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--ok); }
+  .checks small { display: block; color: var(--muted); font-size: 13.5px; }
+
+  .files { display: grid; gap: 6px; font-size: 14px; }
+  .files div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); }
+  .files b { font-weight: 600; }
+  @media (max-width: 520px) { .files div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
 
   .drop {
     position: relative; display: grid; place-items: center; gap: 8px; text-align: center;
-    padding: 36px 20px; border: 2px dashed var(--line); border-radius: var(--r);
-    background: var(--panel); cursor: pointer; transition: border-color .15s, background .15s;
+    padding: 30px 20px; border: 2px dashed var(--line); border-radius: var(--r);
+    background: var(--bg); cursor: pointer; transition: border-color .15s, background .15s;
   }
   .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
   .drop:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
   .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
   .drop strong { font-size: 17px; }
   .drop small { color: var(--muted); }
-  .jack { width: 44px; height: 44px; color: var(--accent); }
+  .drop.busy { pointer-events: none; opacity: .55; }
+  .jack { width: 40px; height: 40px; color: var(--accent); }
+
+  .status { display: grid; gap: 10px; padding: 14px; border-radius: var(--r); border: 1px solid var(--line); }
+  .status.ok { background: var(--ok-soft); border-color: transparent; }
+  .status.bad { background: var(--bad-soft); border-color: transparent; }
+  .status.bad .title { color: var(--bad); }
+  .status.ok .title { color: var(--ok); }
+  .status .title { font-weight: 700; }
+  .bar { height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; border: 1px solid var(--line); }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  details.log summary { cursor: pointer; color: var(--muted); font-size: 13.5px; }
+  details.log pre {
+    margin: 8px 0 0; max-height: 260px; overflow: auto; padding: 10px; border-radius: 8px;
+    background: var(--bg); border: 1px solid var(--line); font: 12px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
   .list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-  .list-head h2 { margin: 0; font-size: 15px; }
+  .list-head h3 { margin: 0; }
   .list { display: grid; gap: 8px; }
-
   .row {
     display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 4px 14px; align-items: center;
     padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
@@ -104,93 +172,241 @@
     .actions { grid-column: 1 / -1; grid-row: auto; order: 2; }
     .actions .btn.primary { flex: 1; }
   }
+  .empty { padding: 14px; border: 1px dashed var(--line); border-radius: var(--r); color: var(--muted); font-size: 14px; }
 
   .btn {
-    font: 600 14px/1 var(--font-ui); padding: 9px 14px; border-radius: 8px; cursor: pointer;
-    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    font: 600 14px/1 var(--font-ui); padding: 10px 15px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); text-decoration: none; display: inline-block;
   }
   .btn:hover { border-color: var(--muted); }
   .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   .btn.primary:hover { filter: brightness(1.08); }
+  .btn.big { font-size: 16px; padding: 13px 20px; }
   .btn.icon { padding: 8px 10px; color: var(--muted); }
   .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   .btn:disabled { opacity: .5; cursor: default; }
 
-  .empty {
-    padding: 20px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
-    color: var(--muted); font-size: 14px;
-  }
+  .tip { padding: 10px 12px; background: var(--accent-soft); border-radius: 8px; font-size: 14.5px; }
+  .knob { font: 600 13px/1 var(--font-mono); padding: 2px 6px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); white-space: nowrap; }
+  .path { font: 600 14px/1.4 var(--font-ui); white-space: nowrap; }
 
-  aside { display: grid; gap: 16px; min-width: 0; }
-  .card { padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
-  .card h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-  ol.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; counter-reset: s; }
-  ol.steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; counter-increment: s; font-size: 14px; }
-  ol.steps li::before {
-    content: counter(s); display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
-    background: var(--accent-soft); color: var(--accent); font: 700 13px/1 var(--font-mono);
-  }
-  .knob { font: 600 13px/1 var(--font-mono); padding: 2px 6px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); }
-  .card p { margin: 0; font-size: 14px; color: var(--muted); }
-  .card p + p { margin-top: 8px; }
+  table.knobs { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  table.knobs th, table.knobs td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.knobs th { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  table.knobs td:first-child { white-space: nowrap; }
+
+  section.recovery { border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+  section.recovery .step-head .n { background: var(--bad); color: var(--panel); }
+
+  details.faq { border-top: 1px solid var(--line); padding-top: 10px; }
+  details.faq + details.faq { border-top: 1px solid var(--line); }
+  details.faq summary { cursor: pointer; font-weight: 600; }
+  details.faq p, details.faq ul { margin: 8px 0 4px; color: var(--muted); font-size: 15px; }
 
   footer { color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
   footer a { color: inherit; }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } html { scroll-behavior: auto; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <span class="eyebrow">HX Stomp · NAM A2 Lite</span>
-    <h1>NAM to HX Stomp IR</h1>
-    <p class="lede">Turn NAM A2 Lite captures into User IR files. Import them into the Stomp with HX Edit and pick them with the Model knob of the NAM A2 Lite amp. Your files stay in this browser; nothing is uploaded.</p>
+    <span class="eyebrow">HX Stomp · HX Stomp XL · NAM A2 Lite</span>
+    <h1>Put NAM captures on your HX Stomp</h1>
+    <p class="lede">This page walks you through everything: building the firmware from your own Line 6 file, installing it, and turning your <b>.nam</b> captures into files the Stomp can play. It all runs in this browser. Nothing is uploaded anywhere.</p>
   </header>
 
-  <div class="main">
-    <section class="tool" aria-label="Converter">
-      <label class="drop" id="drop">
-        <svg class="jack" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M24 6v20"/><path d="M16 18l8 8 8-8"/><rect x="8" y="32" width="32" height="10" rx="3"/>
-        </svg>
-        <strong>Drop .nam files here</strong>
-        <small>or click to choose · several at once is fine</small>
-        <input id="pick" type="file" accept=".nam,application/json" multiple>
-      </label>
-
-      <div class="list-head">
-        <h2 id="count">No captures yet</h2>
-        <div style="display:flex; gap:8px">
-          <button class="btn" id="clear" type="button" hidden>Clear</button>
-          <button class="btn primary" id="all" type="button" hidden>Download all</button>
-        </div>
-      </div>
-      <div class="list" id="list">
-        <div class="empty" id="empty">Converted captures appear here. Only the 3-channel <b>A2 Lite</b> size works. A .nam with several sizes in one file works too; its A2 Lite model is used.</div>
-      </div>
-    </section>
-
-    <aside>
-      <div class="card">
-        <h2>On the Stomp</h2>
-        <ol class="steps">
-          <li><span>Drop your <b>.nam</b> captures here and download the <b>.wav</b> files.</span></li>
-          <li><span>In HX Edit, open the Impulses list and drag each .wav onto a free slot. Note its number.</span></li>
-          <li><span>Add <b>Amp › NAM › NAM A2 Lite</b> and turn <span class="knob">Model</span> to that slot number.</span></li>
-        </ol>
-      </div>
-      <div class="card">
-        <h2>Good to know</h2>
-        <p>The .wav is not a sound. It carries the capture's 1,871 weights, so don't load it into an IR block.</p>
-        <p>A slot that holds a normal cab IR is silent when Model points at it.</p>
-        <p>Needs the HX Stomp firmware with NAM A2 Lite built from the hx-stomp-nam-lite project.</p>
-      </div>
-    </aside>
+  <div class="warning">
+    <b>Unofficial and experimental.</b> This isn't made or supported by Line 6. Installing modified firmware is at your own risk and may void your warranty. If anything goes wrong, the <a href="#recovery">Recovery</a> steps put the stock firmware back; it has been done on a real unit.
   </div>
+
+  <nav class="steps-nav" aria-label="Steps">
+    <ol>
+      <li><a href="#s1" id="nav1"><span class="n">1</span><span class="t">Get ready</span></a></li>
+      <li><a href="#s2" id="nav2"><span class="n">2</span><span class="t">Build firmware</span></a></li>
+      <li><a href="#s3" id="nav3"><span class="n">3</span><span class="t">Install</span></a></li>
+      <li><a href="#s4" id="nav4"><span class="n">4</span><span class="t">Convert captures</span></a></li>
+      <li><a href="#s5" id="nav5"><span class="n">5</span><span class="t">Play</span></a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 -->
+  <section class="step" id="s1" aria-labelledby="h1s">
+    <div class="step-head">
+      <span class="n">1</span>
+      <h2 id="h1s">Get ready</h2>
+      <p>About 10 minutes in all. Tick these off as you go.</p>
+    </div>
+    <div class="checks" id="checks">
+      <label><input type="checkbox"><span>I have an <b>HX Stomp</b> or an <b>HX Stomp XL</b>.
+        <small>Not the Helix Floor, LT, Rack or HX Effects: their firmware is a different design. The XL build passes every check but hasn't been played on an XL yet.</small></span></label>
+      <label><input type="checkbox"><span><b>HX Edit</b> and <b>Line 6 Updater</b> are installed on this computer.
+        <small>Both are free from Line 6. HX Edit imports the captures; Line 6 Updater installs the firmware.</small></span></label>
+      <label><input type="checkbox"><span>I backed up my presets and IRs in HX Edit.
+        <small>Use <b>Backup</b> in HX Edit. A firmware install normally keeps them, but a backup costs a minute.</small></span></label>
+      <label><input type="checkbox"><span>I have Line 6's own firmware file, version 3.80.0, for my unit.
+        <small>One of the two files below, unchanged. The build checks its fingerprint (MD5) and refuses any other file, so you can't pick the wrong one by accident.</small></span></label>
+    </div>
+    <div class="files">
+      <div><b>HX Stomp</b><code>HX_Stomp_v3.80.0_0x103966115.hxf</code></div>
+      <div><b>HX Stomp XL</b><code>HX_Stomp_XL_v3.80.0_0x103966115.hxf</code></div>
+    </div>
+    <p class="tip">Keep this stock file somewhere safe. You also need it for <a href="#recovery">Recovery</a> and to go back to the normal firmware later.</p>
+  </section>
+
+  <!-- 2 -->
+  <section class="step" id="s2" aria-labelledby="h2s">
+    <div class="step-head">
+      <span class="n">2</span>
+      <h2 id="h2s">Build your firmware</h2>
+      <p>Drop the stock file here. This page adds NAM A2 Lite to it and gives you a new file to install.</p>
+    </div>
+
+    <div id="fwOffline" class="status bad" hidden>
+      <span class="title">This step needs the page opened from a web address.</span>
+      <p>You opened the page as a file on your computer, and browsers don't let a file page run the build. Open the online page instead; it does the same thing and still uploads nothing. (Steps 4 and 5 work either way.)</p>
+      <p>Running it from a copy of the project? In its folder, run <code>python3 -m http.server</code> and open <code>http://localhost:8000/web/</code>, or use <code>python3 build.py</code> as in the README.</p>
+    </div>
+
+    <label class="drop" id="fwDrop">
+      <svg class="jack" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="10" y="6" width="28" height="36" rx="3"/><path d="M17 15h14M17 22h14M17 29h8"/>
+      </svg>
+      <strong>Drop your stock .hxf file here</strong>
+      <small>or click to choose it · about 45 MB · it stays on this computer</small>
+      <input id="fwPick" type="file" accept=".hxf">
+    </label>
+
+    <div class="status" id="fwStatus" hidden>
+      <span class="title" id="fwTitle"></span>
+      <div class="bar" id="fwBarWrap"><i id="fwBar"></i></div>
+      <p id="fwText"></p>
+      <div class="row-actions" id="fwActions" hidden>
+        <button class="btn primary big" id="fwSave" type="button">Download firmware</button>
+        <button class="btn" id="fwAgain" type="button">Build another</button>
+      </div>
+      <details class="log"><summary>Technical details</summary><pre id="fwLog"></pre></details>
+    </div>
+    <p style="color:var(--muted); font-size:14px">The first build downloads the build tools (about 15 MB) and takes 20–60 seconds, depending on the computer. Keep this tab open until it finishes.</p>
+  </section>
+
+  <!-- 3 -->
+  <section class="step" id="s3" aria-labelledby="h3s">
+    <div class="step-head">
+      <span class="n">3</span>
+      <h2 id="h3s">Install it with Line 6 Updater</h2>
+      <p>The same way as a normal Line 6 update, with your new file.</p>
+    </div>
+    <ol class="how">
+      <li><b>Close HX Edit</b>, if it's open. Updater can't reach the Stomp while HX Edit is using it.</li>
+      <li>Connect the Stomp to the computer with USB and turn it on.</li>
+      <li>Open <b>Line 6 Updater</b>, sign in, and select your Stomp.</li>
+      <li>Choose <b>Choose File</b> (not the normal update) and pick the file you downloaded in step 2: <code id="fwName">HX_Stomp_v3.80.0_NAM_A2_Lite.hxf</code>.
+        <br><small style="color:var(--muted)">On an XL, pick the file with <code>_XL_</code> in its name. Never install the other unit's file.</small></li>
+      <li>Let it finish. <b>Don't unplug or switch off the Stomp</b> while it updates. It restarts on its own when done.</li>
+    </ol>
+    <h3>Check it worked</h3>
+    <p>On the Stomp, add an amp block and open the model list: there is a new folder, <span class="path">Amp › NAM</span>, with <b>NAM A2 Lite</b> in it. Everything else is the same as stock 3.80.0.</p>
+    <p class="tip">Stuck on the splash screen after the install? Don't worry: follow <a href="#recovery">Recovery</a>.</p>
+  </section>
+
+  <!-- 4 -->
+  <section class="step" id="s4" aria-labelledby="h4s">
+    <div class="step-head">
+      <span class="n">4</span>
+      <h2 id="h4s">Convert your captures</h2>
+      <p>The Stomp loads NAM captures from its User IR slots. This turns each <b>.nam</b> into a <b>.wav</b> that HX Edit can import there.</p>
+    </div>
+    <label class="drop" id="drop">
+      <svg class="jack" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M24 6v20"/><path d="M16 18l8 8 8-8"/><rect x="8" y="32" width="32" height="10" rx="3"/>
+      </svg>
+      <strong>Drop .nam files here</strong>
+      <small>or click to choose · several at once is fine</small>
+      <input id="pick" type="file" accept=".nam,application/json" multiple>
+    </label>
+
+    <div class="list-head">
+      <h3 id="count">No captures yet</h3>
+      <div style="display:flex; gap:8px">
+        <button class="btn" id="clear" type="button" hidden>Clear</button>
+        <button class="btn primary" id="all" type="button" hidden>Download all</button>
+      </div>
+    </div>
+    <div class="list" id="list">
+      <div class="empty" id="empty">Converted captures appear here. Only the 3-channel <b>A2 Lite</b> size works (on ToneHunt and similar sites, look for “A2 Lite”). A .nam with several sizes in one file works too: its A2 Lite model is used.</div>
+    </div>
+    <p class="tip">The .wav isn't a sound: it carries the capture's 1,871 numbers. Don't load it into a Cab or IR block; it's for the NAM A2 Lite amp only.</p>
+  </section>
+
+  <!-- 5 -->
+  <section class="step" id="s5" aria-labelledby="h5s">
+    <div class="step-head">
+      <span class="n">5</span>
+      <h2 id="h5s">Load a capture and play</h2>
+      <p>Import the .wav files with HX Edit, then point the amp at them.</p>
+    </div>
+    <ol class="how">
+      <li>Open <b>HX Edit</b> with the Stomp connected, and open the <b>Impulses</b> list.</li>
+      <li>Drag a <b>.wav</b> from step 4 onto a free slot. <b>Write down its number</b>, for example 5.</li>
+      <li>Add an amp block and pick <span class="path">Amp › NAM › NAM A2 Lite</span>.</li>
+      <li>Turn <span class="knob">Model</span> to that slot number. You hear the capture.</li>
+    </ol>
+    <table class="knobs">
+      <thead><tr><th>Knob</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><span class="knob">Model</span></td><td>Which capture plays: the User IR slot (1–128) that holds it. A slot with a normal cab IR, or nothing, is silent.</td></tr>
+        <tr><td><span class="knob">Drive</span></td><td>Level into the capture, −20 to +20 dB. 5.0 is the capture's own level.</td></tr>
+        <tr><td><span class="knob">Bass</span> <span class="knob">Mid</span><br><span class="knob">Treble</span> <span class="knob">Presence</span></td><td>Tone controls after the capture, ±12 dB. 5.0 is flat.</td></tr>
+        <tr><td><span class="knob">Ch Vol</span></td><td>Output level. 5.0 is unchanged; 10 is +12 dB.</td></tr>
+      </tbody>
+    </table>
+    <ul class="plain">
+      <li>The Model knob shows slot numbers, not names. Presets remember the number, so if you move a capture to another slot, update the presets that use it.</li>
+      <li>Changing Model, by hand or in a snapshot, switches smoothly with no gap.</li>
+      <li><b>One NAM A2 Lite at a time.</b> A second one passes the sound through unchanged.</li>
+      <li>It is a heavy block (about the cost of the biggest stock amps), so the Stomp may grey out other heavy blocks next to it.</li>
+    </ul>
+  </section>
+
+  <!-- Recovery -->
+  <section class="step recovery" id="recovery" aria-labelledby="hrs">
+    <div class="step-head">
+      <span class="n">!</span>
+      <h2 id="hrs">Recovery, or going back to stock</h2>
+      <p>If the Stomp stops at the splash screen, or you just want the normal firmware back.</p>
+    </div>
+    <ol class="how">
+      <li>Turn the Stomp off.</li>
+      <li><b>Hold the Page Right button while you turn it on.</b> It starts in update mode with a dark screen.</li>
+      <li>In Line 6 Updater, choose <b>Choose File</b> and pick the <b>stock</b> file from step 1 (<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>).</li>
+    </ol>
+    <p>This works because the build never touches the Stomp's bootloader. It has restored stock 3.80.0 on a real unit after a modified firmware hung at the splash. To go back to stock without any trouble, just install the stock file with <b>Choose File</b> the normal way.</p>
+    <p style="color:var(--muted); font-size:14.5px">On an XL, use the stock XL file and Line 6's own update-mode procedure for the XL in place of Page Right.</p>
+  </section>
+
+  <section class="step" aria-labelledby="hqs">
+    <div class="step-head">
+      <span class="n">?</span>
+      <h2 id="hqs">Questions</h2>
+    </div>
+    <details class="faq"><summary>Why do I need my own firmware file?</summary>
+      <p>The firmware is Line 6's, so this project can't hand it out. This page takes your copy, changes four of its fifteen parts (the amp list, the model tables, the DSP program and its graph library), and fixes every checksum. The bootloader is never changed. Please don't share the file you build.</p></details>
+    <details class="faq"><summary>Is my file uploaded?</summary>
+      <p>No. The build runs inside this browser tab. The only downloads are the page itself and the build tools; your firmware and captures never leave the computer.</p></details>
+    <details class="faq"><summary>How do I know the built file is right?</summary>
+      <p>The build checks every checksum inside the firmware, then compares the result's fingerprint with the build the project tested. When they match, the page says <b>Verified</b>: your file is byte for byte the same as the tested one.</p></details>
+    <details class="faq"><summary>My capture says “No 3-channel A2 Lite model inside”.</summary>
+      <p>NAM captures come in several sizes. The Stomp's DSP can run only the A2 Lite size. Look for the A2 Lite version of the capture, or a multi-size .nam that includes it.</p></details>
+    <details class="faq"><summary>The build says it isn't the right firmware.</summary>
+      <ul><li>It must be version 3.80.0, for your unit, exactly as Line 6 made it. Older or newer versions don't work.</li>
+        <li>Don't pick a file that was already built here (it ends in <code>_NAM_A2_Lite.hxf</code>).</li>
+        <li>If the file was renamed, that's fine: only its contents count.</li></ul></details>
+  </section>
 
   <footer>
     <span>Unofficial. Not affiliated with or endorsed by Line 6 or Yamaha Guitar Group. Neural Amp Modeler is the work of its own authors.</span>
-    <span>The same conversion as <code>tools/nam2ir.py</code>; GPL-3.0-or-later.</span>
+    <span>The same build as <code>build.py</code> and the same conversion as <code>tools/nam2ir.py</code>; GPL-3.0-or-later. <a href="https://github.com/nocaseguy/hx-stomp-nam-lite">Source on GitHub</a>.</span>
   </footer>
 </div>
 
@@ -198,40 +414,164 @@
 <script>
 (function () {
   "use strict";
-  var items = [];                 // { file, ok, wav, info, error }
   var $ = function (id) { return document.getElementById(id); };
-  var list = $("list"), empty = $("empty");
 
-  function base(name) { return name.replace(/\.nam$/i, ""); }
-  function clean(name) { return name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "capture"; }
-  function outName(i) {
-    return clean(base(items[i].file.name)) + " NAM.wav";
-  }
-  function save(i) {
-    var blob = new Blob([items[i].wav], { type: "audio/wav" });
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = outName(i);
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  }
   function el(tag, cls, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text != null) e.textContent = text;
     return e;
   }
+  function saveBlob(blob, name) {
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+  function markDone(n) {
+    $("nav" + n).classList.add("done");
+    $("s" + n).classList.add("done");
+  }
+  function dropZone(zone, onFiles) {
+    ["dragenter", "dragover"].forEach(function (t) {
+      zone.addEventListener(t, function (e) { e.preventDefault(); zone.classList.add("over"); });
+    });
+    ["dragleave", "drop"].forEach(function (t) {
+      zone.addEventListener(t, function (e) { e.preventDefault(); zone.classList.remove("over"); });
+    });
+    zone.addEventListener("drop", function (e) { onFiles(e.dataTransfer.files); });
+  }
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("drop", function (e) { e.preventDefault(); });
+
+  // ---- Step 1: the checklist -----------------------------------------------------------------
+  var boxes = Array.prototype.slice.call($("checks").querySelectorAll("input"));
+  function checkStep1() {
+    if (boxes.every(function (b) { return b.checked; })) markDone(1);
+    else { $("nav1").classList.remove("done"); $("s1").classList.remove("done"); }
+  }
+  boxes.forEach(function (b) { b.addEventListener("change", checkStep1); });
+
+  // ---- Step 2: the firmware build (firmware-worker.js) ---------------------------------------
+  var STEPS = 6;
+  var built = null;           // { blob, file }
+  var busy = false;
+  var canBuild = location.protocol === "http:" || location.protocol === "https:";
+  if (!canBuild) { $("fwOffline").hidden = false; $("fwDrop").hidden = true; }
+
+  function fwShow(kind, title, text) {
+    $("fwStatus").hidden = false;
+    $("fwStatus").className = "status" + (kind ? " " + kind : "");
+    $("fwTitle").textContent = title;
+    $("fwText").textContent = text || "";
+    $("fwBarWrap").hidden = kind !== "";
+    $("fwActions").hidden = kind !== "ok";
+  }
+  function fwLog(text) {
+    var pre = $("fwLog");
+    pre.textContent += text;
+    pre.scrollTop = pre.scrollHeight;
+  }
+
+  function buildFirmware(files) {
+    if (busy || !files || !files.length) return;
+    var file = files[0];
+    if (/\.nam$/i.test(file.name)) {
+      fwShow("bad", "That's a NAM capture, not firmware.", "Captures go in step 4, below. Here, drop Line 6's firmware file (it ends in .hxf).");
+      return;
+    }
+    if (/_NAM_A2_Lite\.hxf$/i.test(file.name)) {
+      fwShow("bad", "That file is already built.", "Drop the stock Line 6 file (HX_Stomp_v3.80.0_0x103966115.hxf), not one made here. To install the built file, go to step 3.");
+      return;
+    }
+    if (file.size < 20e6 || file.size > 120e6) {
+      fwShow("bad", "This doesn't look like an HX Stomp firmware file.",
+             "“" + file.name + "” is " + (file.size / 1e6).toFixed(1) + " MB; the stock file is about 45 MB and ends in .hxf.");
+      return;
+    }
+    busy = true;
+    built = null;
+    $("fwDrop").classList.add("busy");
+    $("fwLog").textContent = "";
+    $("fwBar").style.width = "4%";
+    fwShow("", "Building…", "Reading " + file.name + "…");
+
+    var worker;
+    file.arrayBuffer().then(function (buf) {
+      worker = new Worker("firmware-worker.js");
+      worker.onmessage = function (e) {
+        var m = e.data;
+        if (m.type === "progress") {
+          $("fwBar").style.width = Math.round(100 * (m.step - 0.5) / STEPS) + "%";
+          $("fwText").textContent = "Step " + m.step + " of " + STEPS + ": " + m.text;
+        } else if (m.type === "log") {
+          fwLog(m.text);
+        } else if (m.type === "done") {
+          finish();
+          built = { blob: new Blob([m.bytes], { type: "application/octet-stream" }), file: m.file };
+          $("fwName").textContent = m.file;
+          fwLog("\nbuilt " + m.file + ", MD5 " + m.md5 + (m.pinned ? " (the tested build)\n" : "\n"));
+          var unit = m.unit === "HX_Stomp_XL" ? "HX Stomp XL" : "HX Stomp";
+          if (m.pinned) {
+            fwShow("ok", "Verified: your " + unit + " firmware is ready.",
+                   "It is byte for byte the same as the build the project tested. Download it, then go to step 3.");
+          } else {
+            fwShow("ok", "Built, but not the tested file.",
+                   "Every checksum passed, but the result differs from the tested build. This shouldn't happen; please report it before installing.");
+          }
+          markDone(2);
+        } else if (m.type === "error") {
+          finish();
+          fwLog("\n" + m.text + "\n");
+          var wrong = /not the stock/.test(m.text);
+          fwShow("bad", wrong ? "This isn't the right firmware file." : "The build stopped.",
+                 wrong ? "Use Line 6's own 3.80.0 file for your unit, unchanged: HX_Stomp_v3.80.0_0x103966115.hxf or HX_Stomp_XL_v3.80.0_0x103966115.hxf. See “Questions” below."
+                       : "Nothing was written. Check your internet connection (the build tools load the first time) and try again. The technical details below say what happened.");
+        }
+      };
+      worker.onerror = function (e) {
+        finish();
+        fwShow("bad", "The build couldn't start.", (e.message || "Worker error") + ". Try a current Chrome, Edge, Firefox or Safari.");
+      };
+      worker.postMessage({ stock: buf }, [buf]);
+    }, function () {
+      finish();
+      fwShow("bad", "The file could not be read.", "Choose it again; if it's on a USB stick or network drive, copy it to the computer first.");
+    });
+
+    function finish() {
+      busy = false;
+      $("fwDrop").classList.remove("busy");
+      if (worker) worker.terminate();
+    }
+  }
+
+  $("fwPick").addEventListener("change", function (e) { buildFirmware(e.target.files); e.target.value = ""; });
+  dropZone($("fwDrop"), buildFirmware);
+  $("fwSave").addEventListener("click", function () {
+    if (built) { saveBlob(built.blob, built.file); markDone(3); }
+  });
+  $("fwAgain").addEventListener("click", function () { $("fwStatus").hidden = true; $("fwPick").click(); });
+
+  // ---- Step 4: the capture converter (nam2ir-core.js) ----------------------------------------
+  var items = [];                 // { file, ok, wav, info, error }
+  var list = $("list"), empty = $("empty");
+
+  function base(name) { return name.replace(/\.nam$/i, ""); }
+  function clean(name) { return name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "capture"; }
+  function outName(i) { return clean(base(items[i].file.name)) + " NAM.wav"; }
+  function save(i) { saveBlob(new Blob([items[i].wav], { type: "audio/wav" }), outName(i)); }
 
   function render() {
     list.querySelectorAll(".row").forEach(function (r) { r.remove(); });
     empty.hidden = items.length > 0;
     var good = items.filter(function (x) { return x.ok; }).length;
-    $("count").textContent = items.length
-      ? good + " of " + items.length + " converted"
-      : "No captures yet";
+    $("count").textContent = items.length ? good + " of " + items.length + " converted" : "No captures yet";
     $("all").hidden = good < 2;
     $("clear").hidden = !items.length;
+    if (good) markDone(4);
 
     items.forEach(function (it, i) {
       var row = el("div", "row" + (it.ok ? "" : " bad"));
@@ -280,6 +620,11 @@
     todo.forEach(function (file) {
       var it = { file: file, ok: false };
       items.push(it);
+      if (/\.hxf$/i.test(file.name)) {
+        it.error = "That's a firmware file. Drop it in step 2, above.";
+        if (--left === 0) render();
+        return;
+      }
       file.text().then(function (text) {
         try {
           var r = NAM2IR.convert(text);
@@ -294,17 +639,7 @@
   }
 
   $("pick").addEventListener("change", function (e) { add(e.target.files); e.target.value = ""; });
-  var drop = $("drop");
-  ["dragenter", "dragover"].forEach(function (t) {
-    drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add("over"); });
-  });
-  ["dragleave", "drop"].forEach(function (t) {
-    drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove("over"); });
-  });
-  drop.addEventListener("drop", function (e) { add(e.dataTransfer.files); });
-  window.addEventListener("dragover", function (e) { e.preventDefault(); });
-  window.addEventListener("drop", function (e) { e.preventDefault(); });
-
+  dropZone($("drop"), add);
   $("clear").addEventListener("click", function () { items = []; render(); });
   $("all").addEventListener("click", function () {
     var k = 0;
