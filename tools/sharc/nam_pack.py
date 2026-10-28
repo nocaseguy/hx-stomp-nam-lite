@@ -38,6 +38,41 @@ def load(path, channels=3):
     raise SystemExit(f"no {channels}-channel WaveNet in {path}")
 
 
+# The HX Stomp's guitar input reaches 0 dBFS at about +11.5 dBu: users measured
+# 0.775 V (0 dBu) at -11.4 dBFS on a Helix Floor and the same on an HX Stomp,
+# one HX Stomp at -15.1 dBFS (TheGearForum, "Calibrating Input Level for
+# Plugins", p.13, 2023). Read over USB/S/PDIF, not at the converter: a guess
+# within some 3 dB until it is measured on the unit.
+STOMP_DBU = 11.5
+
+
+def input_trim_db(path, stomp_dbu=STOMP_DBU):
+    """dB to put in front of the capture in `path` so the Stomp's input hits it
+    as the capture's interface did (its metadata input_level_dbu, the dBu at
+    0 dBFS), or None when the file does not say."""
+    if not path.endswith(".nam"):
+        return None
+    dbu = (json.load(open(path)).get("metadata") or {}).get("input_level_dbu")
+    return None if dbu is None else stomp_dbu - float(dbu)
+
+
+def trim(w, c, db):
+    """The weight stream of the model with `db` of gain in front: the input
+    reaches the model only through the rechannel and each layer's mix-in, so
+    scaling those is exact. float32 products, as web/nam2ir-core.js makes them."""
+    f32 = lambda x: struct.unpack("<f", struct.pack("<f", x))[0]
+    g = f32(10.0 ** (db / 20.0))
+    w = list(w)
+    o, at = c, list(range(c))
+    for k in KERNEL:
+        o += c * c * k + c                            # convolution, bias
+        at += range(o, o + c)                         # mix-in
+        o += c + c * c + c                            # mix-in, 1x1, its bias
+    for i in at:
+        w[i] = f32(f32(w[i]) * g)
+    return w
+
+
 def _layers(w, c, simd):
     """Weight stream -> (per-layer blocks in the kernel's order, head, head bias, scale)."""
     expect = c + sum(c * c * k + c + c + c * c + c for k in KERNEL) + c * HEAD_TAPS + 2

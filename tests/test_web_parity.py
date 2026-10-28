@@ -47,6 +47,20 @@ def test_same_bytes(tmp_path, nam_file, weights, big, slimmable):
     assert (tmp_path / "js.wav").read_bytes() == (tmp_path / "py.wav").read_bytes()
 
 
+@pytest.mark.parametrize("dbu", [12.2, 18.0, 3.7])
+def test_same_bytes_trimmed(tmp_path, nam_file, weights, dbu):
+    # a capture that gives its input level: both fold the same trim into the weights
+    src = nam_file(metadata={"input_level_dbu": dbu})
+    r = py_convert(src, tmp_path / "py.wav")
+    assert r.returncode == 0, r.stderr
+    assert f"input trim {11.5 - dbu:+.1f} dB" in r.stdout
+    assert js_convert(src, tmp_path / "js.wav") == {"ok": True}
+    assert (tmp_path / "js.wav").read_bytes() == (tmp_path / "py.wav").read_bytes()
+    plain = nam_file(name="plain.nam")
+    assert py_convert(plain, tmp_path / "plain.wav").returncode == 0
+    assert (tmp_path / "plain.wav").read_bytes() != (tmp_path / "py.wav").read_bytes()
+
+
 @pytest.mark.parametrize("layer", [
     {"dilations": [1] * 23},
     {"kernel_sizes": [3] * 23},

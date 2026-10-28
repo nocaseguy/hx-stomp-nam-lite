@@ -5,7 +5,7 @@ import pytest
 import nam_lite
 
 
-def nam_json(weights, slimmable=False, **layer):
+def nam_json(weights, slimmable=False, metadata=None, **layer):
     """A .nam file's text: a 3-channel A2 Lite WaveNet (made up, no capture in the repo)."""
     lc = {"channels": nam_lite.C, "kernel_sizes": list(nam_lite.nam_pack.KERNEL),
           "dilations": list(nam_lite.nam_pack.DILATION),
@@ -15,6 +15,8 @@ def nam_json(weights, slimmable=False, **layer):
     if slimmable:
         big = {"architecture": "WaveNet", "config": {"layers": [dict(lc, channels=8)]}, "weights": [0.0]}
         m = {"architecture": "SlimmableContainer", "config": {"submodels": [{"model": big}, {"model": m}]}}
+    if metadata is not None:
+        m["metadata"] = metadata
     return json.dumps(m)
 
 

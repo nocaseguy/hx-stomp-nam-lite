@@ -16,6 +16,7 @@
   var KERNEL = [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 15, 15, 6, 6, 6, 6, 6, 6, 6];
   var DILATION = [1, 3, 7, 17, 41, 101, 239, 1, 3, 7, 17, 41, 101, 239, 1, 13, 1, 3, 7, 17, 41, 101, 239];
   var N_WEIGHTS = 1871;
+  var STOMP_DBU = 11.5;             // the Stomp's input at 0 dBFS: tools/sharc/nam_pack.py STOMP_DBU
 
   function same(a, b) {
     return Array.isArray(a) && a.length === b.length && a.every(function (x, i) { return x === b[i]; });
@@ -65,6 +66,27 @@
       out.push((m.weights ? m.weights.length : 0) + " weights; A2 Lite has " + N_WEIGHTS);
     }
     return out;
+  }
+
+  // tools/sharc/nam_pack.py trim(): `db` of gain in front of the model, folded
+  // into the rechannel and each layer's mix-in (the only weights the input
+  // meets), as float32 products.
+  function trim(w, db) {
+    var f = Math.fround, g = f(Math.pow(10, db / 20)), out = w.slice(), o = C, i;
+    for (i = 0; i < C; i++) out[i] = f(f(w[i]) * g);
+    KERNEL.forEach(function (k) {
+      o += C * C * k + C;
+      for (i = o; i < o + C; i++) out[i] = f(f(w[i]) * g);
+      o += C + C * C + C;
+    });
+    return out;
+  }
+
+  // The input trim for a capture: the Stomp's level less the capture
+  // interface's (metadata input_level_dbu), or null when the file does not say.
+  function inputTrimDb(meta, stompDbu) {
+    var dbu = meta && meta.input_level_dbu;
+    return typeof dbu === "number" && isFinite(dbu) ? stompDbu - dbu : null;
   }
 
   // tools/sharc/nam_lite.py layer_weights(): per layer bias and mix-in per
@@ -169,15 +191,18 @@
     return model.toLowerCase().indexOf(make.toLowerCase()) === 0 ? model : make + " " + model;
   }
 
-  // Text of a .nam file -> { wav, info } or an Error thrown.
-  function convert(text) {
+  // Text of a .nam file -> { wav, info } or an Error thrown. opts: stompDbu
+  // (default STOMP_DBU), trim: false to leave the weights as they are.
+  function convert(text, opts) {
+    opts = opts || {};
     var d;
     try { d = JSON.parse(text); } catch (err) { throw new Error("The file is not valid JSON, so not a .nam file."); }
     var pick = pickModel(d);
     var bad = problems(pick.model);
     if (bad.length) throw new Error("Not an A2 Lite capture the kernel can run: " + bad.join("; ") + ".");
-    var ir = irSamples(pick.model.weights);
     var meta = d.metadata || {};
+    var trimDb = opts.trim === false ? null : inputTrimDb(meta, opts.stompDbu == null ? STOMP_DBU : opts.stompDbu);
+    var ir = irSamples(trimDb === null ? pick.model.weights : trim(pick.model.weights, trimDb));
     var rate = pick.model.sample_rate || d.sample_rate;
     return {
       wav: wavBytes(ir.samples),
@@ -188,13 +213,14 @@
         slimmable: pick.slimmable,
         exponent: ir.exponent,
         peak: ir.peak,
+        trimDb: trimDb,
         sampleRate: rate,
         warnings: rate && rate !== 48000 ? ["Trained at " + rate + " Hz; the Stomp runs at 48 kHz, so it will sound off."] : []
       }
     };
   }
 
-  var api = { convert: convert, pickModel: pickModel, problems: problems, irSamples: irSamples, wavBytes: wavBytes };
+  var api = { STOMP_DBU: STOMP_DBU, trim: trim, convert: convert, pickModel: pickModel, problems: problems, irSamples: irSamples, wavBytes: wavBytes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.NAM2IR = api;
 })(this);
