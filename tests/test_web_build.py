@@ -1,6 +1,7 @@
 """web/firmware-worker.js, the in-browser build.py: it accepts the same stock files,
 pins the same built MD5s, and loads every file the build reads."""
 import ast
+import json
 import re
 from pathlib import Path
 
@@ -23,11 +24,15 @@ def test_stock_md5_as_build_py():
     assert js_object("STOCK_MD5") == py_dict("build.py", "STOCK_MD5")
 
 
-def test_kernel_as_build_py():
-    body = re.search(r"var KERNEL = \{(.*?)\};", WORKER, re.S).group(1)
-    js = {u: (k, re.findall(r'"([^"]+)"', opts)) for u, k, opts in
-          re.findall(r'"(\w+)": \["([\w/.]+)", \[(.*?)\]\]', body)}
-    assert js == {u: (k, list(o)) for u, (k, o) in py_dict("build.py", "KERNEL").items()}
+def js_value(name):
+    """A var whose value is a JSON string, list or object."""
+    body = re.search(r"var " + name + r" = (.*?);\n", WORKER, re.S).group(1)
+    return json.loads(re.sub(r",(\s*[}\]])", r"\1", body))
+
+
+def test_build_steps_as_build_py():
+    for name in ("KERNEL", "MODEL", "IR_TITLE"):
+        assert js_value(name) == py_dict("build.py", name), name
 
 
 def test_built_md5_as_firmware_test():
@@ -40,7 +45,7 @@ def test_sources_cover_the_build():
     assert all((ROOT / p).is_file() for p in listed)
     # every module the build's scripts import, and every file they open next to themselves
     need = {"tools/hxf.py", "tools/l6ia.py", "tools/l6ia_verify.py", "tools/patch_amp.py",
-            "tools/sharc/nam_lite.py", "tools/sharc/nam_lite_kernel.asm",
+            "tools/sharc/nam_lite.py",
             "tools/sharc/nam_multi.py", "tools/sharc/nam_multi_kernel.asm"}
     for d in ("tools", "tools/sharc"):
         for f in listed:

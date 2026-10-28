@@ -83,13 +83,6 @@ def test_fade_table_is_equal_power():
         assert t[k] ** 2 + t[16 - k] ** 2 == pytest.approx(1, abs=1e-6)
 
 
-def test_build_fits_memory(weights):
-    _, used = nam_lite.build(weights)
-    assert used["block 2 to"] <= nam_lite.B2_END
-    assert used["block 3 to"] <= nam_lite.EQ_C
-    assert used["DDR2 to"] <= nam_lite.DDR2_END
-
-
 def test_nam2ir_writes_the_ir_samples(tmp_path, nam_file, weights):
     out = tmp_path / "m.wav"
     r = subprocess.run([sys.executable, str(ROOT / "tools/nam2ir.py"), str(nam_file()), "-o", str(out)],

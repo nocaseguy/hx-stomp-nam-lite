@@ -1,9 +1,11 @@
 // firmware-worker.js - build.py in the browser: the stock .hxf in, the .hxf
-// with NAM A2 Lite out. Pyodide runs the repository's own Python tools, the
-// same commands build.py runs (without --check, the simulator run, which
-// takes minutes here). The result's MD5 is then compared with the build
-// pinned in tests/test_firmware.py: a match means the bytes are the very
-// file that build makes, and was tried, on a desktop.
+// with NAM A2 Lite out (up to three blocks, each with its own capture; on the
+// HX Stomp the block's title shows the selected IR's name). Pyodide runs the
+// repository's own Python tools, the same commands build.py runs (without
+// --check, the simulator run, which takes minutes here). The result's MD5 is
+// then compared with the build pinned in tests/test_firmware.py: a match
+// means the bytes are the very file that build makes, and was tried, on a
+// desktop.
 //
 // Messages in:  { stock: ArrayBuffer }
 // It also lays out the RAM run of the result (tools/hxf_ram.py plan), for
@@ -24,15 +26,16 @@ var STOCK_MD5 = {
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "faa1b8107d9c217f6a6a5033a7dc3e7f",
+  "HX_Stomp": "87709d151b4163ee20917df19776ef24",
   "HX_Stomp_XL": "d47a79aa3e0299729fa04ffe356f520d",
 };
 
-// build.py's KERNEL: the kernel and add-model's host options per unit
-// (tests/test_web_build.py keeps them equal).
-var KERNEL = {
-  "HX_Stomp": ["tools/sharc/nam_multi.py", ["--dsp-cost", "2700", "--sdram-words", "0x5000"]],
-  "HX_Stomp_XL": ["tools/sharc/nam_multi.py", ["--dsp-cost", "2700", "--sdram-words", "0x5000"]],
+// build.py's KERNEL, MODEL and IR_TITLE (tests/test_web_build.py keeps them equal).
+var KERNEL = "tools/sharc/nam_multi.py";
+var MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
+             "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2700", "--sdram-words", "0x5000"];
+var IR_TITLE = {
+  "HX_Stomp": ["--preset-id", "147"],
 };
 
 // What build.py needs, relative to the repository root.
@@ -44,7 +47,6 @@ var SOURCES = [
   "tools/patch_amp.py",
   "tools/sharc/entry4_blob.py",
   "tools/sharc/nam_lite.py",
-  "tools/sharc/nam_lite_kernel.asm",
   "tools/sharc/nam_multi.py",
   "tools/sharc/nam_multi_kernel.asm",
   "tools/sharc/nam_pack.py",
@@ -120,17 +122,19 @@ async function build(stock) {
     return out;
   }
   try {
-    var k = KERNEL[unit];
-    step(3, "Building the NAM kernel…",
-         [k[0], "-o", "build/nam_lite.asm"]);
+    var base = "build/nam_lite_base.l6ia";
+    step(3, "Building the NAM kernel…", [KERNEL, "-o", "build/nam_lite.asm"]);
     step(4, "Adding the NAM A2 Lite amp…",
-         ["tools/patch_amp.py", "add-model", "build/stock.hxf", "build/nam_lite_base.l6ia",
-          "--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
-          "--folder", "NAM"].concat(k[1]));
+         ["tools/patch_amp.py", "add-model", "build/stock.hxf", base].concat(MODEL));
+    if (IR_TITLE[unit]) {
+      step(4, "Adding the NAM A2 Lite amp…",
+           ["tools/patch_amp.py", "ir-title", base, "build/nam_lite_title.l6ia"].concat(IR_TITLE[unit]));
+      p.FS.unlink("/repo/" + base);
+      base = "build/nam_lite_title.l6ia";
+    }
     step(5, "Adding the kernel to the DSP program…",
-         ["tools/patch_amp.py", "patch", "build/nam_lite_base.l6ia", "build/nam_lite.l6ia",
-          "--asm", "build/nam_lite.asm"]);
-    p.FS.unlink("/repo/build/nam_lite_base.l6ia");
+         ["tools/patch_amp.py", "patch", base, "build/nam_lite.l6ia", "--asm", "build/nam_lite.asm"]);
+    p.FS.unlink("/repo/" + base);
     var report = step(6, "Checking every checksum and packing the file…",
                       ["tools/l6ia_verify.py", "build/nam_lite.l6ia"]);
     if (report.indexOf("ALL OK") < 0) throw new Error("The built image failed its checksum check.");

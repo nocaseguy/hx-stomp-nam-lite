@@ -4,20 +4,25 @@
 usage: python3 build.py <HX_Stomp_v3.80.0_0x103966115.hxf | HX_Stomp_XL_v3.80.0_0x103966115.hxf> [-o out.hxf] [--no-check]
 
 The input is Line 6's own firmware file for your unit, version 3.80.0
-(Line 6 Updater keeps a copy; see README.md). The XL build has not been
-tried on an XL yet. Nothing of it is in this
+(Line 6 Updater keeps a copy; see README.md). Nothing of it is in this
 repository: the build reads it, adds NAM A2 Lite and writes a new .hxf
 (default build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf, or ..._XL_... for the XL) for Line 6 Updater.
 
+NAM A2 Lite runs as up to three blocks at once (at most two per preset, as any
+amp), each playing its own capture from a User IR slot. On the HX Stomp the
+block's title shows the selected IR's name; the XL build is made without that
+change (and has not run on an XL).
+
 Steps:
-  1. tools/sharc/nam_multi.py: the SHARC kernel (several NAM A2 Lite blocks at
-     once, each with its own capture), checked in the simulator against
-     src/sharc/nam_a2.asm bit for bit (--no-check skips it, ~10 s)
+  1. tools/sharc/nam_multi.py: the SHARC kernel, checked in the simulator
+     against src/sharc/nam_a2.asm bit for bit, each block on its own capture
+     (--no-check skips it, ~10 s)
   2. tools/patch_amp.py add-model: the "NAM A2 Lite" amp in Amp > NAM, each
      block with its own SDRAM block
-  3. tools/patch_amp.py patch: the kernel into the SHARC boot stream
-  4. tools/l6ia_verify.py: every checksum of the result
-  5. tools/hxf.py pack: the .hxf
+  3. tools/patch_amp.py ir-title (HX Stomp): the IR name in the block title
+  4. tools/patch_amp.py patch: the kernel into the SHARC boot stream
+  5. tools/l6ia_verify.py: every checksum of the result
+  6. tools/hxf.py pack: the .hxf
 """
 import hashlib
 import os
@@ -28,14 +33,14 @@ STOCK_MD5 = {
     "a2cd8f4ae56f49415380270ebc484bf1": "HX_Stomp",       # HX_Stomp_v3.80.0_0x103966115.hxf
     "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",    # HX_Stomp_XL_v3.80.0_0x103966115.hxf (untried on a unit)
 }
-# The kernel and add-model's host options per unit: the multi kernel on both (tested
-# on an HX Stomp: two blocks, each with its own capture). The XL's DSP program, model
-# list and DSP graph library are byte for byte the Stomp's, so its kernel and graph
-# changes are too; only the application's model tables differ (patch_amp's E0_DEVICES).
-KERNEL = {
-    "HX_Stomp": ("tools/sharc/nam_multi.py", ["--dsp-cost", "2700", "--sdram-words", "0x5000"]),
-    "HX_Stomp_XL": ("tools/sharc/nam_multi.py", ["--dsp-cost", "2700", "--sdram-words", "0x5000"]),
-}
+# The kernel and the amp (tests/test_web_build.py keeps web/firmware-worker.js's copies
+# equal). Preset ID 147 and the knobs are those of every NAM A2 Lite build, so presets
+# saved with an earlier one open with this one.
+KERNEL = "tools/sharc/nam_multi.py"
+MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
+         "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2700", "--sdram-words", "0x5000"]
+# ir-title per unit: the patch knows the HX Stomp's application only.
+IR_TITLE = {"HX_Stomp": ["--preset-id", "147"]}
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -66,13 +71,17 @@ def main():
     os.makedirs(build, exist_ok=True)
     asm = os.path.join(build, "nam_lite.asm")
     base = os.path.join(build, "nam_lite_base.l6ia")
+    titled = os.path.join(build, "nam_lite_title.l6ia")
     image = os.path.join(build, "nam_lite.l6ia")
     py = sys.executable
 
-    kernel, host = KERNEL[unit]
-    run(py, kernel, "-o", asm, *([] if "--no-check" in argv else ["--check"]))
-    run(py, "tools/patch_amp.py", "add-model", stock, base, "--clone", "HD2_AmpLine6Clarity",
-        "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite", "--folder", "NAM", *host)
+    run(py, KERNEL, "-o", asm, *([] if "--no-check" in argv else ["--check"]))
+    run(py, "tools/patch_amp.py", "add-model", stock, base, *MODEL)
+    if unit in IR_TITLE:
+        run(py, "tools/patch_amp.py", "ir-title", base, titled, *IR_TITLE[unit])
+        os.replace(titled, base)
+    else:
+        print("(no IR name in the block title: that patch is made for the HX Stomp only)")
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:

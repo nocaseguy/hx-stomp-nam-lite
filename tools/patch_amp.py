@@ -17,6 +17,12 @@ Commands:
       the model table (Entry 3) and the DSP graph library (Entry 4); the SHARC's
       graph buffer is enlarged to fit (Entry 2).
 
+  ir-title <in> <out> --preset-id 148 [--preset-id N ...]
+      HX Stomp only: a block of these preset_ids (an amp whose first knob is
+      a User IR slot, as add-model's Model) shows the selected IR's name in its
+      edit-screen title, as an IR block does. Changes Entry 0 (the main
+      processor's program) only.
+
   patch <in> <out> --asm nam_lite.asm
       Assemble the kernel (tools/sharc/sasm.py), add it to the SHARC boot
       stream (Entry 2) and point primitive 0x9c75 at it.
@@ -703,6 +709,197 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
     return bytes(out_e0), new_pid, src_dsp_cost, blist_addrs
 
 
+# --- IR-name title (patch_amp.py ir-title; HX Stomp only) ---------------------------------
+# The edit screen shows a User IR's name in the block title only for a block whose browser
+# category is 15 (IR). Two 6-byte sites in Entry 0 (HX Stomp 3.80.0) test that category;
+# each becomes a B.W to a small Thumb cave appended to seg[6] that also takes the IR path
+# for the listed preset_ids. UI only: the parameter, its DSP value and presets are unchanged.
+#   site A 0x28dbebea (block title):  ldrb r3,[r4,#12]; cmp r3,#15; bne 0x28dbebfe
+#   site B 0x28dbf72e (knob drawing): ldrb r3,[r5,#12]; cmp r3,#15; beq 0x28dbf7d8
+# The source parameter a module's first knob (knob 0, the one the IR path reads) must copy.
+IR_TITLE_SOURCES = ('HD2_ImpulseResponse2048Mono.Index', 'HD2_ImpulseResponse1024Mono.Index')
+IR_TITLE = {    # by seg[6]'s load address; the XL (r6 for r5, its stack frame unchecked) is not done
+    0x28d8fa80: types.SimpleNamespace(
+        SITE_A=0x28dbebea, SITE_A_STOCK=bytes.fromhex('237b0f2b06d1'),
+        IR_CONT=0x28dbebf0,      # stock IR path: ldrb r5,[r4,#13] ...
+        IR_NAME=0x28dbeddc,      # the IR Single name branch (r5 = 0); returns to 0x28dbebf8
+        NON_IR=0x28dbebfe,       # stock continuation for any other category
+        SITE_B=0x28dbf72e, SITE_B_STOCK=bytes.fromhex('2b7b0f2b51d0'),
+        B_RET=0x28dbf734,        # stock: return
+        B_IR=0x28dbf7d8,         # stock IR: knob 0 redraws the title
+        TARGET_STOCK={0x28dbebf0: bytes.fromhex('657b002d'), 0x28dbeddc: bytes.fromhex('6ff00102'),
+                      0x28dbebfe: bytes.fromhex('16f083f9'), 0x28dbf734: bytes.fromhex('27b0bde8'),
+                      0x28dbf7d8: bytes.fromhex('1b9b23b1')}),
+}
+
+
+def thumb_bw(src, dst):
+    """Thumb-2 B.W (T4) at src to dst."""
+    off = dst - (src + 4)
+    assert off % 2 == 0 and -(1 << 24) <= off < (1 << 24), f'B.W {src:#x} -> {dst:#x} out of range'
+    s, i1, i2 = (off >> 24) & 1, (off >> 23) & 1, (off >> 22) & 1
+    j1, j2 = (~(i1 ^ s)) & 1, (~(i2 ^ s)) & 1
+    return struct.pack('<2H', 0xf000 | (s << 10) | ((off >> 12) & 0x3ff),
+                       0x9000 | (j1 << 13) | (j2 << 11) | ((off >> 1) & 0x7ff))
+
+
+def _thumb_modimm(v):
+    """Thumb-2 modified immediate (i:imm3:imm8) for v, or None."""
+    if v < 256:
+        return v
+    for rot in range(8, 32):
+        x = ((v << rot) | (v >> (32 - rot))) & 0xffffffff     # rotate left by rot = undo ROR rot
+        if 0x80 <= x <= 0xff:
+            return (rot << 7) | (x & 0x7f)
+    return None
+
+
+def _cmp_r3(v):
+    """cmp r3, #v (16-bit for v < 256, else cmp.w)."""
+    if v < 256:
+        return struct.pack('<H', 0x2b00 | v)
+    m = _thumb_modimm(v)
+    if m is None:
+        raise SystemExit(f'ir-title: preset_id {v} is no Thumb-2 immediate (cmp r3, #{v})')
+    return struct.pack('<2H', 0xf1b3 | ((m >> 11) << 10), 0x0f00 | (((m >> 8) & 7) << 12) | (m & 0xff))
+
+
+def ir_title_cave(cave_va, pids, X):
+    """The cave at cave_va: (bytes, caveA address, caveB address). Only r3 is used, and r5 on
+    the IR path (as the stock code there); every exit leaves r3 as the stock code would have
+    or goes where r3 is written before it is read.
+      caveA: ldrb r3,[r4,#12]; cmp r3,#15; bne 1f; b.w IR_CONT
+          1: ldrb.w r3,[sp,#11]; cbnz r3,3f      @ the cab half of an Amp+Cab block: no
+             ldr.w r3,[r4,#1]                    @ the block's preset_id (half 0)
+             {cmp r3,#pid; beq 2f}...; b 3f
+          2: movs r5,#0; b.w IR_NAME             @ as an IR Single block, knob 0
+          3: ldrb r3,[r4,#12]; b.w NON_IR
+      caveB: ldrb r3,[r5,#12]; cmp r3,#15; beq 4f
+             ldr.w r3,[r5,#1]; {cmp r3,#pid; beq 4f}...
+             b.w B_RET
+          4: b.w B_IR"""
+    out = bytearray()
+    fix = []                                     # (offset, kind, label)
+    labels = {}
+
+    def emit(b):
+        out.extend(b)
+
+    def bcc(cond, label):                        # 16-bit conditional branch (T1)
+        fix.append((len(out), 'bcc', cond, label)); emit(b'\0\0')
+
+    def bw(dst):
+        emit(thumb_bw(cave_va + len(out), dst))
+
+    labels['caveA'] = 0
+    emit(bytes.fromhex('237b0f2b')); bcc(1, '1'); bw(X.IR_CONT)
+    labels['1'] = len(out)
+    emit(bytes.fromhex('9df80b30'))
+    fix.append((len(out), 'cbnz', None, '3')); emit(b'\0\0')
+    emit(bytes.fromhex('d4f80130'))
+    for p in pids:
+        emit(_cmp_r3(p)); bcc(0, '2')
+    fix.append((len(out), 'b', None, '3')); emit(b'\0\0')
+    labels['2'] = len(out)
+    emit(bytes.fromhex('0025')); bw(X.IR_NAME)
+    labels['3'] = len(out)
+    emit(bytes.fromhex('237b')); bw(X.NON_IR)
+    labels['caveB'] = len(out)
+    emit(bytes.fromhex('2b7b0f2b')); bcc(0, '4')
+    emit(bytes.fromhex('d5f80130'))
+    for p in pids:
+        emit(_cmp_r3(p)); bcc(0, '4')
+    bw(X.B_RET)
+    labels['4'] = len(out)
+    bw(X.B_IR)
+    for at, kind, cond, label in fix:
+        off = labels[label] - (at + 4)
+        assert off % 2 == 0
+        if kind == 'bcc':
+            assert -256 <= off < 256, 'cave branch out of range'
+            struct.pack_into('<H', out, at, 0xd000 | (cond << 8) | ((off >> 1) & 0xff))
+        elif kind == 'b':
+            assert -2048 <= off < 2048
+            struct.pack_into('<H', out, at, 0xe000 | ((off >> 1) & 0x7ff))
+        else:                                    # cbnz r3 (forward only, 0..126)
+            assert 0 <= off <= 126, 'cbnz out of range: too many preset_ids'
+            struct.pack_into('<H', out, at, 0xb900 | ((off >> 6) << 9) | (((off >> 1) & 0x1f) << 3) | 3)
+    while len(out) % 4:
+        out += b'\x00\xbf'                       # nop
+    return bytes(out), cave_va + labels['caveA'], cave_va + labels['caveB']
+
+
+def ir_title_entry0(e0, pids):
+    """Entry 0 with the IR-name title for blocks of these preset_ids. Returns (e0, info)."""
+    pids = sorted(set(pids))
+    if not pids:
+        raise SystemExit('ir-title: no preset_ids')
+    e0 = bytearray(e0)
+    segs = _parse_e0_segments(e0)
+    A = e0_device(segs)
+    X = IR_TITLE.get(segs[6][3])
+    if X is None:
+        raise SystemExit(f'ir-title is made for the HX Stomp only; this is the {A.NAME}')
+
+    def vread(va, ln):
+        fo = _e0_vaddr_to_foff(segs, va, ln)
+        return bytes(e0[fo: fo + ln])
+
+    def vwrite(va, data):
+        fo = _e0_vaddr_to_foff(segs, va, len(data))
+        e0[fo: fo + len(data)] = data
+
+    for va, want in ((X.SITE_A, X.SITE_A_STOCK), (X.SITE_B, X.SITE_B_STOCK)):
+        got = vread(va, 6)
+        if got != want:
+            already = (struct.unpack_from('<H', got)[0] & 0xf800) == 0xf000 and got[4:] == b'\x00\xbf'
+            raise SystemExit(f'ir-title: Entry 0 at {va:#x} is {got.hex()}, not the stock {want.hex()}'
+                             + (' (the patch is already applied)' if already else ''))
+    for va, want in X.TARGET_STOCK.items():
+        assert vread(va, len(want)) == want, f'Entry 0 at {va:#x}: not the stock code'
+    # Each block must be in a non-IR browser list, not subcategory 1: after the IR name the
+    # stock code tests r5 = subcategory == 1 (IR Dual) again.
+    where = collections.defaultdict(list)
+    for idx in range(E0_BLIST_SLOTS):
+        lptr, lcnt = (struct.unpack('<I', vread(t + 4 * idx, 4))[0] for t in (A.BLIST_PTR_TAB, A.BLIST_CNT_TAB))
+        for k in range(lcnt if lptr else 0):
+            _, _, c_idx, u12 = struct.unpack('<IIiH', vread(lptr + 48 * k, 14))
+            if c_idx == -1 and u12 in pids:
+                where[u12].append((idx // 4, idx % 4))
+    for p in pids:
+        if not where[p]:
+            raise SystemExit(f'ir-title: preset_id {p} is in no browser list')
+        bad = [cs for cs in where[p] if cs[0] == 15 or cs[1] == 1]
+        if bad:
+            raise SystemExit(f'ir-title: preset_id {p} is in browser list(s) {bad}: IR, or subcategory 1')
+
+    s6_hdr_off, s6_poff, s6_slen, s6_dst, s6_next_off = segs[6]
+    assert s6_slen % 4 == 0 and s6_next_off <= len(e0)
+    cave_va = s6_dst + s6_slen
+    cave, ca, cb = ir_title_cave(cave_va, pids, X)
+    vwrite(X.SITE_A, thumb_bw(X.SITE_A, ca) + b'\x00\xbf')
+    vwrite(X.SITE_B, thumb_bw(X.SITE_B, cb) + b'\x00\xbf')
+    new_s6_slen = s6_slen + len(cave)
+    out_e0 = bytearray(e0[:s6_next_off]) + cave
+    out_e0 += b'\x00' * ((-len(out_e0)) & 3)
+    struct.pack_into('<3I', out_e0, s6_hdr_off, new_s6_slen, s6_dst, s6_poff + new_s6_slen)
+    struct.pack_into('<I', out_e0, 4, len(out_e0))
+    out_e0 = bytes(l6ia.fix_internal_crcs(out_e0))
+    if len(out_e0) > E0_MAX:
+        raise SystemExit(f'Entry 0 would be {len(out_e0):#x} bytes; its partition holds {E0_MAX:#x}')
+    return out_e0, {'pids': pids, 'cave': cave_va, 'caveA': ca, 'caveB': cb, 'cave_len': len(cave)}
+
+
+def ir_title(l6ia_bytes, pids, log=print):
+    """ir_title_entry0 on an image's Entry 0. Returns (new l6ia bytes, info)."""
+    e0 = get_entry_swapped(l6ia_bytes, 0)
+    new_e0, info = ir_title_entry0(e0, pids)
+    new_l6ia, _, _ = l6ia.rebuild_archive(l6ia_bytes, {0: new_e0})
+    log(f"[+] Entry 0: IR-name title for preset_id {', '.join(map(str, info['pids']))}: "
+        f"cave {info['cave_len']} B at {info['cave']:#x}; {len(e0):#x} -> {len(new_e0):#x} bytes")
+    return new_l6ia, info
+
+
 # Blob 0 must keep its stock length: the SHARC loads it into a buffer of exactly
 # 0x77aac words at 0x21c400 (the stock Blob 0 ends at 0x77aac, its last composite's
 # end) unless expand_sharc_blob0_buffer enlarges it. A longer Blob 0 stops the unit
@@ -818,7 +1015,7 @@ def clone_composite_in_blob0(b0, src_comp_id):
     return b0, 0x600000 + dst_idx
 
 
-# NAM Lite (tools/sharc/nam_lite_kernel.asm): an amp whose whole audio path is
+# NAM A2 Lite (tools/sharc/nam_multi.py): an amp whose whole audio path is
 # graph input -> primitive 0x9c75 -> graph output, on a clone of the source amp's
 # composite (HD2_AmpLine6Clarity's). Its parameters are its own, consistent in
 # all three places that count them: Entry 3 (parameters and states), the blob's
@@ -1209,6 +1406,14 @@ def add_model_entry3(e3, src, new_name, display_name, blob_index, nam):
     return bytes(out), new_id, slots
 
 
+def cmd_ir_title(args):
+    l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
+    new_l6ia, _ = ir_title(l6ia_bytes, args.preset_id)
+    donor = args.input if is_hxf else args.donor
+    save_l6ia_to_any(new_l6ia, args.output, donor_hxf=donor)
+    print(f"[+] Wrote {args.output}")
+
+
 def cmd_add_model(args):
     l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
     e0 = get_entry_swapped(l6ia_bytes, 0)
@@ -1321,14 +1526,21 @@ def main():
                        help="DSP cost for Entry 0 Table 1 (default: the source's; stock amps 775..3700, "
                             "apparently hundredths of a per cent of the SHARC)")
 
+    p_irt = sub.add_parser('ir-title', help="HX Stomp: a NAM block's title shows its User IR's name")
+    p_irt.add_argument('input', help='Input .hxf or L6IA (after add-model)')
+    p_irt.add_argument('output', help='Output .hxf or L6IA')
+    p_irt.add_argument('--preset-id', type=int, action='append', required=True,
+                       help="the model's preset_id (add-model --preset-id); repeat for several models")
+    p_irt.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
+
     p_pat = sub.add_parser('patch', help='Inject the SHARC kernel into Entry 2 and hook primitive 0x9c75 to it')
     p_pat.add_argument('input', help='Input .hxf or L6IA')
     p_pat.add_argument('output', help='Output .hxf or L6IA')
-    p_pat.add_argument('--asm', required=True, help='SHARC assembly file (tools/sharc/nam_lite.py -o ...)')
+    p_pat.add_argument('--asm', required=True, help='SHARC assembly file (tools/sharc/nam_multi.py -o ...)')
     p_pat.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
 
     args = ap.parse_args()
-    {'add-model': cmd_add_model, 'inspect': cmd_inspect, 'patch': cmd_patch}[args.cmd](args)
+    {'add-model': cmd_add_model, 'inspect': cmd_inspect, 'ir-title': cmd_ir_title, 'patch': cmd_patch}[args.cmd](args)
 
 
 if __name__ == '__main__':

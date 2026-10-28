@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NAM A2 Lite Multi: NAM A2 Lite as several blocks at once, each with its own capture.
+"""NAM A2 Lite's kernel: up to three blocks at once, each with its own capture.
 
 usage: nam_multi.py [model.nam] [-o out.asm] [--slots 2|3] [--staging b2|b3] [--check]
 
@@ -36,7 +36,7 @@ import sys
 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, here)
-import nam_lite  # noqa: E402  (the single-instance module: its model format and reference)
+import nam_lite  # noqa: E402  (the model format, the reference and the shared tables)
 import nam_pack  # noqa: E402
 import sasm  # noqa: E402
 import ssim  # noqa: E402

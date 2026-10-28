@@ -13,9 +13,12 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 pytestmark = pytest.mark.firmware
 
+# The HX Stomp's is hx-stomp-kit's `kit.py build ... nam-a2-lite --ir-title` byte for byte. Its
+# kernel, graph and model list are those of the image (then preset ID 148, "NAM Lite Multi")
+# that ran on an HX Stomp from RAM: two blocks, two captures, the IR names in the titles.
 BUILT_MD5 = {
-    "HX_STOMP_HXF": "faa1b8107d9c217f6a6a5033a7dc3e7f",
-    "HX_STOMP_XL_HXF": "d47a79aa3e0299729fa04ffe356f520d",
+    "HX_STOMP_HXF": "87709d151b4163ee20917df19776ef24",
+    "HX_STOMP_XL_HXF": "d47a79aa3e0299729fa04ffe356f520d",     # no IR-name title; not run on an XL
 }
 
 
@@ -30,3 +33,13 @@ def test_build(tmp_path, env):
     assert r.returncode == 0, r.stdout + r.stderr
     assert "ALL OK" in r.stdout
     assert hashlib.md5(out.read_bytes()).hexdigest() == BUILT_MD5[env]
+
+
+def test_ir_title_refuses_the_xl(tmp_path):
+    stock = os.environ.get("HX_STOMP_XL_HXF")
+    if not stock:
+        pytest.skip("HX_STOMP_XL_HXF is not set")
+    r = subprocess.run([sys.executable, str(ROOT / "tools/patch_amp.py"), "ir-title", stock,
+                        str(tmp_path / "out.hxf"), "--preset-id", "148"], capture_output=True, text=True)
+    assert r.returncode != 0 and "HX Stomp only" in r.stderr
+    assert not (tmp_path / "out.hxf").exists()

@@ -25,7 +25,7 @@ transcribes them from the Analog Devices "SHARC Processor Programming
 Reference".
 
 Neural Amp Modeler (https://github.com/sdatkinson/neural-amp-modeler,
-MIT licence): src/sharc/nam_a2.asm and tools/sharc/nam_lite_kernel.asm are
+MIT licence): src/sharc/nam_a2.asm and tools/sharc/nam_multi_kernel.asm are
 independent implementations of the A2 WaveNet arithmetic, written from the
 model file format; no NeuralAmpModelerCore source is included.
 

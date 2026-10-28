@@ -1,6 +1,6 @@
 // nam_a2.asm - Neural Amp Modeler A2 block for the SHARC, any channel count.
 //
-// The reference for tools/sharc/nam_lite.py --check: Neural Amp Modeler's A2
+// The reference for tools/sharc/nam_multi.py --check: Neural Amp Modeler's A2
 // WaveNet arithmetic, written from the model file format, one sample at a
 // time, in float32 as NAM computes it; the layout of the
 // model block at MODEL is produced by tools/sharc/nam_pack.py:
