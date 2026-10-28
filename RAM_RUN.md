@@ -2,7 +2,7 @@
 
 You can try a built `.hxf` on the Stomp without installing it. The firmware runs from the Stomp's SDRAM for one session, and nothing is written to the eMMC. Turn the Stomp off and on and it starts whatever is installed, as before.
 
-**Status:** the RAM run (`tools/hxf_ram.py`, the loader and the hook) has been used on a real HX Stomp to test NAM A2 Lite builds before any of them was installed. The browser version on the setup page (`web/ramrun.js`) does the same steps over WebUSB. It has passed tests against stand-in devices (`tests/test_ramrun.py`) but **has not been tried on a unit yet**. Neither has been tried on an XL.
+**Status:** both ways have run NAM A2 Lite on a real HX Stomp: the command line (`tools/hxf_ram.py`, the loader and the hook) and the browser version on the setup page (`web/ramrun.js`, the same steps over WebUSB). Neither has been tried on an XL.
 
 ## From the setup page
 
@@ -12,7 +12,7 @@ Step 3 of the [setup page](https://nocaseguy.github.io/hx-stomp-nam-lite/web/) h
 - HX Edit and Line 6 Updater closed, because they hold the USB connection;
 - stock 3.80.0 (or this same build) installed on the Stomp; see [The eMMC](#the-emmc).
 
-The browser asks for a device at most three times: the HX Stomp itself, the Stomp in update mode (`1fc9:000c`, often shown as "LPC" or as an unknown device) and the RAM loader (`1209:0001`). If it already has permission for one of these, that step needs no click.
+The browser asks for a device three times: the HX Stomp itself, the Stomp in update mode (`1fc9:000c`, often shown as "LPC" or as an unknown device) and the RAM loader (`1209:0001`). The last two are new USB devices each time the Stomp restarts, so the browser doesn't remember them. If it ever already has permission for one, the page goes on without the click.
 
 On Windows the browser may not see the Stomp, because Line 6's driver holds it. On Linux the user needs access to the three USB devices (a udev rule).
 
