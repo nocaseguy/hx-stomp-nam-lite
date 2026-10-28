@@ -6,8 +6,12 @@
 // file that build makes, and was tried, on a desktop.
 //
 // Messages in:  { stock: ArrayBuffer }
+// It also lays out the RAM run of the result (tools/hxf_ram.py plan), for
+// ramrun.js: the regions to send and the eMMC checks.
+//
 // Messages out: { type: "progress", step, of, text } | { type: "log", text }
-//               { type: "done", unit, file, bytes: ArrayBuffer, md5, pinned }
+//               { type: "done", unit, file, bytes: ArrayBuffer, md5, pinned,
+//                 ram: { regions: [{ addr, label, bytes: ArrayBuffer }], checks } | { error } }
 //               { type: "error", text }
 "use strict";
 
@@ -28,6 +32,7 @@ var BUILT_MD5 = {
 var SOURCES = [
   "tools/hxf.py",
   "tools/l6ia.py",
+  "tools/hxf_ram.py",
   "tools/l6ia_verify.py",
   "tools/patch_amp.py",
   "tools/sharc/entry4_blob.py",
@@ -37,6 +42,7 @@ var SOURCES = [
   "tools/sharc/recips_table.json",
   "tools/sharc/sasm.py",
   "tools/sharc/ssim.py",
+  "tools/ramboot/ramboot-hook.bin",
 ];
 
 // One command of build.py: run a script as __main__ with argv, return its output.
@@ -71,7 +77,7 @@ async function boot() {
     if (!r.ok) throw new Error("Could not load " + path + " (" + r.status + ").");
     return [path, new Uint8Array(await r.arrayBuffer())];
   }));
-  ["/repo", "/repo/tools", "/repo/tools/sharc", "/repo/build"].forEach(function (d) {
+  ["/repo", "/repo/tools", "/repo/tools/sharc", "/repo/tools/ramboot", "/repo/build"].forEach(function (d) {
     try { p.FS.mkdir(d); } catch (e) { /* exists */ }
   });
   files.forEach(function (f) { p.FS.writeFile("/repo/" + f[0], f[1]); });
@@ -121,6 +127,7 @@ async function build(stock) {
     var file = unit + "_v3.80.0_NAM_A2_Lite.hxf";
     step(6, "Checking every checksum and packing the file…",
          ["tools/hxf.py", "pack", "build/nam_lite.l6ia", "build/" + file, "--donor", "build/stock.hxf"]);
+    var ram = ramPlan(p, step, file);
   } finally {
     run.destroy();
   }
@@ -130,7 +137,32 @@ async function build(stock) {
     try { p.FS.unlink("/repo/build/" + f); } catch (e) { /* gone */ }
   });
   var buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  post({ type: "done", unit: unit, file: file, bytes: buf, md5: outMd5, pinned: outMd5 === BUILT_MD5[unit] }, [buf]);
+  post({ type: "done", unit: unit, file: file, bytes: buf, md5: outMd5, pinned: outMd5 === BUILT_MD5[unit], ram: ram },
+       [buf].concat(ram.regions ? ram.regions.map(function (r) { return r.bytes; }) : []));
+}
+
+// The RAM run of the built file: what tools/hxf_ram.py run would send. A failure here leaves the
+// build as it is; the page then offers no RAM run.
+function ramPlan(p, step, file) {
+  var dir = "/repo/build/ram";
+  try {
+    step(6, "Checking every checksum and packing the file…",
+         ["tools/hxf_ram.py", "plan", "build/" + file, "--stock", "build/stock.hxf", "--out", "build/ram"]);
+    var meta = JSON.parse(new TextDecoder().decode(p.FS.readFile(dir + "/plan.json")));
+    var regions = meta.regions.map(function (r) {
+      var b = p.FS.readFile(dir + "/" + r.file);
+      return { addr: r.addr, label: r.label, bytes: b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) };
+    });
+    return { regions: regions, checks: meta.checks };
+  } catch (e) {
+    post({ type: "log", text: "RAM run not available: " + (e && e.message ? e.message : e) + "\n" });
+    return { error: String(e && e.message ? e.message : e) };
+  } finally {
+    try {
+      p.FS.readdir(dir).forEach(function (f) { if (f !== "." && f !== "..") p.FS.unlink(dir + "/" + f); });
+      p.FS.rmdir(dir);
+    } catch (e) { /* not made */ }
+  }
 }
 
 self.onmessage = function (e) {

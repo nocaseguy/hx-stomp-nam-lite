@@ -34,6 +34,7 @@ Everything else in the firmware stays stock 3.80.0.
 What is here is our own work:
 - a SHARC assembler and simulator;
 - the NAM A2 Lite kernel, written from scratch in SHARC assembly;
+- a RAM loader that runs a build without installing it (C for the Stomp's Cortex-M4, and WebUSB for the page);
 - tools that read the firmware container and patch the model tables;
 - the offsets they patch.
 
@@ -73,6 +74,19 @@ This writes `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (from the XL's file, `build
 4. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
 Only 4 of the 15 parts of the firmware change: the main application's model tables, the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
+
+## Try it first, from RAM
+
+You can run the built firmware from the Stomp's memory for one session before you install it. Nothing is written to the Stomp, and turning it off and on brings back what is installed. The Stomp must have stock 3.80.0 installed.
+
+- **On the setup page:** step 3, **Run from RAM**, in Chrome or Edge. This browser version hasn't been tried on a unit yet.
+- **From the command line:** hold Page Right while you power on, then
+  ```sh
+  dfu-util -d 1fc9:000c -a 0 -D tools/ramboot/firmware-ramboot.dfu
+  python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf --stock HX_Stomp_v3.80.0_0x103966115.hxf
+  ```
+
+Presets and IRs you change during the run are lost at power-off. [RAM_RUN.md](RAM_RUN.md) explains how it works and its limits.
 
 ## Install
 
@@ -151,16 +165,18 @@ Write the test first, watch it fail, then change the code:
 ```
 build.py                      one-step build from the stock .hxf
 tools/nam2ir.py               .nam -> User IR .wav
-web/index.html                the setup page: firmware build (web/firmware-worker.js) and converter (web/nam2ir-core.js)
+web/index.html                the setup page: firmware build (web/firmware-worker.js), RAM run (web/ramrun.js) and converter (web/nam2ir-core.js)
 tools/patch_amp.py            inspect / add-model / patch
 tools/hxf.py, l6ia.py         .hxf container and L6IA archive
 tools/l6ia_verify.py          checks every checksum in an archive
+tools/hxf_ram.py              runs a build from RAM (RAM_RUN.md); tools/ramboot/ holds the built loader and hook
 tools/sharc/nam_lite.py       kernel + data, and its simulator check
 tools/sharc/nam_lite_kernel.asm
 tools/sharc/nam_pack.py       .nam loader, layer order
 tools/sharc/entry4_blob.py    DSP graph library parser
 tools/sharc/sasm.py, ssim.py  SHARC assembler and simulator
 src/sharc/nam_a2.asm          reference NAM A2 implementation for the check
+src/ramboot/                  the RAM loader and its eMMC overlay hook (C, Cortex-M4; make -C src/ramboot)
 tests/                        pytest: unit, web parity, kernel (slow), firmware (needs a stock .hxf)
 ```
 
