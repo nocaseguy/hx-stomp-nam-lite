@@ -42,7 +42,7 @@ What is here is our own work:
 
 ## Requirements
 
-- An **HX Stomp**, or an **HX Stomp XL** (see [HX Stomp XL](#hx-stomp-xl): not tried on an XL yet). Not the Helix Floor, LT or Rack: their firmware is a different design.
+- An **HX Stomp**, or an **HX Stomp XL** (see [HX Stomp XL](#hx-stomp-xl): run from RAM on an XL, not installed on one yet). Not the Helix Floor, LT or Rack: their firmware is a different design.
 - Line 6's firmware 3.80.0 for your unit. The build checks the MD5 and refuses any other file:
   - HX Stomp: `HX_Stomp_v3.80.0_0x103966115.hxf`, MD5 `a2cd8f4ae56f49415380270ebc484bf1`
   - HX Stomp XL: `HX_Stomp_XL_v3.80.0_0x103966115.hxf`, MD5 `329e3a26d60d3de1988b6785fa833ee1`
@@ -99,7 +99,7 @@ Presets and IRs you change during the run are lost at power-off. [RAM_RUN.md](RA
 
 The XL's firmware 3.80.0 is the Stomp's with another build of the main application: the DSP program, the model list and the DSP graph library, the three parts the patch changes besides the application, are byte for byte the same. `tools/patch_amp.py` holds the XL's own addresses for the application's model tables, and checks each one against the table it points to. The XL image passes the same checks as the Stomp's, and every byte it changes in the application corresponds to one the Stomp build changes.
 
-**It has not run on an XL.** The Stomp build is the one tested on a unit. If you try it on an XL, have the stock XL file ready for recovery. The XL has the same Page Right button, so holding it while powering on should give update mode as on the Stomp, but that has not been tried on an XL either.
+**It has run on an XL from RAM** (see [RAM_RUN.md](RAM_RUN.md)), but has not been installed on one. If you install it on an XL, have the stock XL file ready for recovery. The XL has the same Page Right button, so holding it while powering on should give update mode as on the Stomp, but that has not been tried on an XL either.
 
 ## Use
 

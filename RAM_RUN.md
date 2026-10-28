@@ -2,7 +2,7 @@
 
 You can try a built `.hxf` on the Stomp without installing it. The firmware runs from the Stomp's SDRAM for one session, and nothing is written to the eMMC. Turn the Stomp off and on and it starts whatever is installed, as before.
 
-**Status:** both ways have run NAM A2 Lite on a real HX Stomp: the command line (`tools/hxf_ram.py`, the loader and the hook) and the browser version on the setup page (`web/ramrun.js`, the same steps over WebUSB). Neither has been tried on an XL.
+**Status:** both ways have run NAM A2 Lite on a real HX Stomp: the command line (`tools/hxf_ram.py`, the loader and the hook) and the browser version on the setup page (`web/ramrun.js`, the same steps over WebUSB). The XL build has also run from RAM on a real HX Stomp XL.
 
 ## From the setup page
 
