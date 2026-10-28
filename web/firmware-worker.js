@@ -24,8 +24,8 @@ var STOCK_MD5 = {
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "fb0fdba170dae2310abbe811dce5b86b",
-  "HX_Stomp_XL": "8871b0f5506b7ca85a5dd0bec12f0007",
+  "HX_Stomp": "52457ec05e2cf46afeb315282c34342d",
+  "HX_Stomp_XL": "9de45083fd8adbc81218e1f93ce4805a",
 };
 
 // What build.py needs, relative to the repository root.

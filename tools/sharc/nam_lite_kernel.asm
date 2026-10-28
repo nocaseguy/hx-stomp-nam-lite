@@ -35,7 +35,8 @@
 // .. +12 dB: 100 Hz low shelf, 650 Hz peak, 2.5 and 5.5 kHz high shelves),
 // 0..1 (the model's blob
 // routes them there; DM(3) and DM(4) belong to fn_ctrl 0x611ddd): Drive the
-// input gain, 0 dB at 5.0 (the capture's level), -20 .. +20 dB, 4 dB a unit; Ch Vol the
+// input gain, 0 dB at 5.0, -20 .. +20 dB, 4 dB a unit, x the model's input trim (N_TRIM:
+// at 5.0 the Stomp's input then meets the model at its capture's level); Ch Vol the
 // output level 4 k^2 (0 mute, 0 dB at 5.0, +12 dB at 10.0).
 //
 // It sets CBUFEN for its circular buffers: on the unit, rings that did not wrap
@@ -61,6 +62,8 @@
 .equ N_MG,     0xe4899          // the tail's fade-out step 17 .. 0 at the start of a block
 .equ N_MR,     0xe489a          // where the tail reads in HIST (going back)
 .equ N_HW,     0xe489b          // where the block's output goes in HIST
+.equ N_TRIM,   0xe489c          // the loaded model's input trim (x Drive): its IR word 5,
+                                // 10^(-input_level_dbu/20), x STOMP_GAIN; 0: none (x 1)
                                 // A model change crossfades with no gap: the new model, from
                                 // cleared rings, fades in over 16 blocks (5.3 ms) while the
                                 // last output, played backwards from HIST, fades out (sin and
@@ -71,9 +74,10 @@
 .equ FADE_TAB, 0x327480         // DDR2: sin(pi/2 k/16), k = 0 .. 16, then 1.0 (k = 17)
 .equ EQ_C,     0xe7fe0          // the tone stack: 4 bands x {b0, b1, b2, -a1, -a2}
 .equ EQ_S,     0xe7ff4          // its state, 4 x {s1, s2} (0 at boot, never cleared)
-.equ EQ_IDX,   0xe7ffc          // each band's knob step 0..100 now (-1 at boot: load)
+.equ EQ_IDX,   0xe7ffc          // each band's knob step - 50 now (-50 .. 50; 0x80000000 at boot: load)
 .equ EQ_TAB,   0x326a00         // DDR2: 4 bands x 101 steps x 5 coefficients (nam_lite.py)
 .equ DRIVE_TAB, 0x327400        // DDR2: Drive's input gain for each step 0.0 .. 10.0 (-20 .. +20 dB)
+.equ STOMP_GAIN, 0x327465       // DDR2: 10^(STOMP_DBU/20), the Stomp's input level (nam_lite.py)
 .equ IR_FLAG,  0x2ab56e         // the stock User IR slots: slot s loaded,
 .equ IR_TOP,   0x2abded         // and its sample k at IR_TOP + s * 0x800 - k
 .equ P_SEEN,   100              // in each instance's own block (I0; zeroed by fn_reset
@@ -220,19 +224,20 @@ n_own:
     F1 = 0.5;
     F0 = F0 + F1;
     R0 = TRUNC F0;
-    R1 = 0;
-    R0 = MAX(R0, R1);
-    R1 = 100;
-    R0 = MIN(R0, R1);
-    R1 = DRIVE_TAB;
-    R0 = R0 + R1;
+    R1 = 50;
+    R0 = R0 - R1;
+    R0 = CLIP R0 BY R1;                 // step - 50, -50 .. 50
     I3 = R0;
-    F14 = DM(0, I3);
+    F14 = DM(DRIVE_TAB + 50, I3);
+    F0 = DM(N_TRIM);                    // x the model's input trim (0: none): its
+    F0 = PASS F0;                       // capture's level against the Stomp's
+    IF NE F14 = F14 * F0;
     F0 = DM(6, I0);
+    F0 = F0 + F0;
     F0 = F0 * F0;
-    F1 = 4.0;
+    F1 = DM(MODEL + H_SCALE);
     F0 = F0 * F1;
-    DM(N_LEVEL) = F0;                   // output level, 4 k^2
+    DM(N_LEVEL) = F0;                   // output level, 4 k^2, x the head's scale
     B10 = I1;                           // the block's input and output, through PM
     B11 = I2;
     L0 = 0; L3 = 0; L4 = 0; L5 = 0;     // (L1, L2 are 0 already)
@@ -241,7 +246,8 @@ n_own:
 
     // ---- the model: Model (DM(7, I0)), the User IR list as the IR block's IR Select,
     // an integer 1 .. 128: that User IR slot when it holds a NAM Lite model
-    // (tools/nam2ir.py: its first words 0.5, -0.5, 3.0, scale, 1871 / 1024; the
+    // (tools/nam2ir.py: its first words 0.5, -0.5, 3.0, scale, 1871 / 1024, then the
+    // input level (word 5, see N_TRIM); the
     // -0.5 is not checked), else
     // (a cab IR, an empty slot) silence. 0 (a model with no Model parameter,
     // whose DM(7) fn_reset left 0) is the built-in one. A
@@ -294,23 +300,12 @@ n_sigw: R5 = R5 + R6;
     IF EQ JUMP n_same;
     DM(N_SIG) = R5;                     // another model: crossfade to it, and load it
     CALL n_cut;
-    JUMP n_load;
-n_same:
-    R0 = DM(N_GAIN);                    // the same model: fade in, or stay at 16
-    R0 = R0 + 1;
-    R1 = 16;
-    R0 = MIN(R0, R1);
-    DM(N_G1) = R0;
-    JUMP n_have;
-n_none:
-    R0 = DM(N_SIG);                     // no model in that slot: silence (after the tail)
-    R0 = PASS R0;
-    IF EQ JUMP n_zero;
-    CALL n_cut;                         // (R0 = 0 after it)
-    DM(N_SIG) = R0;                     // none loaded: a model in the slot loads, from
-    JUMP n_zero;                        // cleared rings
-n_load:                                 // load it: each word x the scale, through the map
+                                        // load it: each word x the scale, through the map
     I3 = R8;
+    F0 = DM(-5, I3);                    // its input trim from the next block on: word 5,
+    F1 = DM(STOMP_GAIN);                // 10^(-input_level_dbu/20) (0: none), x the
+    F0 = F0 * F1;                       // Stomp's level
+    DM(N_TRIM) = F0;
     F3 = DM(-3, I3);
     MODIFY(I3, -8);
     I4 = DM(MODEL + H_LMAP);
@@ -324,6 +319,21 @@ n_load:                                 // load it: each word x the scale, throu
         F0 = F0 * F3;
 n_ldw:  DM(I5, 1) = F0;
 n_ldr: MODIFY(I4, 2);
+    JUMP n_zero;
+n_same:
+    R0 = DM(N_GAIN);                    // the same model: fade in, or stay at 16
+    R0 = R0 + 1;
+    R1 = 16;
+    R0 = MIN(R0, R1);
+    DM(N_G1) = R0;
+    JUMP n_have;
+n_none:
+    R0 = DM(N_SIG);                     // no model in that slot: silence (after the tail)
+    R0 = PASS R0;
+    IF EQ JUMP n_zero;
+    CALL n_cut;                         // (R0 = 0 after it)
+    DM(N_SIG) = R0;                     // none loaded: a model in the slot loads, from
+                                        // cleared rings
 n_zero:                                 // no model this block: the tail alone
     R0 = 0;
     DM(N_INIT) = R0;
@@ -339,7 +349,7 @@ n_have:
     MODIFY(I3, 8);
     I4 = EQ_IDX;
     I5 = EQ_C;
-    R9 = EQ_TAB;
+    R9 = EQ_TAB + 250;                  // (step 50 of the first band)
     LCNTR = 4, DO n_eqk UNTIL LCE;
       F0 = DM(I3, 1);
       F1 = 100.0;
@@ -347,15 +357,14 @@ n_have:
       F1 = 0.5;
       F0 = F0 + F1;
       R0 = TRUNC F0;
-      R1 = 0;
-      R0 = MAX(R0, R1);
-      R1 = 100;
-      R0 = MIN(R0, R1);
+      R1 = 50;
+      R0 = R0 - R1;
+      R0 = CLIP R0 BY R1;               // step - 50, -50 .. 50
       R1 = DM(0, I4);
       COMP(R0, R1);
       IF EQ JUMP n_eqs;
       DM(0, I4) = R0;
-      R1 = R0 + R0;                     // 5 x step
+      R1 = R0 + R0;                     // 5 x (step - 50)
       R1 = R1 + R1;
       R1 = R1 + R0;
       R1 = R1 + R9;
@@ -657,10 +666,8 @@ n_layer: MODIFY(I4, T_SIZE);
     M1 = -15;
     M2 = -14;
     R7 = DM(MODEL + H_HEAD);
-    F2 = DM(MODEL + H_SCALE);
+    F2 = DM(N_LEVEL);                   // the head's scale x the level
     S2 = R2;
-    F3 = DM(N_LEVEL);
-    S3 = R3;
     BIT SET MODE1 PEYEN | BDCST9;
     NOP;
     LCNTR = 8, DO n_hpair UNTIL LCE;
@@ -673,8 +680,7 @@ n_layer: MODIFY(I4, T_SIZE);
         F12 = F0 * F4, F8 = F8 + F12, F0 = DM(I2, M0), F4 = PM(I9, M9);
 n_htap: F12 = F0 * F4, F8 = F8 + F12, F0 = DM(I0, M0), F4 = PM(I9, M9);
       F8 = F8 + F12;
-      F8 = F8 * F2;                     // scale, then the level
-      F8 = F8 * F3;
+      F8 = F8 * F2;                     // scale x level
       PM(I11, M10) = F8;                // out(t), out(t + 1)
       MODIFY(I0, M1);
       MODIFY(I1, M2);
@@ -877,3 +883,4 @@ n_fark: MODIFY(I0, M1);
     .word 0, 0, 0, 0                // N_LEVEL; N_OWNER, N_TICK: no owner yet;
     .word 0, 0, 0, 0, 0             // N_T0, N_MCNT, N_SIG (no model loaded), N_GAIN, N_G1
     .word 0, 0x327500, 0x327500     // N_MG, N_MR, N_HW (HIST)
+    .word 0                         // N_TRIM: none

@@ -3,7 +3,7 @@
 // in Node (module.exports) for the check against the Python tool.
 //
 // The .wav is 2,048 samples, 48 kHz, mono, 32-bit float: a header (0.5, -0.5,
-// 3.0, a scale 2^e, 1871 / 1024, 0, 0, 0), then the capture's 1,871 weights
+// 3.0, a scale 2^e, 1871 / 1024, the input level, 0, 0), then the capture's 1,871 weights
 // in the order the kernel loads them, then their silence state (72 words), all
 // divided by 2^e so that every sample is within HX Edit's +-15.8 limit, then zeros.
 (function (root) {
@@ -16,7 +16,7 @@
   var KERNEL = [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 15, 15, 6, 6, 6, 6, 6, 6, 6];
   var DILATION = [1, 3, 7, 17, 41, 101, 239, 1, 3, 7, 17, 41, 101, 239, 1, 13, 1, 3, 7, 17, 41, 101, 239];
   var N_WEIGHTS = 1871;
-  var STOMP_DBU = 11.5;             // the Stomp's input at 0 dBFS: tools/sharc/nam_pack.py STOMP_DBU
+  var STOMP_DBU = 11.5;             // the Stomp's input at 0 dBFS, the firmware's: tools/sharc/nam_lite.py
 
   function same(a, b) {
     return Array.isArray(a) && a.length === b.length && a.every(function (x, i) { return x === b[i]; });
@@ -68,25 +68,19 @@
     return out;
   }
 
-  // tools/sharc/nam_pack.py trim(): `db` of gain in front of the model, folded
-  // into the rechannel and each layer's mix-in (the only weights the input
-  // meets), as float32 products.
-  function trim(w, db) {
-    var f = Math.fround, g = f(Math.pow(10, db / 20)), out = w.slice(), o = C, i;
-    for (i = 0; i < C; i++) out[i] = f(f(w[i]) * g);
-    KERNEL.forEach(function (k) {
-      o += C * C * k + C;
-      for (i = o; i < o + C; i++) out[i] = f(f(w[i]) * g);
-      o += C + C * C + C;
-    });
-    return out;
+  // The capture's input level in dBu (metadata input_level_dbu), or null when
+  // the file does not give a number: tools/sharc/nam_pack.py input_level_dbu().
+  function inputLevelDbu(meta) {
+    var dbu = meta && meta.input_level_dbu;
+    return typeof dbu === "number" && isFinite(dbu) ? dbu : null;
   }
 
-  // The input trim for a capture: the Stomp's level less the capture
-  // interface's (metadata input_level_dbu), or null when the file does not say.
-  function inputTrimDb(meta, stompDbu) {
-    var dbu = meta && meta.input_level_dbu;
-    return typeof dbu === "number" && isFinite(dbu) ? stompDbu - dbu : null;
+  // IR word 5: tools/sharc/nam_lite.py level_word().
+  function levelWord(dbu) {
+    if (dbu === null) return 0;
+    var g = Math.fround(Math.pow(10, -dbu / 20));
+    if (!(g > 0 && g < IR_LIMIT)) throw new Error("Input level " + dbu + " dBu is out of range (above -24 dBu).");
+    return g;
   }
 
   // tools/sharc/nam_lite.py layer_weights(): per layer bias and mix-in per
@@ -154,14 +148,14 @@
   }
 
   // The 2,048 IR samples as a Float32Array, and the scale exponent.
-  function irSamples(w) {
+  function irSamples(w, dbu) {
     var st = stream(w);
     var peak = 0;
     st.forEach(function (x) { peak = Math.max(peak, Math.abs(x)); });
     var e = 0;
     while (peak / Math.pow(2, e) > 15.5) e++;
     var s = Math.pow(2, e);
-    var vals = [0.5, -0.5, C, s, N_WEIGHTS / 1024, 0, 0, 0].concat(st.map(function (x) { return x / s; }));
+    var vals = [0.5, -0.5, C, s, N_WEIGHTS / 1024, levelWord(dbu === undefined ? null : dbu), 0, 0].concat(st.map(function (x) { return x / s; }));
     if (vals.length >= IR_SAMPLES) throw new Error("Too many weights for one IR slot.");
     vals.forEach(function (v) {
       if (!(Math.abs(v) < IR_LIMIT)) throw new Error("A sample HX Edit would refuse (" + v + ").");
@@ -191,8 +185,8 @@
     return model.toLowerCase().indexOf(make.toLowerCase()) === 0 ? model : make + " " + model;
   }
 
-  // Text of a .nam file -> { wav, info } or an Error thrown. opts: stompDbu
-  // (default STOMP_DBU), trim: false to leave the weights as they are.
+  // Text of a .nam file -> { wav, info } or an Error thrown. opts: level: false
+  // to leave the input level out (word 5 0: no trim).
   function convert(text, opts) {
     opts = opts || {};
     var d;
@@ -201,8 +195,8 @@
     var bad = problems(pick.model);
     if (bad.length) throw new Error("Not an A2 Lite capture the kernel can run: " + bad.join("; ") + ".");
     var meta = d.metadata || {};
-    var trimDb = opts.trim === false ? null : inputTrimDb(meta, opts.stompDbu == null ? STOMP_DBU : opts.stompDbu);
-    var ir = irSamples(trimDb === null ? pick.model.weights : trim(pick.model.weights, trimDb));
+    var dbu = opts.level === false ? null : inputLevelDbu(meta);
+    var ir = irSamples(pick.model.weights, dbu);
     var rate = pick.model.sample_rate || d.sample_rate;
     return {
       wav: wavBytes(ir.samples),
@@ -213,14 +207,15 @@
         slimmable: pick.slimmable,
         exponent: ir.exponent,
         peak: ir.peak,
-        trimDb: trimDb,
+        inputDbu: dbu,
+        trimDb: dbu === null ? null : STOMP_DBU - dbu,
         sampleRate: rate,
         warnings: rate && rate !== 48000 ? ["Trained at " + rate + " Hz; the Stomp runs at 48 kHz, so it will sound off."] : []
       }
     };
   }
 
-  var api = { STOMP_DBU: STOMP_DBU, trim: trim, convert: convert, pickModel: pickModel, problems: problems, irSamples: irSamples, wavBytes: wavBytes };
+  var api = { STOMP_DBU: STOMP_DBU, convert: convert, pickModel: pickModel, problems: problems, irSamples: irSamples, wavBytes: wavBytes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.NAM2IR = api;
 })(this);

@@ -1,6 +1,7 @@
 """web/nam2ir-core.js writes the same bytes as tools/nam2ir.py, and refuses the same captures."""
 import json
 import shutil
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -47,18 +48,22 @@ def test_same_bytes(tmp_path, nam_file, weights, big, slimmable):
     assert (tmp_path / "js.wav").read_bytes() == (tmp_path / "py.wav").read_bytes()
 
 
-@pytest.mark.parametrize("dbu", [12.2, 18.0, 3.7])
-def test_same_bytes_trimmed(tmp_path, nam_file, weights, dbu):
-    # a capture that gives its input level: both fold the same trim into the weights
+@pytest.mark.parametrize("dbu", [12.2, 18.0, 3.7, 15])
+def test_same_bytes_with_level(tmp_path, nam_file, weights, dbu):
+    # a capture that gives its input level: both put it in word 5, the weights as they are
     src = nam_file(metadata={"input_level_dbu": dbu})
     r = py_convert(src, tmp_path / "py.wav")
     assert r.returncode == 0, r.stderr
-    assert f"input trim {11.5 - dbu:+.1f} dB" in r.stdout
+    assert f"input level {dbu:g} dBu" in r.stdout
     assert js_convert(src, tmp_path / "js.wav") == {"ok": True}
-    assert (tmp_path / "js.wav").read_bytes() == (tmp_path / "py.wav").read_bytes()
+    py = (tmp_path / "py.wav").read_bytes()
+    assert (tmp_path / "js.wav").read_bytes() == py
     plain = nam_file(name="plain.nam")
     assert py_convert(plain, tmp_path / "plain.wav").returncode == 0
-    assert (tmp_path / "plain.wav").read_bytes() != (tmp_path / "py.wav").read_bytes()
+    words = struct.unpack("<2048f", py[44:])
+    assert words[5] == pytest.approx(10 ** (-dbu / 20), rel=1e-6)
+    other = struct.unpack("<2048f", (tmp_path / "plain.wav").read_bytes()[44:])
+    assert words[:5] + words[6:] == other[:5] + other[6:]
 
 
 @pytest.mark.parametrize("metadata", [None, {}, {"input_level_dbu": None}, {"input_level_dbu": "15"},
@@ -68,7 +73,7 @@ def test_no_level_no_trim(tmp_path, nam_file, metadata):
     src = nam_file(metadata=metadata)
     r = py_convert(src, tmp_path / "py.wav")
     assert r.returncode == 0, r.stderr
-    assert "input trim none" in r.stdout
+    assert "input level none" in r.stdout
     assert js_convert(src, tmp_path / "js.wav") == {"ok": True}
     plain = nam_file(name="plain.nam")
     assert py_convert(plain, tmp_path / "plain.wav").returncode == 0

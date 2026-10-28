@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """nam2ir.py - a NAM A2 Lite model (3 channels) as an HX Stomp User IR, for NAM A2 Lite.
 
-usage: nam2ir.py <model.nam> -o model.wav [--stomp-dbu 11.5 | --no-trim]
+usage: nam2ir.py <model.nam> -o model.wav [--no-level]
 
 A capture that gives its interface's level (metadata input_level_dbu, the dBu
-at 0 dBFS) gets an input trim of stomp_dbu - input_level_dbu, folded into its
-weights (nam_pack.trim), so Drive 5.0 hits it as the capture's interface did.
---stomp-dbu sets the Stomp's input level (default nam_pack.STOMP_DBU, 11.5);
---no-trim leaves the weights as they are.
+at 0 dBFS) has it in IR word 5 (nam_lite.level_word); the kernel then trims
+its input by STOMP_DBU - input_level_dbu (nam_lite.py), so that at Drive 5.0
+the Stomp's input meets the model as the capture's interface did. --no-level
+leaves word 5 at 0 (no trim).
 
 Writes a 2,048-sample, 48 kHz, mono, 32-bit float .wav. Import it into a User
 IR slot (1..128) with HX Edit and set NAM A2 Lite's Model knob to that slot's
@@ -82,23 +82,24 @@ def main():
     if len(argv) < 3 or "-o" not in argv:
         sys.exit(__doc__)
     out = argv.pop(argv.index("-o") + 1)
-    stomp_dbu = float(argv.pop(argv.index("--stomp-dbu") + 1)) if "--stomp-dbu" in argv else nam_pack.STOMP_DBU
-    src = [a for a in argv if a not in ("-o", "--stomp-dbu", "--no-trim")][0]
+    src = [a for a in argv if a not in ("-o", "--no-level")][0]
     w, c = nam_pack.load(src, channels=nam_lite.C)
     if c != nam_lite.C:
         sys.exit(f"{src}: {c} channels; NAM A2 Lite takes the 3-channel A2 Lite model")
     bad = problems(src)
     if bad:
         sys.exit(f"{src}: not an A2 Lite capture the kernel can run: " + "; ".join(bad))
-    db = None if "--no-trim" in argv else nam_pack.input_trim_db(src, stomp_dbu)
-    if db is not None:
-        w = nam_pack.trim(w, c, db)
-    words = nam_lite.ir_samples(w)
+    dbu = None if "--no-level" in argv else nam_pack.input_level_dbu(src)
+    try:
+        words = nam_lite.ir_samples(w, dbu)
+    except ValueError as e:
+        sys.exit(f"{src}: {e}")
     write_wav(out, words)
     scale = struct.unpack("<f", struct.pack("<I", words[3]))[0]
-    print(f"input trim {db:+.1f} dB (Stomp {stomp_dbu:g} dBu at 0 dBFS)" if db is not None
-          else "input trim none: the capture gives no input_level_dbu" if "--no-trim" not in argv
-          else "input trim off (--no-trim)")
+    print(f"input level {dbu:g} dBu: trimmed {nam_lite.STOMP_DBU - dbu:+.1f} dB on the Stomp "
+          f"({nam_lite.STOMP_DBU:g} dBu at 0 dBFS)" if dbu is not None
+          else "input level none: the capture gives no input_level_dbu" if "--no-level" not in argv
+          else "input level left out (--no-level)")
     print(f"wrote {out}: 2048 samples, 48 kHz float, 1,871 weights (scale {scale:g}); "
           f"HX Edit: import into a User IR slot, then set NAM A2 Lite's Model knob to that slot")
 

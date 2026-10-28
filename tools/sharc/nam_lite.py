@@ -44,11 +44,19 @@ DDR2_END = 0x328000               # the stock Heap 4 starts here
 T_SIZE = 11
 BUILTIN_TOP = 0x326200 + 2047     # the built-in model, laid out as an IR slot (DDR2, after the rings)
 IR_SAMPLES = 2048
-IR_HEAD = 8                       # s[0..7]: 0.5, -0.5, 3.0 (channels), 2^e (scale), words / 1024, 0, 0, 0
+IR_HEAD = 8                       # s[0..7]: 0.5, -0.5, 3.0 (channels), 2^e (scale), words / 1024, level, 0, 0
 EQ_C, EQ_S, EQ_IDX = 0xE7FE0, 0xE7FF4, 0xE7FFC   # nam_lite_kernel.asm's tone stack
 EQ_TAB = 0x326A00                 # DDR2, after the built-in model
 LISTS = 0x327200                  # DDR2: the clear list and the load map (read on a load or a clear)
 DRIVE_TAB = 0x327400              # DDR2: Drive's gain per step, 0 dB at 5.0, -20 .. +20 dB (linear in dB)
+STOMP_GAIN = 0x327465             # DDR2: 10^(STOMP_DBU/20), after DRIVE_TAB
+# The HX Stomp's guitar input reaches 0 dBFS at about +11.5 dBu: users measured
+# 0.775 V (0 dBu) at -11.4 dBFS on a Helix Floor and the same on an HX Stomp,
+# one HX Stomp at -15.1 dBFS (TheGearForum, "Calibrating Input Level for
+# Plugins", p.13, 2023), over USB/S/PDIF, not at the converter: a guess within
+# some 3 dB until it is measured on the unit. The kernel gives a model whose
+# file says its capture's input_level_dbu an input trim of STOMP_DBU - that.
+STOMP_DBU = 11.5
 FADE_TAB = 0x327480               # DDR2: the crossfade's gains, sin(pi/2 k/16), k = 0 .. 16, then 1.0
 HIST = 0x327500                   # DDR2: the last 512 outputs (the crossfade's tail plays them back)
 HIST_N = 512
@@ -132,9 +140,29 @@ def placeholder():
     return [ssim.b2f(nam_pack.f2b(rnd.uniform(-0.3, 0.3))) for _ in range(n)]
 
 
-def ir_samples(w):
+def level_word(dbu):
+    """IR word 5: 10^(-dbu/20) for a capture made at `dbu` (its interface's dBu at
+    0 dBFS), which the kernel multiplies by STOMP_GAIN for the input trim; 0 (no
+    trim) for None. A level the word cannot hold (HX Edit's +-15.8) is refused."""
+    if dbu is None:
+        return 0.0
+    g = ssim.b2f(nam_pack.f2b(10.0 ** (-dbu / 20.0)))
+    if not 0 < g < IR_LIMIT:
+        raise ValueError(f"input_level_dbu {dbu:g}: out of range (above -24 dBu)")
+    return g
+
+
+def input_trim(dbu):
+    """The kernel's N_TRIM for a model made at `dbu` (None: none), float32 as it
+    computes it."""
+    f = lambda x: ssim.b2f(ssim.f2b(x))
+    g = f(level_word(dbu) * f(10.0 ** (STOMP_DBU / 20)))
+    return g if g > 0 else 1.0
+
+
+def ir_samples(w, dbu=None):
     """The 2,048 float samples of a NAM Lite model as a User IR (tools/nam2ir.py):
-    a header, then the stream divided by 2^e (exact) so that every sample is
+    a header (word 5 the capture's input level, level_word(dbu)), then the stream divided by 2^e (exact) so that every sample is
     within HX Edit's +-15.8 limit (the header too: the word count is stored
     / 1024; 1871.0 itself was refused, -8317); the rest 0 (sample 2047 = 0:
     no tail fade)."""
@@ -143,7 +171,7 @@ def ir_samples(w):
     e = 0
     while peak / 2.0 ** e > 15.5:
         e += 1
-    head = [0.5, -0.5, float(C), 2.0 ** e, N_WEIGHTS / 1024.0, 0.0, 0.0, 0.0]
+    head = [0.5, -0.5, float(C), 2.0 ** e, N_WEIGHTS / 1024.0, level_word(dbu), 0.0, 0.0]
     out = head + [x / 2.0 ** e for x in st]
     assert len(out) < IR_SAMPLES
     assert max(abs(x) for x in out) < IR_LIMIT, "a sample HX Edit would refuse"
@@ -181,7 +209,7 @@ def eq_table():
     return out
 
 
-def model_words(w, n_code, layers=None):
+def model_words(w, n_code, layers=None, dbu=None):
     """{address: word} for the model data, the memory to clear, and a summary."""
     blocks, head, rech, scale = layer_weights(w)
     n = len(nam_pack.KERNEL)
@@ -266,11 +294,11 @@ def model_words(w, n_code, layers=None):
                                                                              BUILTIN_TOP, LISTS]
     assert MODEL + len(header) <= table
     assert BUILTIN_TOP - IR_SAMPLES >= far_a
-    for k, v in enumerate(ir_samples(w)):          # the built-in model, top-down as in an IR slot
+    for k, v in enumerate(ir_samples(w, dbu)):     # the built-in model, top-down as in an IR slot
         mem[BUILTIN_TOP - k] = v
     put(EQ_TAB, eq_table())
     assert EQ_TAB > BUILTIN_TOP and EQ_TAB + 4 * 101 * 5 <= LISTS
-    put(EQ_IDX, [0xFFFFFFFF] * 4)                  # no step yet: the first call loads them
+    put(EQ_IDX, [0x80000000] * 4)                  # no step yet: the first call loads them
     put(EQ_C, [nam_pack.f2b(x) for x in [1.0, 0.0, 0.0, 0.0, 0.0] * 4])   # flat until then
     put(EQ_S, [0] * 8)                             # the tone stack's state: 0 at boot, never cleared
     put(FADE_TAB, fade_table())
@@ -278,6 +306,8 @@ def model_words(w, n_code, layers=None):
     assert DRIVE_TAB + 101 <= FADE_TAB and FADE_TAB + 18 <= HIST and HIST + HIST_N <= DDR2_END
     assert LISTS + len(clr_list) + len(load_map) <= DRIVE_TAB
     put(DRIVE_TAB, [nam_pack.f2b(10.0 ** ((step - 50) * 0.4 / 20)) for step in range(101)])   # 0.4 dB a step
+    assert DRIVE_TAB + 101 <= STOMP_GAIN < FADE_TAB
+    put(STOMP_GAIN, [nam_pack.f2b(10.0 ** (STOMP_DBU / 20))])
     put(MODEL, header)
     put(table, tab)
     used = {"block 2 to": b2, "block 3 to": a, "DDR2 to": far_a, "layers in DDR2": far}
@@ -312,14 +342,14 @@ n_m0: PM(I11, M9) = F0;
 '''
 
 
-def build(w, layers=None, meter=False):
+def build(w, layers=None, meter=False, dbu=None):
     src = open(os.path.join(here, "nam_lite_kernel.asm")).read()
     if meter:
         src = src.replace("    // METER (nam_lite.py --meter puts code here)\n", METER)
         src = src.replace("    // METER ENTRY (nam_lite.py --meter puts code here)\n", METER_ENTRY)
     secs, _ = sasm.assemble(src, "nam_lite_kernel.asm")
     n_code = sum(len(s.words) for s in secs if s.kind == "pm")
-    mem, used = model_words(w, n_code, layers)
+    mem, used = model_words(w, n_code, layers, dbu)
     lines = ["", "// ---- model data, written by tools/sharc/nam_lite.py ----"]
     last = None
     for a in sorted(mem):
@@ -436,8 +466,9 @@ class KernelCheck:
              "bit_exact", "cycle_budget", "second_takes_over", "slot_model_crossfades", "cab_ir_is_silent",
              "model_0_is_builtin")
 
-    def __init__(self, asm, w, nblk=6):
+    def __init__(self, asm, w, nblk=6, dbu=None):
         self.w, self.nblk, self.n = w, nblk, 16 * nblk
+        self.g0 = input_trim(dbu)                      # the built-in model's input trim
         self.sig = [0.3 * math.sin(0.031 * i) * math.exp(-i / 300) + 0.1 * math.sin(0.41 * i) + (0.5 if i == 7 else 0)
                     for i in range(self.n)]
         secs, self.syms = sasm.assemble(asm, "nam_lite.asm")
@@ -462,6 +493,10 @@ class KernelCheck:
         self.zero = [0] * 16
         self.pipe = Pipe()
         self.got, self.want = [], []
+
+    def trimmed(self, sig):
+        """What the built-in model sees of `sig` at Drive 5.0: x its trim, in float32."""
+        return [ssim.b2f(ssim.f2b(ssim.b2f(ssim.f2b(x)) * self.g0)) for x in sig]
 
     def run(self):
         for name in self.STEPS:
@@ -524,7 +559,7 @@ class KernelCheck:
 
     def plays_while_second_passes_through(self):
         """A plays the built-in model; B, called after A every block, passes its input through untouched."""
-        ref = reference(self.w, self.sig)
+        ref = reference(self.w, self.trimmed(self.sig))
         for b in range(self.nblk):
             self.want += self.pipe.block(ref[16 * b: 16 * b + 16])
             self.got += self.call(self.PA, self.blocks[b], f"A block {b}")
@@ -549,18 +584,19 @@ class KernelCheck:
         """A removed: B's next call finds the tick where it left it and takes over,
         from the silence state, fading in, with no tail."""
         self.pipe.gain = self.pipe.mg = 0
-        self.ref4 = reference(self.w, self.sig[:64])
+        self.ref4 = reference(self.w, self.trimmed(self.sig[:64]))
         for b in range(min(self.nblk, 4)):
             self.expect(self.PB, self.blocks[b], f"B owner block {b}", self.ref4[16 * b: 16 * b + 16])
 
     def slot_model_crossfades(self):
-        """Another model in User IR slot 3 (Model 3, an integer): at once a crossfade, the
-        loading block with the tail alone, then nam_a2.asm's output for that model from
-        its silence state fading in as the tail fades out."""
+        """Another model in User IR slot 3 (Model 3, an integer), whose capture was
+        made at 15 dBu: at once a crossfade, the loading block with the tail alone,
+        then nam_a2.asm's output for that model on the input x its trim
+        (STOMP_DBU - 15 dB), from its silence state fading in as the tail fades out."""
         sim = self.sim
         w2 = [x * (1 + 0.05 * math.sin(i)) for i, x in enumerate(self.w)]
         top = 0x2ABDED + 2 * 0x800
-        for k, v in enumerate(ir_samples(w2)):
+        for k, v in enumerate(ir_samples(w2, dbu=15.0)):
             sim.wr(top - k, v)
         sim.wr(0x2AB56E + 2, 1)
         sim.wr(self.PB + 7, 3)
@@ -569,7 +605,8 @@ class KernelCheck:
             raise CheckFailed("no tail while the slot-3 model loads")
         # (past the test signal's end the input is 0: nam_a2.asm sees the same)
         sig2 = [ssim.f2b(x) for x in self.sig[:16 * 20]] + [0] * max(0, 16 * 20 - len(self.sig))
-        ref2 = reference(w2, [ssim.b2f(v) for v in sig2])
+        g = input_trim(15.0)
+        ref2 = reference(w2, [ssim.b2f(ssim.f2b(ssim.b2f(v) * g)) for v in sig2])
         for b in range(20):
             self.expect(self.PB, sig2[16 * b: 16 * b + 16], f"B slot-3 block {b}", ref2[16 * b: 16 * b + 16])
 
@@ -587,7 +624,8 @@ class KernelCheck:
             self.expect(self.PB, self.blocks[k % self.nblk], f"B to a cab IR, {k}", None)
 
     def model_0_is_builtin(self):
-        """Model 0 (a model without the parameter): the built-in model again, crossfaded."""
+        """Model 0 (a model without the parameter): the built-in model again, crossfaded,
+        and without the slot-3 model's trim (the built-in one has no level)."""
         self.sim.wr(self.PB + 7, 0)
         self.pipe.cut()
         self.expect(self.PB, self.zero, "B back to built-in (load)", None)
@@ -595,8 +633,8 @@ class KernelCheck:
             self.expect(self.PB, self.blocks[b], f"B built-in block {b}", self.ref4[16 * b: 16 * b + 16])
 
 
-def check(asm, w, nblk):
-    k = KernelCheck(asm, w, nblk)
+def check(asm, w, nblk, dbu=None):
+    k = KernelCheck(asm, w, nblk, dbu)
     try:
         k.run()
     except CheckFailed as e:
@@ -617,10 +655,11 @@ def main():
         w, c = nam_pack.load(args[0], channels=C)
         if c != C:
             sys.exit(f"{args[0]}: {c} channels, NAM Lite has {C}")
+        dbu = nam_pack.input_level_dbu(args[0])
     else:
-        w = placeholder()
+        w, dbu = placeholder(), None
     layers = int(sys.argv[sys.argv.index("--layers") + 1]) if "--layers" in sys.argv else None
-    asm, used = build(w, layers, "--meter" in sys.argv)
+    asm, used = build(w, layers, "--meter" in sys.argv, dbu)
     out = sys.argv[sys.argv.index("-o") + 1] if "-o" in sys.argv else None
     if out:
         open(out, "w").write(asm)
@@ -628,7 +667,7 @@ def main():
     if "--check" in sys.argv and not layers and "--meter" not in sys.argv:
         i = sys.argv.index("--check")
         nblk = int(sys.argv[i + 1]) if i + 1 < len(sys.argv) and sys.argv[i + 1].isdigit() else 6
-        if not check(asm, w, nblk):
+        if not check(asm, w, nblk, dbu):
             sys.exit("MISMATCH")
         print("NAM LITE MATCHES nam_a2.asm")
 

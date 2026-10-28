@@ -109,7 +109,7 @@ The XL's firmware 3.80.0 is the Stomp's with another build of the main applicati
    ```
    The web page converts several files at once. It runs entirely in your browser, uploads nothing, and writes the same bytes as `nam2ir.py`.
 
-   **Input level.** If the capture records its interface's level (`input_level_dbu` in the `.nam` metadata), the converter adds an input trim so that the Stomp's input drives the model the way the capture's interface did. The trim is `11.5 − input_level_dbu` dB, built into the weights, so it costs no DSP. 11.5 dBu is the Stomp's input at 0 dBFS as users have measured it (one unit read 15.1). Use `--stomp-dbu` to set your own figure, or `--no-trim` to leave the weights unchanged. The web page shows the trim as an "input … dB" chip. A capture without that metadata is converted as before.
+   **Input level.** If the capture records its interface's level (`input_level_dbu` in the `.nam` metadata), the converter stores it in the `.wav`, and the web page shows it as a "captured at … dBu" chip. The amp then trims its input by `11.5 − input_level_dbu` dB, so that at Drive 5.0 the Stomp's input drives the model the way the capture's interface did. 11.5 dBu is the Stomp's input at 0 dBFS as users have measured it (one unit read 15.1). It is a constant in the firmware (`STOMP_DBU` in `tools/sharc/nam_lite.py`), so a better figure needs only a firmware rebuild, not new `.wav` files. `--no-level` leaves the level out. Captures without the level, and `.wav` files from older converters, play untrimmed.
 2. In HX Edit, import the `.wav` into a User IR slot, for example slot 5.
 3. On the Stomp, add **Amp → NAM → NAM A2 Lite** and set **Model** to 5.
 
