@@ -61,6 +61,20 @@ def test_same_bytes_trimmed(tmp_path, nam_file, weights, dbu):
     assert (tmp_path / "plain.wav").read_bytes() != (tmp_path / "py.wav").read_bytes()
 
 
+@pytest.mark.parametrize("metadata", [None, {}, {"input_level_dbu": None}, {"input_level_dbu": "15"},
+                                      {"input_level_dbu": True}], ids=["none", "empty", "null", "string", "bool"])
+def test_no_level_no_trim(tmp_path, nam_file, metadata):
+    # no usable input_level_dbu: both leave the weights as they are
+    src = nam_file(metadata=metadata)
+    r = py_convert(src, tmp_path / "py.wav")
+    assert r.returncode == 0, r.stderr
+    assert "input trim none" in r.stdout
+    assert js_convert(src, tmp_path / "js.wav") == {"ok": True}
+    plain = nam_file(name="plain.nam")
+    assert py_convert(plain, tmp_path / "plain.wav").returncode == 0
+    assert (tmp_path / "js.wav").read_bytes() == (tmp_path / "py.wav").read_bytes() == (tmp_path / "plain.wav").read_bytes()
+
+
 @pytest.mark.parametrize("layer", [
     {"dilations": [1] * 23},
     {"kernel_sizes": [3] * 23},

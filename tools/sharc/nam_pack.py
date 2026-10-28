@@ -9,6 +9,7 @@ kernel reads them, then the zeroed rings; tools/sharc/nam_lite.py uses its
 loader and layer order.
 """
 import json
+import math
 import re
 import struct
 import sys
@@ -53,7 +54,8 @@ def input_trim_db(path, stomp_dbu=STOMP_DBU):
     if not path.endswith(".nam"):
         return None
     dbu = (json.load(open(path)).get("metadata") or {}).get("input_level_dbu")
-    return None if dbu is None else stomp_dbu - float(dbu)
+    ok = isinstance(dbu, (int, float)) and not isinstance(dbu, bool) and math.isfinite(dbu)
+    return stomp_dbu - dbu if ok else None           # only a number, as web/nam2ir-core.js
 
 
 def trim(w, c, db):
