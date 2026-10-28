@@ -42,7 +42,7 @@ What is here is our own work:
 
 ## Requirements
 
-- An **HX Stomp**, or an **HX Stomp XL** (see [HX Stomp XL](#hx-stomp-xl): run from RAM on an XL, not installed on one yet). Not the Helix Floor, LT or Rack: their firmware is a different design.
+- An **HX Stomp**, or an **HX Stomp XL** (see [HX Stomp XL](#hx-stomp-xl): the current build has not run on an XL yet; an earlier one-block build ran from RAM). Not the Helix Floor, LT or Rack: their firmware is a different design.
 - Line 6's firmware 3.80.0 for your unit. The build checks the MD5 and refuses any other file:
   - HX Stomp: `HX_Stomp_v3.80.0_0x103966115.hxf`, MD5 `a2cd8f4ae56f49415380270ebc484bf1`
   - HX Stomp XL: `HX_Stomp_XL_v3.80.0_0x103966115.hxf`, MD5 `329e3a26d60d3de1988b6785fa833ee1`
