@@ -39,7 +39,8 @@
 //   does the same. Nothing waits without a bound.
 //
 // Knobs as nam-a2-lite: Drive DM(5), Ch Vol DM(6), Model DM(7) (0 the built-in
-// model, 1..128 a User IR slot), Bass..Presence DM(8..11).
+// model, 1..128 a User IR slot), Bass..Presence DM(8..11); and Polarity
+// DM(P_PHASE) (a bool: not 0 inverts the output, by negating Ch Vol's gain).
 // Drive is x the slot's S_TRIM, set on each load from the model's IR word 5
 // (10^(-input_level_dbu/20); 0 none, as the built-in model and older .wav files)
 // x STOMP_GAIN (10^(STOMP_DBU/20), nam_lite.py): as nam-a2-lite's N_TRIM.
@@ -274,6 +275,9 @@ m_ready:
     F0 = F0 * F0;
     F1 = 4.0;
     F0 = F0 * F1;
+    R1 = DM(P_PHASE, I0);               // Polarity: Inverted negates the level, so the
+    R1 = PASS R1;                       // head's output and all that follows it (the
+    IF NE F0 = -F0;                     // crossfade and the tone stack are linear)
     DM(G_LEVEL) = F0;                   // output level, 4 k^2
 
     // ---- the model (as nam-a2-lite): 0 the built-in one, 1..128 a User IR slot

@@ -12,8 +12,8 @@ Commands:
 
   add-model <in> <out> --name HD2_AmpNAMLite --display-name "NAM A2 Lite" [--folder NAM]
       Add the NAM host amp: a copy of HD2_AmpLine6Clarity's composite whose amp
-      stage is primitive 0x9c75, with its own seven parameters (Model, Drive,
-      Bass, Mid, Treble, Presence, Ch Vol), listed in the amp browser (Entry 0),
+      stage is primitive 0x9c75, with its own eight parameters (Model, Drive,
+      Bass, Mid, Treble, Presence, Ch Vol, Polarity), listed in the amp browser (Entry 0),
       the model table (Entry 3) and the DSP graph library (Entry 4); the SHARC's
       graph buffer is enlarged to fit (Entry 2).
 
@@ -1025,16 +1025,18 @@ def clone_composite_in_blob0(b0, src_comp_id):
 # browser; all three must change together.
 NAM_HOST_COMPOSITE = 0x6001a9   # Line 6 Clarity & co.: in port, the amp (one sub-composite), out port
 # (slot, source model, source parameter, pid, displayName or None, default or None):
-# 0x611ddd puts pid 5..11 in DM(5..11, I0). Model, the first knob, is the IR block's
+# 0x611ddd puts pid p (5..144) in DM(p, I0). Model, the first knob, is the IR block's
 # IR Select (an integer 1..128; on an amp the unit shows the number, not the IR's
-# name); Bass..Presence are a tone stack, flat at 0.5; Drive 0 dB and Ch Vol +12 dB at 0.5.
+# name); Bass..Presence are a tone stack, flat at 0.5; Drive 0 dB and Ch Vol +12 dB at 0.5;
+# Polarity (a switch, Normal by default) at pid 15: DM(12..14) are the kernel's.
 NAM_PARAMS = ((1, 'HD2_ImpulseResponse2048Mono', 'Index', 7, 'Model', None),
               (2, 'HD2_AmpLine6Clarity', 'Drive', 5, None, 0.5),
               (3, 'HD2_AmpLine6Clarity', 'Bass', 8, None, 0.5),
               (4, 'HD2_AmpLine6Clarity', 'Mid', 9, None, 0.5),
               (5, 'HD2_AmpLine6Clarity', 'Treble', 10, None, 0.5),
               (6, 'HD2_AmpLine6Clarity', 'Presence', 11, None, 0.5),
-              (7, 'HD2_AmpLine6Clarity', 'ChVol', 6, None, 0.5))
+              (7, 'HD2_AmpLine6Clarity', 'ChVol', 6, None, 0.5),
+              (8, 'HD2_PreampVintagePre', 'Polarity', 15, None, None))   # Normal / Inverted (nam_multi's P_PHASE)
 NAM_INPUT_OP = {3: 0x0a, 2: 0x0b, 1: 0x0d}   # parameter type (float, int, bool) -> pmap input node op
 
 

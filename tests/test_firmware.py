@@ -14,11 +14,11 @@ ROOT = Path(__file__).resolve().parent.parent
 pytestmark = pytest.mark.firmware
 
 # The HX Stomp's is hx-stomp-kit's `kit.py build ... nam-a2-lite --ir-title` byte for byte. Its
-# kernel, graph and model list are those of the image (then preset ID 148, "NAM Lite Multi")
-# that ran on an HX Stomp from RAM: two blocks, two captures, the IR names in the titles.
+# kernel is that of the image (then preset ID 148, "NAM Lite Multi") that ran on an HX Stomp
+# from RAM (two blocks, two captures, the IR names in the titles), plus the Polarity knob.
 BUILT_MD5 = {
-    "HX_STOMP_HXF": "87709d151b4163ee20917df19776ef24",
-    "HX_STOMP_XL_HXF": "d47a79aa3e0299729fa04ffe356f520d",     # no IR-name title; not run on an XL
+    "HX_STOMP_HXF": "a54ace94a6a8f1ded17513cf7d0019fd",
+    "HX_STOMP_XL_HXF": "e109ba3062277e62e2f53112abed2d77",     # no IR-name title; not run on an XL
 }
 
 

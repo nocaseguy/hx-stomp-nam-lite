@@ -14,15 +14,16 @@ Watch it on YouTube: https://www.youtube.com/watch?v=zQzj0qahJ6E
 
 ## What's new
 
+- **A Polarity knob** (Normal / Inverted), added after the other seven so older presets keep their settings.
 - **Several NAM blocks, each with its own capture.** NAM A2 Lite now runs as up to three blocks at once, each playing the capture in its own User IR slot (the HX Stomp allows two amp blocks in a preset, so two in practice). The earlier build ran one NAM block per unit.
 - **Input level trim.** A capture that records its interface's input level plays at the level it was captured at (see [Use](#use)).
 - **The capture's name in the block title** (HX Stomp only). The edit screen shows the name of the User IR the Model knob selects, as it does for an IR block.
 
-It is the same amp as before: **NAM A2 Lite**, preset ID 147, the same seven knobs in the same order, so presets saved with an earlier build open with this one.
+It is the same amp as before: **NAM A2 Lite**, preset ID 147, the same first seven knobs in the same order (Polarity is the eighth), so presets saved with an earlier build open with this one.
 
 ## What you get
 
-- **NAM A2 Lite**, a new amp in the menu under **Amp → NAM**, with seven knobs:
+- **NAM A2 Lite**, a new amp in the menu under **Amp → NAM**, with eight knobs:
 
   | Knob | What it does |
   |---|---|
@@ -30,6 +31,7 @@ It is the same amp as before: **NAM A2 Lite**, preset ID 147, the same seven kno
   | **Drive** | Input gain into the capture, −20 to +20 dB; 0 dB (the capture's own level) at 5.0 |
   | **Bass / Mid / Treble / Presence** | A tone stack after the model, ±12 dB, flat at 5.0 (100 Hz shelf, 650 Hz peak, 2.5 kHz and 5.5 kHz shelves) |
   | **Ch Vol** | Output level; 0 dB at 5.0, +12 dB at 10 |
+  | **Polarity** | Normal or Inverted. Inverted flips the output's polarity (phase), exactly. |
 
 - **A converter** (on the [setup page](https://nocaseguy.github.io/hx-stomp-nam-lite/web/), or `tools/nam2ir.py`) turns a `.nam` file into a `.wav`. HX Edit imports that `.wav` as a User IR. The "IR" is not a sound: it carries the capture's 1,871 weights, and the amp loads them from the slot.
 
@@ -78,14 +80,14 @@ This writes `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (from the XL's file, `build
 1. Assembles the kernel and runs it in the SHARC simulator. Each block's output must match a reference NAM A2 implementation (`src/sharc/nam_a2.asm`) bit for bit, on its own capture and input trim; the check also covers the tone stack, the crossfades, model changes, a fourth block, and the DMA that fetches the long rings and its failure path. Add `--no-check` to skip this step.
 2. Adds the amp, with the steps below:
    - copies the Line 6 Clarity amp's DSP graph and replaces its amp stage with the NAM kernel;
-   - gives the copy its own seven parameters, and each block its own DDR2 block;
+   - gives the copy its own eight parameters, and each block its own DDR2 block;
    - lists it in a new **NAM** folder under Amp;
    - enlarges the DSP's graph buffer to fit the extra graph.
 3. HX Stomp only: makes the block's title show the selected IR's name (`patch_amp.py ir-title`). The patch knows the HX Stomp's application only and refuses the XL's, so the XL build is made without it.
 4. Adds the kernel to the DSP's boot code and hooks it to an unused DSP primitive.
 5. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
-The HX Stomp result has MD5 `87709d151b4163ee20917df19776ef24` (pinned in `tests/test_firmware.py`), byte for byte what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`. Its DSP program and graph are those of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names (that test image named the amp "NAM Lite Multi", preset ID 148; only the name and ID differ).
+The HX Stomp result has MD5 `a54ace94a6a8f1ded17513cf7d0019fd` (pinned in `tests/test_firmware.py`), byte for byte what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`. Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
 
 Only 4 of the 15 parts of the firmware change: the main application (its model tables, and on the HX Stomp the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 

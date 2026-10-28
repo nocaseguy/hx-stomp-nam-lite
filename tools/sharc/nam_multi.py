@@ -80,7 +80,7 @@ REPW = dict(R_MAGIC=0, R_CALLS=1, R_TIMEOUTS=2, R_SKIPS=3, R_LOADS=4, R_CLAIMS=5
 T = dict(T_RB=0, T_STRIDE=1, T_L=2, T_LW=3, T_K=4, T_S=5, T_WT=6, T_KD=7, T_FAR=8, T_RPOS=9, T_KS=10,
          T_D=11, T_SB=12, T_OB=13, T_WA=14, T_SIL=15, T_NW=16)
 J = dict(J_TYPE=0, J_READY=1, J_ROW=2, J_CHAIN=3, J_FLAG=4, J_CP=5, J_N=6)
-P = dict(P_SLOT=12, P_SEEN=13, P_MET=14)
+P = dict(P_SLOT=12, P_SEEN=13, P_MET=14, P_PHASE=15)   # P_PHASE: the Polarity knob (patch_amp pid 15)
 FAR_D = {2: 41, 3: 17}            # with 3 slots the d = 17 rings go to SDRAM too, to fit
 
 
@@ -592,9 +592,13 @@ class Inst:
             sim.dm[sdram + k] = rnd.getrandbits(32)
         self.pipe = Pipe()
         self.knobs(drive=0.5, vol=0.5, model=0, eq=nam_lite.EQ_TEST)
+        self.polarity = 0
 
-    def knobs(self, drive=None, vol=None, model=None, eq=None):
+    def knobs(self, drive=None, vol=None, model=None, eq=None, polarity=None):
         sim = self.rig.sim
+        if polarity is not None:            # the raw word: 0/1, or a float's bits
+            self.polarity = polarity
+            sim.wr(self.i0 + P["P_PHASE"], polarity)
         if drive is not None:
             self.drive = drive
             sim.wr(self.i0 + 5, ssim.f2b(drive))
@@ -736,6 +740,8 @@ class Player:
     def next(self):
         out = self.words[16 * self.b: 16 * self.b + 16]
         self.b += 1
+        if self.inst.polarity:              # Inverted: x -level, exactly the sign flipped
+            out = [v ^ 0x80000000 for v in out]
         return out
 
 
@@ -743,7 +749,7 @@ class KernelCheck:
     """The steps, in order; each carries on from the state the ones before left."""
 
     STEPS = ("silence_fixed_point", "two_models_load", "two_models_play", "model_change_crossfades",
-             "cab_ir_is_silent", "back_to_builtin", "third_and_fourth", "takeover", "recreated",
+             "polarity_inverts", "cab_ir_is_silent", "back_to_builtin", "third_and_fourth", "takeover", "recreated",
              "dma_timeout", "busy_channel", "cycle_budget")
 
     def __init__(self, asm, lay, w, nblk=8, **dma):
@@ -818,7 +824,7 @@ class KernelCheck:
         self.A = r.inst("A", 0)
         self.B = r.inst("B", 1)
         self.B.knobs(drive=0.62, vol=0.7, model=3, eq=(0.3, 0.7, 0.45, 0.9))
-        self.start(self.A, self.w, self.sig("A", 64), "A")
+        self.start(self.A, self.w, self.sig("A", 80), "A")
         self.start(self.B, self.w2, self.sig("B", 12), "B")
         rep = r.rep()
         if rep[REPW["R_CLAIMS"]] != 2 or rep[REPW["R_LOADS"]] != 2:
@@ -843,10 +849,20 @@ class KernelCheck:
         tail alone, then the new model from its silence state, on its input x its own
         trim, fades in as the tail fades out. A plays on, untrimmed."""
         self.B.knobs(model=7)
-        self.start(self.B, self.w3, self.sig("B7", 24), "B to slot 7")
+        self.start(self.B, self.w3, self.sig("B7", 36), "B to slot 7")
         for b in range(20):
             self.play(self.A, "A")
             self.play(self.B, "B slot 7")
+
+    def polarity_inverts(self):
+        """B's Polarity to Inverted (1, then a float 1.0's bits), then back to Normal:
+        from the next block on its output is the reference with the sign flipped, through
+        the tone stack; A, Normal, plays on unchanged."""
+        for pol, n in ((1, 4), (ssim.f2b(1.0), 3), (0, 4)):
+            self.B.knobs(polarity=pol)
+            for b in range(n):
+                self.play(self.A, "A")
+                self.play(self.B, f"B polarity {pol:#x}")
 
     def cab_ir_is_silent(self):
         """B to slot 5, an ordinary cab IR (Model 5.0 as a float): the tail fades out to silence."""
