@@ -99,7 +99,7 @@ Presets and IRs you change during the run are lost at power-off. [RAM_RUN.md](RA
 
 The XL's firmware 3.80.0 is the Stomp's with another build of the main application: the DSP program, the model list and the DSP graph library, the three parts the patch changes besides the application, are byte for byte the same. `tools/patch_amp.py` holds the XL's own addresses for the application's model tables, and checks each one against the table it points to. The XL image passes the same checks as the Stomp's, and every byte it changes in the application corresponds to one the Stomp build changes.
 
-**It has run on an XL from RAM** (see [RAM_RUN.md](RAM_RUN.md)), but has not been installed on one. If you install it on an XL, have the stock XL file ready for recovery. The XL has the same Page Right button, so holding it while powering on should give update mode as on the Stomp, but that has not been tried on an XL either.
+**The one-block build has run on an XL from RAM** (see [RAM_RUN.md](RAM_RUN.md)); the current multi-block build has not run on an XL yet, and neither has been installed on one. Its kernel, graph and model-list bytes are exactly those of the HX Stomp build that runs two captures on an HX Stomp; it differs from the earlier XL build only in that DSP side and the declared DSP cost. If you install it on an XL, have the stock XL file ready for recovery. The XL has the same Page Right button, so holding it while powering on should give update mode as on the Stomp, but that has not been tried on an XL either.
 
 ## Use
 
@@ -120,10 +120,9 @@ Notes:
 
 ## Limits
 
-- **HX Stomp: several NAM A2 Lite blocks, each with its own capture.** The kernel (`tools/sharc/nam_multi.py`) has 3 model slots; a fourth block would pass its input through. The Stomp itself allows 2 amp blocks in a preset, so in practice that means 2. Run on an HX Stomp with two blocks playing two captures.
+- **Several NAM A2 Lite blocks, each with its own capture.** The kernel (`tools/sharc/nam_multi.py`) has 3 model slots; a fourth block would pass its input through. The HX Stomp itself allows 2 amp blocks in a preset, so in practice that means 2. Run on an HX Stomp with two blocks playing two captures; the XL build has the same DSP-side bytes but has not run on an XL with this kernel.
   - Each block uses about **29% of the DSP** on the unit (two blocks about 77% with the rest of the preset). The amp declares a DSP cost of 2700.
   - Each block takes its own 0x5000-word block of DDR2 for its long rings; the Amp blocks' DDR2 allowance is raised to fit.
-- **HX Stomp XL: one NAM A2 Lite at a time** (`tools/sharc/nam_lite.py`; the multi kernel has not been checked against the XL's firmware). A second instance passes its input through unchanged. If you delete the first, the second takes over. In the simulator it uses about 23% of the DSP (34,182 of 150,000 cycles); DSP cost 3600.
 - Only the 3-channel A2 Lite architecture fits; standard and A2 Full captures don't.
 - Names on the Stomp hold 16 characters at most.
 
@@ -173,9 +172,9 @@ tools/patch_amp.py            inspect / add-model / patch
 tools/hxf.py, l6ia.py         .hxf container and L6IA archive
 tools/l6ia_verify.py          checks every checksum in an archive
 tools/hxf_ram.py              runs a build from RAM (RAM_RUN.md); tools/ramboot/ holds the built loader and hook
-tools/sharc/nam_lite.py       kernel + data, and its simulator check (one block; the XL build)
+tools/sharc/nam_lite.py       the one-block kernel + data and its simulator check (model format, converter, reference)
 tools/sharc/nam_lite_kernel.asm
-tools/sharc/nam_multi.py      the multi-block kernel's layout, data and simulator check (the HX Stomp build)
+tools/sharc/nam_multi.py      the multi-block kernel's layout, data and simulator check (the build's kernel)
 tools/sharc/nam_multi_kernel.asm
 tools/sharc/nam_pack.py       .nam loader, layer order
 tools/sharc/entry4_blob.py    DSP graph library parser

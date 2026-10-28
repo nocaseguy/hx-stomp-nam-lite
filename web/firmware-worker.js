@@ -25,14 +25,14 @@ var STOCK_MD5 = {
 };
 var BUILT_MD5 = {
   "HX_Stomp": "faa1b8107d9c217f6a6a5033a7dc3e7f",
-  "HX_Stomp_XL": "9de45083fd8adbc81218e1f93ce4805a",
+  "HX_Stomp_XL": "d47a79aa3e0299729fa04ffe356f520d",
 };
 
 // build.py's KERNEL: the kernel and add-model's host options per unit
 // (tests/test_web_build.py keeps them equal).
 var KERNEL = {
   "HX_Stomp": ["tools/sharc/nam_multi.py", ["--dsp-cost", "2700", "--sdram-words", "0x5000"]],
-  "HX_Stomp_XL": ["tools/sharc/nam_lite.py", ["--dsp-cost", "3600"]],
+  "HX_Stomp_XL": ["tools/sharc/nam_multi.py", ["--dsp-cost", "2700", "--sdram-words", "0x5000"]],
 };
 
 // What build.py needs, relative to the repository root.

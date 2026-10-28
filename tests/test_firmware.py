@@ -15,7 +15,7 @@ pytestmark = pytest.mark.firmware
 
 BUILT_MD5 = {
     "HX_STOMP_HXF": "faa1b8107d9c217f6a6a5033a7dc3e7f",
-    "HX_STOMP_XL_HXF": "9de45083fd8adbc81218e1f93ce4805a",
+    "HX_STOMP_XL_HXF": "d47a79aa3e0299729fa04ffe356f520d",
 }
 
 
