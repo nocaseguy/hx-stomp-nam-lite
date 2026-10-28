@@ -263,6 +263,8 @@ class Sim:
     def pre(self, i, step, scale=None):
         if scale is None:
             scale = 4 if self.byte_mode else 1
+        if self.strict_cbufen:              # the chip wraps post-modify accesses only
+            return (self.u[0x10 + i] + s32(step) * scale) & M32
         return self._wrap(i, self.u[0x10 + i] + s32(step) * scale)
 
     # ---------------------------------------------------------- SIMD

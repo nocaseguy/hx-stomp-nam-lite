@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 pytestmark = pytest.mark.firmware
 
 BUILT_MD5 = {
-    "HX_STOMP_HXF": "52457ec05e2cf46afeb315282c34342d",
+    "HX_STOMP_HXF": "faa1b8107d9c217f6a6a5033a7dc3e7f",
     "HX_STOMP_XL_HXF": "9de45083fd8adbc81218e1f93ce4805a",
 }
 

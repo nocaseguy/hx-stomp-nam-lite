@@ -120,8 +120,10 @@ Notes:
 
 ## Limits
 
-- **One NAM A2 Lite at a time.** A second instance passes its input through unchanged. If you delete the first, the second takes over.
-- Measured in the simulator, the kernel uses about **23% of the DSP** per audio block (34,182 of 150,000 cycles). The amp declares a DSP cost of 3600, like the heaviest stock amps, so the Stomp greys out other heavy blocks next to it.
+- **HX Stomp: several NAM A2 Lite blocks, each with its own capture.** The kernel (`tools/sharc/nam_multi.py`) has 3 model slots; a fourth block would pass its input through. The Stomp itself allows 2 amp blocks in a preset, so in practice that means 2. Run on an HX Stomp with two blocks playing two captures.
+  - Each block uses about **29% of the DSP** on the unit (two blocks about 77% with the rest of the preset). The amp declares a DSP cost of 2700.
+  - Each block takes its own 0x5000-word block of DDR2 for its long rings; the Amp blocks' DDR2 allowance is raised to fit.
+- **HX Stomp XL: one NAM A2 Lite at a time** (`tools/sharc/nam_lite.py`; the multi kernel has not been checked against the XL's firmware). A second instance passes its input through unchanged. If you delete the first, the second takes over. In the simulator it uses about 23% of the DSP (34,182 of 150,000 cycles); DSP cost 3600.
 - Only the 3-channel A2 Lite architecture fits; standard and A2 Full captures don't.
 - Names on the Stomp hold 16 characters at most.
 
@@ -136,10 +138,9 @@ This has been done on a real unit after a modified firmware hung at the splash, 
 
 ## How it works
 
-- **The DSP.** The HX Stomp's audio runs on an Analog Devices SHARC ADSP-21469. The kernel (`tools/sharc/nam_lite_kernel.asm`) is hand-written SHARC assembly:
-  - the WaveNet layers run two samples at a time in SIMD;
-  - the long-dilation rings sit in external DDR2;
-  - the result is bit-exact with the reference.
+- **The DSP.** The HX Stomp's audio runs on an Analog Devices SHARC ADSP-21469. The kernels are hand-written SHARC assembly, bit-exact with the reference:
+  - `tools/sharc/nam_lite_kernel.asm` (one block): the WaveNet layers run two samples at a time in SIMD; the long-dilation rings sit in external DDR2.
+  - `tools/sharc/nam_multi_kernel.asm` (several blocks): the free internal memory is split into 3 slots, one model each; the long rings live in each block's own DDR2 block, and their taps are copied in by chained external-port DMA while the previous layer computes.
 - **No vendor toolchain.** `tools/sharc/sasm.py` assembles the code and `tools/sharc/ssim.py` simulates it.
 - **Captures through the IR slots.** The Stomp already stores up to 128 User IRs of 2,048 samples and hands them to the DSP unchanged.
   - `nam2ir.py` packs a capture's weights into those samples, behind a small header the kernel recognises.
@@ -172,8 +173,10 @@ tools/patch_amp.py            inspect / add-model / patch
 tools/hxf.py, l6ia.py         .hxf container and L6IA archive
 tools/l6ia_verify.py          checks every checksum in an archive
 tools/hxf_ram.py              runs a build from RAM (RAM_RUN.md); tools/ramboot/ holds the built loader and hook
-tools/sharc/nam_lite.py       kernel + data, and its simulator check
+tools/sharc/nam_lite.py       kernel + data, and its simulator check (one block; the XL build)
 tools/sharc/nam_lite_kernel.asm
+tools/sharc/nam_multi.py      the multi-block kernel's layout, data and simulator check (the HX Stomp build)
+tools/sharc/nam_multi_kernel.asm
 tools/sharc/nam_pack.py       .nam loader, layer order
 tools/sharc/entry4_blob.py    DSP graph library parser
 tools/sharc/sasm.py, ssim.py  SHARC assembler and simulator

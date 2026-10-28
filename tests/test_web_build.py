@@ -23,6 +23,13 @@ def test_stock_md5_as_build_py():
     assert js_object("STOCK_MD5") == py_dict("build.py", "STOCK_MD5")
 
 
+def test_kernel_as_build_py():
+    body = re.search(r"var KERNEL = \{(.*?)\};", WORKER, re.S).group(1)
+    js = {u: (k, re.findall(r'"([^"]+)"', opts)) for u, k, opts in
+          re.findall(r'"(\w+)": \["([\w/.]+)", \[(.*?)\]\]', body)}
+    assert js == {u: (k, list(o)) for u, (k, o) in py_dict("build.py", "KERNEL").items()}
+
+
 def test_built_md5_as_firmware_test():
     pinned = py_dict("tests/test_firmware.py", "BUILT_MD5")
     assert js_object("BUILT_MD5") == {"HX_Stomp": pinned["HX_STOMP_HXF"], "HX_Stomp_XL": pinned["HX_STOMP_XL_HXF"]}
@@ -33,7 +40,8 @@ def test_sources_cover_the_build():
     assert all((ROOT / p).is_file() for p in listed)
     # every module the build's scripts import, and every file they open next to themselves
     need = {"tools/hxf.py", "tools/l6ia.py", "tools/l6ia_verify.py", "tools/patch_amp.py",
-            "tools/sharc/nam_lite.py", "tools/sharc/nam_lite_kernel.asm"}
+            "tools/sharc/nam_lite.py", "tools/sharc/nam_lite_kernel.asm",
+            "tools/sharc/nam_multi.py", "tools/sharc/nam_multi_kernel.asm"}
     for d in ("tools", "tools/sharc"):
         for f in listed:
             if not f.endswith(".py"):

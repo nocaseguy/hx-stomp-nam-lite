@@ -877,9 +877,9 @@ def nam_params(e3, info):
     return out
 
 
-def nam_host_member(b0, comp_id):
+def nam_host_member(b0, comp_id, sdram_words=0):
     """Make member 1 of composite `comp_id` (a clone of NAM_HOST_COMPOSITE) the
-    primitive 0x9c75 (dm 145, pm 13), keeping its ports (1 in, 1 out)."""
+    primitive 0x9c75 (dm 145, pm 13, SDRAM sdram_words), keeping its ports (1 in, 1 out)."""
     ct = b0[0x10]
     hdr = b0[ct + 7 * (comp_id - 0x600000): ct + 7 * (comp_id - 0x600000) + 7]
     assert hdr[2] == 3, f'{comp_id:#x} has {hdr[2]} members, the NAM host wants 3'
@@ -887,9 +887,37 @@ def nam_host_member(b0, comp_id):
     assert 0x600000 <= b0[r + 6] < 0x601000 and b0[r + 7] == 1 and b0[r + 9] == 1, 'member 1 is not a 1-in 1-out composite'
     b0[r + 6] = 0x9c75
     b0[r + 11] = 0                  # no static init parameters
-    b0[r + 13], b0[r + 14] = 0x91, 0x0d
     for k in range(15, 20):         # sub-arena sizes: 0 for a primitive, as stock primitive members have
         b0[r + k] = 0
+    b0[r + 13], b0[r + 14], b0[r + 15] = 0x91, 0x0d, sdram_words   # the instance's DM, PM, SDRAM
+
+
+# The Amp harnesses: their model placeholder (member 3, composite 0x6000c8) gives the
+# amp's whole tree SDRAM 0x800 (DM 0x596, PM 0x1fa); a request above 0x800 fails to bind
+# (silent block) unless it is raised. The slot reserves 0x63000 SDRAM words for the whole
+# harness. Raised to 0x800, 0x5000 and 0x8000 on an HX Stomp.
+AMP_HARNESSES = (0x60000c, 0x60000d, 0x60000f)
+AMP_PLACEHOLDER, AMP_PLACEHOLDER_MEMBER, SLOT_SDRAM = 0x6000c8, 3, 0x63000
+
+
+def raise_amp_harness_sdram(b0, words):
+    """Raise the SDRAM of each Amp harness's model placeholder to hold `words` (aligned
+    to 0x400, at least the stock 0x800); return the harnesses changed."""
+    align = lambda n: (n + 0x3ff) & ~0x3ff
+    need = align(max(words, 0x800))
+    ct, changed = b0[0x10], []
+    for cid in AMP_HARNESSES:
+        hdr = b0[ct + 7 * (cid - 0x600000): ct + 7 * (cid - 0x600000) + 7]
+        r = hdr[3] + 20 * AMP_PLACEHOLDER_MEMBER
+        assert b0[r + 6] == AMP_PLACEHOLDER and b0[r + 13] == 0x596, f'{cid:#x}: member 3 is not the amp placeholder'
+        others = sum(align(b0[hdr[3] + 20 * k + 15]) for k in range(hdr[2]) if k != AMP_PLACEHOLDER_MEMBER)
+        if others + need > SLOT_SDRAM:
+            raise SystemExit(f'{cid:#x}: {need:#x} SDRAM words for the model and {others:#x} for the rest '
+                             f'exceed the slot\'s {SLOT_SDRAM:#x}')
+        if need > b0[r + 15]:
+            b0[r + 15] = need
+            changed.append(cid)
+    return changed
 
 
 def nam_host_blob(comp_id, params):
@@ -971,7 +999,7 @@ def pmap_slots_without_param(e4, blob_index, params):
     return sorted(slots - {p['slot'] for p in params})
 
 
-def add_model_entry4(e4, src_blob_index, nam):
+def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
     """Entry 4 with one more blob, the NAM host: a copy of the model's composite
     (NAM_HOST_COMPOSITE) appended to Blob 0 (0x6001c6, 0x6001c7, ...;
     clone_composite_in_blob0) with its amp member made primitive 0x9c75
@@ -997,7 +1025,9 @@ def add_model_entry4(e4, src_blob_index, nam):
     assert src_comp_id == NAM_HOST_COMPOSITE, \
         f'the NAM host wants a model on composite {NAM_HOST_COMPOSITE:#x} (HD2_AmpLine6Clarity), not {src_comp_id:#x}'
     b0_words, new_comp_id = clone_composite_in_blob0(b0_words, src_comp_id)
-    nam_host_member(b0_words, new_comp_id)
+    nam_host_member(b0_words, new_comp_id, sdram_words)
+    if sdram_words:
+        raise_amp_harness_sdram(b0_words, sdram_words)
     err = sharc_blob0_check(b0_words, SHARC_BLOB0_MAX_WORDS)
     assert err is None, err
     src_blob_words = nam_host_blob(new_comp_id, nam)
@@ -1189,7 +1219,7 @@ def cmd_add_model(args):
 
     nam = nam_params(e3, info)
     e4 = get_entry_swapped(l6ia_bytes, 4)
-    new_e4, blob, new_comp_id = add_model_entry4(e4, src['blob_index'], nam)
+    new_e4, blob, new_comp_id = add_model_entry4(e4, src['blob_index'], nam, args.sdram_words)
     replaced = {4: new_e4}
     print(f"[+] Entry 4: NAM host blob {blob} on composite {new_comp_id:#x} (a copy of {src['name']}'s); "
           f"{len(e4):#x} -> {len(new_e4):#x} bytes")
@@ -1283,6 +1313,9 @@ def main():
                        '(e.g. NAM) instead of Amp > Guitar')
     p_add.add_argument('--short-name', help='16-char short display name in Entry 0 Table 2 (defaults to --display-name)')
     p_add.add_argument('--preset-id', type=int, help='Preset model ID <= 832 in Entry 0 Table 1 (default: first free ID, 147)')
+    p_add.add_argument('--sdram-words', type=lambda x: int(x, 0), default=0,
+                       help='each block\'s own SDRAM (DDR2) block in words (0x5000 for tools/sharc/nam_multi.py); '
+                            'raises the Amp harnesses\' model budget to fit (default 0: none)')
     p_add.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
     p_add.add_argument('--dsp-cost', type=int,
                        help="DSP cost for Entry 0 Table 1 (default: the source's; stock amps 775..3700, "

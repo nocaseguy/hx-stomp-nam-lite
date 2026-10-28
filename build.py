@@ -10,9 +10,12 @@ repository: the build reads it, adds NAM A2 Lite and writes a new .hxf
 (default build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf, or ..._XL_... for the XL) for Line 6 Updater.
 
 Steps:
-  1. tools/sharc/nam_lite.py: the SHARC kernel, checked in the simulator
-     against src/sharc/nam_a2.asm bit for bit (--no-check skips it, ~10 s)
-  2. tools/patch_amp.py add-model: the "NAM A2 Lite" amp in Amp > NAM
+  1. the SHARC kernel, checked in the simulator against src/sharc/nam_a2.asm
+     bit for bit (--no-check skips it, ~10 s): on the HX Stomp
+     tools/sharc/nam_multi.py (several NAM A2 Lite blocks at once, each with
+     its own capture), on the XL tools/sharc/nam_lite.py (one block)
+  2. tools/patch_amp.py add-model: the "NAM A2 Lite" amp in Amp > NAM (on the
+     HX Stomp with each block's own SDRAM block for the multi kernel)
   3. tools/patch_amp.py patch: the kernel into the SHARC boot stream
   4. tools/l6ia_verify.py: every checksum of the result
   5. tools/hxf.py pack: the .hxf
@@ -25,6 +28,13 @@ import sys
 STOCK_MD5 = {
     "a2cd8f4ae56f49415380270ebc484bf1": "HX_Stomp",       # HX_Stomp_v3.80.0_0x103966115.hxf
     "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",    # HX_Stomp_XL_v3.80.0_0x103966115.hxf (untried on a unit)
+}
+# The kernel and add-model's host options per unit. The HX Stomp runs the multi kernel
+# (tested on an HX Stomp: two blocks, each with its own capture); the XL keeps the
+# one-block kernel (the multi kernel's memory has not been checked on the XL's firmware).
+KERNEL = {
+    "HX_Stomp": ("tools/sharc/nam_multi.py", ["--dsp-cost", "2700", "--sdram-words", "0x5000"]),
+    "HX_Stomp_XL": ("tools/sharc/nam_lite.py", ["--dsp-cost", "3600"]),
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -59,9 +69,10 @@ def main():
     image = os.path.join(build, "nam_lite.l6ia")
     py = sys.executable
 
-    run(py, "tools/sharc/nam_lite.py", "-o", asm, *([] if "--no-check" in argv else ["--check"]))
+    kernel, host = KERNEL[unit]
+    run(py, kernel, "-o", asm, *([] if "--no-check" in argv else ["--check"]))
     run(py, "tools/patch_amp.py", "add-model", stock, base, "--clone", "HD2_AmpLine6Clarity",
-        "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite", "--folder", "NAM", "--dsp-cost", "3600")
+        "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite", "--folder", "NAM", *host)
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:
