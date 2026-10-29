@@ -317,7 +317,6 @@ n_int:
     COMP(F2, F3);
     IF NE JUMP n_none;
     R8 = R1;
-n_pick:
     I3 = R8;
     R5 = R8;
     LCNTR = 16, DO n_sigw UNTIL LCE;
