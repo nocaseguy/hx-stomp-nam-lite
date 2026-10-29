@@ -12,7 +12,7 @@ Commands:
 
   add-model <in> <out> --name HD2_AmpNAMLite --display-name "NAM A2 Lite" [--folder NAM]
       Add the NAM host amp: a copy of HD2_AmpLine6Clarity's composite whose amp
-      stage is primitive 0x9c75, with its own eight parameters (Model, Drive,
+      stage is primitive 0x9c75, with its own eight parameters (Model, Input (Drive),
       Bass, Mid, Treble, Presence, Ch Vol, Polarity), listed in the amp browser (Entry 0),
       the model table (Entry 3) and the DSP graph library (Entry 4); the SHARC's
       graph buffer is enlarged to fit (Entry 2).
@@ -1030,7 +1030,7 @@ NAM_HOST_COMPOSITE = 0x6001a9   # Line 6 Clarity & co.: in port, the amp (one su
 # name); Bass..Presence are a tone stack, flat at 0.5; Drive 0 dB and Ch Vol +12 dB at 0.5;
 # Polarity (a switch, Normal by default) at pid 15: DM(12..14) are the kernel's.
 NAM_PARAMS = ((1, 'HD2_ImpulseResponse2048Mono', 'Index', 7, 'Model', None),
-              (2, 'HD2_AmpLine6Clarity', 'Drive', 5, None, 0.5),
+              (2, 'HD2_AmpLine6Clarity', 'Drive', 5, 'Input', 0.5),   # shown as Input: the input level
               (3, 'HD2_AmpLine6Clarity', 'Bass', 8, None, 0.5),
               (4, 'HD2_AmpLine6Clarity', 'Mid', 9, None, 0.5),
               (5, 'HD2_AmpLine6Clarity', 'Treble', 10, None, 0.5),

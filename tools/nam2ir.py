@@ -5,7 +5,7 @@ usage: nam2ir.py <model.nam> -o model.wav [--no-level]
 
 A capture that gives its interface's level (metadata input_level_dbu, the dBu
 at 0 dBFS) has it in IR word 5 (nam_lite.level_word); the kernel then trims
-its input by STOMP_DBU - input_level_dbu (nam_lite.py), so that at Drive 5.0
+its input by STOMP_DBU - input_level_dbu (nam_lite.py), so that at Input 5.0
 the Stomp's input meets the model as the capture's interface did. --no-level
 leaves word 5 at 0 (no trim).
 
