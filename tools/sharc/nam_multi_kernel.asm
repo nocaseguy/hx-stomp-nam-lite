@@ -39,7 +39,7 @@
 //   does the same. Nothing waits without a bound.
 //
 // Knobs as nam-a2-lite: Drive DM(5), Ch Vol DM(6), Model DM(7) (0 the built-in
-// model, 1..128 a User IR slot), Bass..Presence DM(8..11); and Polarity
+// model, now none: silence), 1..128 a User IR slot), Bass..Presence DM(8..11); and Polarity
 // DM(P_PHASE) (a bool: not 0 inverts the output, by negating Ch Vol's gain).
 // Drive is x the slot's S_TRIM, set on each load from the model's IR word 5
 // (10^(-input_level_dbu/20); 0 none, as the built-in model and older .wav files)
@@ -280,8 +280,8 @@ m_ready:
     IF NE F0 = -F0;                     // crossfade and the tone stack are linear)
     DM(G_LEVEL) = F0;                   // output level, 4 k^2
 
-    // ---- the model (as nam-a2-lite): 0 the built-in one, 1..128 a User IR slot
-    R8 = BUILTIN_TOP;
+    // ---- the model: 1..128 a User IR slot; 0 (the knob's range is 1..128) or a slot
+    // without a NAM capture: silence
     R0 = DM(7, I0);
     R1 = 0x800000;
     COMP(R0, R1);
@@ -290,7 +290,7 @@ m_ready:
 n_int:
     R1 = 1;
     R0 = R0 - R1;
-    IF LT JUMP n_pick;
+    IF LT JUMP n_none;
     R1 = 128;
     COMP(R0, R1);
     IF GE JUMP n_none;

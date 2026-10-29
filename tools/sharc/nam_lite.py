@@ -4,7 +4,7 @@
 The kernel is tools/sharc/nam_multi.py's. This module holds what it shares
 with the converter (tools/nam2ir.py) and its check: a model's layer order and
 silence state (stream, silence), a model as a User IR (ir_samples,
-level_word, input_trim), the made-up built-in model (placeholder), the tone
+level_word, input_trim), a made-up test model (placeholder), the tone
 stack's and crossfade's tables (eq_table, fade_table), src/sharc/nam_a2.asm
 run in ssim as the reference (reference), and the float32 model of the kernel
 after the model (Pipe).
@@ -102,9 +102,9 @@ def silence(w):
 
 
 def placeholder():
-    """A made-up 3-channel A2 Lite model (seeded random weights), for building
-    without a .nam: it fills the built-in model's place, which NAM A2 Lite's
-    Model knob (1 .. 128) never selects, and drives --check."""
+    """A made-up 3-channel A2 Lite model (seeded random weights): the kernel
+    checks' test model when no .nam is given (the firmware has no built-in model;
+    NAM A2 Lite plays the User IR slots only)."""
     rnd = random.Random(2026)
     n = N_WEIGHTS
     return [ssim.b2f(nam_pack.f2b(rnd.uniform(-0.3, 0.3))) for _ in range(n)]

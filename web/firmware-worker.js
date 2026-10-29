@@ -26,8 +26,8 @@ var STOCK_MD5 = {
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "817a99c1a7619d09f9ac1c900d43b208",
-  "HX_Stomp_XL": "265dcd26c94d33abb95fbd43fe91c8b7",
+  "HX_Stomp": "0c65a863a1d9a3879581ac6d19f799db",
+  "HX_Stomp_XL": "20ed413a220770db2b94b8bf447e66e7",
 };
 
 // build.py's KERNEL, MODEL and IR_TITLE (tests/test_web_build.py keeps them equal).

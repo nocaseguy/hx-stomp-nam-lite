@@ -3,8 +3,9 @@
 
 usage: nam_multi.py [model.nam] [-o out.asm] [--slots 2|3] [--staging b2|b3] [--check]
 
-The built-in model (Model 0) is model.nam's A2 Lite submodel, or the seeded
-placeholder (nam_lite.placeholder) without one. The image needs each block's
+There is no built-in model: Model 1..128 is a User IR slot, anything else
+silence. model.nam (or nam_lite.placeholder) is the check's test model, in IR
+slot 1. The image needs each block's
 SDRAM block: patch_amp.py add-model --sdram-words 0x5000. Run on an HX Stomp:
 two blocks, each with its own capture.
 
@@ -23,8 +24,7 @@ Memory (normal words):
       a probe kernel), saved registers, scratch, the write-back buffer, the TCB chains,
       the job, layer and clear tables, Drive's and the fade's tables, then NSLOTS
       slots: state, tone stack, the model's 1,943 words, its short rings.
-  DDR2 0x324500..: the built-in model (laid out as an IR slot), the tone
-      stack's table and STOMP_GAIN (10^(STOMP_DBU/20): a loaded model's IR word 5,
+  DDR2 0x324500..: the tone stack's table and STOMP_GAIN (10^(STOMP_DBU/20): a loaded model's IR word 5,
       10^(-input_level_dbu/20), x this is its slot's input trim, x Drive).
   Each instance's SDRAM block: its long rings (d >= FAR_D), each with a 16-word
       mirror, HIST (the crossfade's 512 outputs) and the two sentinel words.
@@ -109,7 +109,7 @@ def names():
     return list(S) + list(ST) + list(REPW) + list(T) + list(J) + list(P) + [
         "SAVE", "REP", "G_SDR", "G_JOBS", "G_LEVEL", "J_NEXT", "J_BUSY", "J_DONE", "EVENTS", "DMA_FAIL", "J_CHKADR",
         "J_CHKVAL", "FLAGL", "SLOTTAB", "NSLOTS", "IN", "X", "HS", "TABLE", "NLAYERS", "JOBS", "NJOBS", "CLR",
-        "NCLR", "DRIVE_TAB", "FADE_TAB", "EQ_TAB", "STOMP_GAIN", "BUILTIN_TOP", "LBUF", "LBUF_N", "LCH", "LCH_CP",
+        "NCLR", "DRIVE_TAB", "FADE_TAB", "EQ_TAB", "STOMP_GAIN", "LBUF", "LBUF_N", "LCH", "LCH_CP",
         "FARTAB", "WADDR", "NFAR", "S_STREAM", "S_HB0", "S_HB1", "S_HB2", "HIST_OFF", "SENT_OFF", "SENT2_OFF",
         "SDR_NEED", "MAGIC", "POLLMAX", "LPOLLMAX", "BACKOFF_N", "T_MAX", "N_STREAM", "KM1", "T_SIZE",
         "TCB_EI", "TCB_IC", "TCB_II", "IR_FLAG", "IR_TOP", "DMAC0", "EIEP0", "EMEP0", "ICEP0", "IIEP0", "IMEP0",
@@ -222,9 +222,8 @@ class Layout:
         self.hist_off = o
         self.sent_off = o + HIST_N
         self.sdr_need = self.sent_off + 2
-        # DDR2 (shared): the built-in model as an IR slot, the tone stack's table
-        self.builtin_top = DDR2 + 2047
-        self.eq_tab = DDR2 + 2048
+        # DDR2 (shared): the tone stack's table
+        self.eq_tab = DDR2
         self.stomp_gain = self.eq_tab + 4 * 101 * 5      # 10^(STOMP_DBU/20) (nam_lite.py)
         self.ddr2_to = self.stomp_gain + 1
         assert self.ddr2_to <= DDR2_END
@@ -232,7 +231,7 @@ class Layout:
                  HS=alloc["HS"], TABLE=alloc["TABLE"], NLAYERS=NL, JOBS=alloc["JOBS"], NJOBS=F + len(self.groups), CLR=alloc["CLR"],
                  NCLR=self.nclr, DRIVE_TAB=alloc["DRIVE_TAB"], FADE_TAB=alloc["FADE_TAB"], EQ_TAB=self.eq_tab,
                  STOMP_GAIN=self.stomp_gain,
-                 BUILTIN_TOP=self.builtin_top, LBUF=self.sb[0], LBUF_N=2 * SB_WORDS, LCH=alloc["LCH"],
+                 LBUF=self.sb[0], LBUF_N=2 * SB_WORDS, LCH=alloc["LCH"],
                  LCH_CP=(alloc["LCH"] + TCB_II) & 0x7FFFF, FARTAB=alloc["FARTAB"],
                  WADDR=alloc["WADDR"], NFAR=F, S_STREAM=S_STREAM, S_HB0=self.hb[0], S_HB1=self.hb[1],
                  S_HB2=self.hb[2], HIST_OFF=self.hist_off, SENT_OFF=self.sent_off, SENT2_OFF=self.sent_off + 1,
@@ -248,7 +247,7 @@ class Layout:
         return -(-self.sdr_need // 0x400) * 0x400
 
     # ------------------------------------------------------------ the tables
-    def words(self, w):
+    def words(self):
         """{address: word}: everything the kernel finds in memory at boot."""
         v, al, F = self.v, self.alloc, self.nfar
         mem = {}
@@ -340,9 +339,7 @@ class Layout:
                 jobs += [1, 2 * grp[-1] + 1, al["FARTAB"] + grp[0], self.wch[j], al["WADDR"] + grp[0],
                          (self.wch[j] + TCB_II) & 0x7FFFF, len(grp), 0]
         put(al["JOBS"], jobs)
-        # DDR2: the built-in model, top-down as in an IR slot; the tone stack's table
-        for k, x in enumerate(nam_lite.ir_samples(w)):
-            mem[self.builtin_top - k] = x
+        # DDR2: the tone stack's table
         put(self.eq_tab, nam_lite.eq_table())
         put(self.stomp_gain, [nam_pack.f2b(10.0 ** (nam_lite.STOMP_DBU / 20))])
         return mem
@@ -362,14 +359,14 @@ class Layout:
                 "DDR2": f"{DDR2:#x}..{self.ddr2_to:#x}"}
 
 
-def build(w, slots=3, backoff=BACKOFF_N, staging="b2"):
+def build(slots=3, backoff=BACKOFF_N, staging="b2"):
     """(asm, layout): the kernel with its addresses and tables."""
     lay = Layout(slots, backoff=backoff, staging=staging)
     src = open(os.path.join(here, "nam_multi_kernel.asm")).read()
     src = src.replace("// EQUS (nam_multi.py puts the layout here)\n", equs(lay.v))
     secs, _ = sasm.assemble(src, "nam_multi_kernel.asm")
     assert sum(len(s.words) for s in secs if s.kind == "pm") == lay.n_code
-    mem = lay.words(w)
+    mem = lay.words()
     lines = ["", "// ---- tables, written by nam_multi.py ----"]
     last = None
     for a in sorted(mem):
@@ -695,15 +692,14 @@ class Rig:
 
     def check_dma(self, inst, label):
         """Every word a TCB moved: external words in the calling instance's SDRAM block
-        (or, read only, the User IR slots and the built-in model), internal words in the
+        (or, read only, the User IR slots), internal words in the
         module's memory."""
         sd = (inst.sdram, inst.sdram + self.lay.sdram_words())
         ir = (IR_TOP - 0x800 + 1, IR_TOP + 128 * 0x800)
-        bi = (self.lay.builtin_top - 2047, self.lay.builtin_top + 1)
         for out, ei, ii, n, em, im in self.dma.log:
             e0, e1 = sorted((ei, ei + (n - 1) * em))
             i0, i1 = sorted((ii, ii + (n - 1) * im))
-            ok_e = sd[0] <= e0 and e1 < sd[1] or not out and any(a <= e0 and e1 < b for a, b in (ir, bi))
+            ok_e = sd[0] <= e0 and e1 < sd[1] or not out and ir[0] <= e0 and e1 < ir[1]
             ok_i = any(a <= i0 and i1 < b for a, b in self.allowed[:2])
             if not (ok_e and ok_i):
                 raise CheckFailed(f"{label}: a TCB {'to' if out else 'from'} {ei:#x} ({n} words) / internal "
@@ -749,7 +745,7 @@ class KernelCheck:
     """The steps, in order; each carries on from the state the ones before left."""
 
     STEPS = ("silence_fixed_point", "two_models_load", "two_models_play", "model_change_crossfades",
-             "polarity_inverts", "cab_ir_is_silent", "back_to_builtin", "third_and_fourth", "takeover", "recreated",
+             "polarity_inverts", "cab_ir_is_silent", "model_0_is_silent", "third_and_fourth", "takeover", "recreated",
              "dma_timeout", "busy_channel", "cycle_budget")
 
     def __init__(self, asm, lay, w, nblk=8, **dma):
@@ -769,8 +765,9 @@ class KernelCheck:
         self.sig = sig
         sim = self.rig.sim
         # each slot model's capture at its own input level (IR word 5): the kernel trims
-        # each block's input by STOMP_DBU - that; the built-in model (no level) by nothing
-        self.dbu = {id(self.w2): 15.0, id(self.w3): 6.0, id(self.w4): None}
+        # each block's input by STOMP_DBU - that; the test model in slot 1 (no level) by nothing
+        self.dbu = {id(self.w): None, id(self.w2): 15.0, id(self.w3): 6.0, id(self.w4): None}
+        set_ir(sim, 1, nam_lite.ir_samples(self.w, None))
         set_ir(sim, 3, nam_lite.ir_samples(self.w2, 15.0))
         set_ir(sim, 7, nam_lite.ir_samples(self.w3, 6.0))
         set_ir(sim, 9, nam_lite.ir_samples(self.w4, None))
@@ -817,12 +814,13 @@ class KernelCheck:
             raise CheckFailed("silence(): not a fixed point of nam_a2.asm")
 
     def two_models_load(self):
-        """A (Model 0, the built-in model, no input trim) and B (Model 3, another capture
+        """A (Model 1, the test model in User IR slot 1, made with no level: no input trim) and B (Model 3, another capture
         in User IR slot 3, made at 15 dBu: its input x 10^((STOMP_DBU - 15)/20), other
         knobs) each claim a slot and load their model on their first call."""
         r = self.rig
         self.A = r.inst("A", 0)
         self.B = r.inst("B", 1)
+        self.A.knobs(model=1)
         self.B.knobs(drive=0.62, vol=0.7, model=3, eq=(0.3, 0.7, 0.45, 0.9))
         self.start(self.A, self.w, self.sig("A", 80), "A")
         self.start(self.B, self.w2, self.sig("B", 12), "B")
@@ -872,13 +870,18 @@ class KernelCheck:
             self.expect(self.B, self.sig("B7", 24)[k % 8], f"B to a cab IR, {k}", None)
             self.play(self.A, "A")
 
-    def back_to_builtin(self):
-        """B to Model 0: the built-in model again (not a fresh slot: no fade from nothing),
-        without slot 7's trim."""
+    def model_0_is_silent(self):
+        """B to Model 0 (out of the knob's range, but a raw 0): silence, as a slot with no
+        capture. Then B to slot 1 (not a fresh slot: no fade from nothing), without slot
+        7's trim."""
         self.B.knobs(model=0)
-        self.start(self.B, self.w, self.sig("B0", 18), "B to Model 0")
+        for k in range(4):
+            self.expect(self.B, self.sig("B7", 36)[k], f"B on Model 0, {k}", None)
+            self.play(self.A, "A")
+        self.B.knobs(model=1)
+        self.start(self.B, self.w, self.sig("B0", 18), "B to slot 1")
         for b in range(4):
-            self.play(self.B, "B built-in")
+            self.play(self.B, "B slot 1")
             self.play(self.A, "A")
 
     def third_and_fourth(self):
@@ -894,7 +897,7 @@ class KernelCheck:
         self.D.knobs(model=3)
         for b in range(4):
             self.play(self.A, "A")
-            self.play(self.B, "B built-in")
+            self.play(self.B, "B slot 1")
             if self.C:
                 self.play(self.C, "C")
             blk = self.sig("D", 4)[b]
@@ -909,7 +912,7 @@ class KernelCheck:
             raise CheckFailed("D did not take A's slot")
         for b in range(6):
             self.play(self.D, "D")
-            self.play(self.B, "B built-in")
+            self.play(self.B, "B slot 1")
             if self.C:
                 self.play(self.C, "C")
 
@@ -1005,7 +1008,7 @@ def main():
             sys.exit(f"{src[0]}: {c} channels, NAM A2 Lite has {C}")
     else:
         w = nam_lite.placeholder()
-    asm, lay = build(w, slots, staging=opt("--staging") or "b2")
+    asm, lay = build(slots, staging=opt("--staging") or "b2")
     if "-o" in sys.argv:
         open(sys.argv[sys.argv.index("-o") + 1], "w").write(asm)
     for k, v in lay.report().items():

@@ -10,7 +10,7 @@ pytestmark = pytest.mark.slow
 
 @pytest.mark.parametrize("slots", [3, 2])
 def test_kernel(weights, slots):
-    asm, lay = nam_multi.build(weights, slots)
+    asm, lay = nam_multi.build(slots)
     ok, res, _ = nam_multi.check(asm, lay, weights)
     assert ok, res
     assert res["worst"] <= 36000

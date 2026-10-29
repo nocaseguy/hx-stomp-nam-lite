@@ -190,7 +190,7 @@ tools/l6ia_verify.py          checks every checksum in an archive
 tools/hxf_ram.py              runs a build from RAM (RAM_RUN.md); tools/ramboot/ holds the built loader and hook
 tools/sharc/nam_multi.py      the kernel's layout, data and simulator check
 tools/sharc/nam_multi_kernel.asm
-tools/sharc/nam_lite.py       the model format (converter), placeholder model, shared tables, reference run
+tools/sharc/nam_lite.py       the model format (converter), test model, shared tables, reference run
 tools/sharc/nam_pack.py       .nam loader, layer order
 tools/sharc/entry4_blob.py    DSP graph library parser
 tools/sharc/sasm.py, ssim.py  SHARC assembler and simulator
