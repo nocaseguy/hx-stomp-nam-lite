@@ -27,7 +27,7 @@ var STOCK_MD5 = {
 };
 var BUILT_MD5 = {
   "HX_Stomp": "0c65a863a1d9a3879581ac6d19f799db",
-  "HX_Stomp_XL": "20ed413a220770db2b94b8bf447e66e7",
+  "HX_Stomp_XL": "fa042abe8f748518170bdfcc901ac537",
 };
 
 // build.py's KERNEL, MODEL and IR_TITLE (tests/test_web_build.py keeps them equal).
@@ -36,6 +36,7 @@ var MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--di
              "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2700", "--sdram-words", "0x5000"];
 var IR_TITLE = {
   "HX_Stomp": ["--preset-id", "147"],
+  "HX_Stomp_XL": ["--preset-id", "147"],
 };
 
 // What build.py needs, relative to the repository root.

@@ -27,3 +27,11 @@ def test_ir_title_cave():
     assert cave[:4] == bytes.fromhex("237b0f2b")                  # caveA: ldrb r3,[r4,#12]; cmp r3,#15
     assert cave[cb - ca: cb - ca + 4] == bytes.fromhex("2b7b0f2b")  # caveB: ldrb r3,[r5,#12]; cmp r3,#15
     assert patch_amp._cmp_r3(148) in cave
+    assert bytes.fromhex("0025") in cave                          # movs r5,#0 (the Stomp's IR_REG)
+
+
+def test_ir_title_cave_xl():
+    X = patch_amp.IR_TITLE[0x28d92230]
+    cave, ca, cb = patch_amp.ir_title_cave(0x28e53aac, [147], X)
+    assert len(cave) == 60 and cave[:4] == bytes.fromhex("237b0f2b")
+    assert bytes.fromhex("0026") in cave and bytes.fromhex("0025") not in cave   # movs r6,#0

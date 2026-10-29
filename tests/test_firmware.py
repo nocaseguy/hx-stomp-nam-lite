@@ -18,7 +18,7 @@ pytestmark = pytest.mark.firmware
 # from RAM (two blocks, two captures, the IR names in the titles), plus the Polarity knob.
 BUILT_MD5 = {
     "HX_STOMP_HXF": "0c65a863a1d9a3879581ac6d19f799db",
-    "HX_STOMP_XL_HXF": "20ed413a220770db2b94b8bf447e66e7",     # no IR-name title; not run on an XL
+    "HX_STOMP_XL_HXF": "fa042abe8f748518170bdfcc901ac537",     # not run on an XL
 }
 
 
@@ -34,12 +34,3 @@ def test_build(tmp_path, env):
     assert "ALL OK" in r.stdout
     assert hashlib.md5(out.read_bytes()).hexdigest() == BUILT_MD5[env]
 
-
-def test_ir_title_refuses_the_xl(tmp_path):
-    stock = os.environ.get("HX_STOMP_XL_HXF")
-    if not stock:
-        pytest.skip("HX_STOMP_XL_HXF is not set")
-    r = subprocess.run([sys.executable, str(ROOT / "tools/patch_amp.py"), "ir-title", stock,
-                        str(tmp_path / "out.hxf"), "--preset-id", "148"], capture_output=True, text=True)
-    assert r.returncode != 0 and "HX Stomp only" in r.stderr
-    assert not (tmp_path / "out.hxf").exists()

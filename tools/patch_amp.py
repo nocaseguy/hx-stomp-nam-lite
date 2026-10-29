@@ -18,7 +18,7 @@ Commands:
       graph buffer is enlarged to fit (Entry 2).
 
   ir-title <in> <out> --preset-id 148 [--preset-id N ...]
-      HX Stomp only: a block of these preset_ids (an amp whose first knob is
+      HX Stomp or XL: a block of these preset_ids (an amp whose first knob is
       a User IR slot, as add-model's Model) shows the selected IR's name in its
       edit-screen title, as an IR block does. Changes Entry 0 (the main
       processor's program) only.
@@ -709,18 +709,23 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
     return bytes(out_e0), new_pid, src_dsp_cost, blist_addrs
 
 
-# --- IR-name title (patch_amp.py ir-title; HX Stomp only) ---------------------------------
+# --- IR-name title (patch_amp.py ir-title) ------------------------------------------------
 # The edit screen shows a User IR's name in the block title only for a block whose browser
-# category is 15 (IR). Two 6-byte sites in Entry 0 (HX Stomp 3.80.0) test that category;
-# each becomes a B.W to a small Thumb cave appended to seg[6] that also takes the IR path
-# for the listed preset_ids. UI only: the parameter, its DSP value and presets are unchanged.
+# category is 15 (IR). Two 6-byte sites in Entry 0 (3.80.0) test that category; each
+# becomes a B.W to a small Thumb cave appended to seg[6] that also takes the IR path for
+# the listed preset_ids. UI only: the parameter, its DSP value and presets are unchanged.
 #   site A 0x28dbebea (block title):  ldrb r3,[r4,#12]; cmp r3,#15; bne 0x28dbebfe
 #   site B 0x28dbf72e (knob drawing): ldrb r3,[r5,#12]; cmp r3,#15; beq 0x28dbf7d8
+# (HX Stomp addresses.) The XL's two functions are the Stomp's with the same stack frame
+# (sub sp,#96 at site A's, the cab-half flag at [sp,#11]) and the same instructions at the
+# sites; site A's function has r5/r7 and r6/r8 swapped, so its IR path keeps the
+# subcategory in r6 (IR_REG) where the Stomp's uses r5.
 # The source parameter a module's first knob (knob 0, the one the IR path reads) must copy.
 IR_TITLE_SOURCES = ('HD2_ImpulseResponse2048Mono.Index', 'HD2_ImpulseResponse1024Mono.Index')
-IR_TITLE = {    # by seg[6]'s load address; the XL (r6 for r5, its stack frame unchecked) is not done
-    0x28d8fa80: types.SimpleNamespace(
+IR_TITLE = {    # by seg[6]'s load address
+    0x28d8fa80: types.SimpleNamespace(      # HX Stomp
         SITE_A=0x28dbebea, SITE_A_STOCK=bytes.fromhex('237b0f2b06d1'),
+        IR_REG=5,                # the IR path's subcategory register
         IR_CONT=0x28dbebf0,      # stock IR path: ldrb r5,[r4,#13] ...
         IR_NAME=0x28dbeddc,      # the IR Single name branch (r5 = 0); returns to 0x28dbebf8
         NON_IR=0x28dbebfe,       # stock continuation for any other category
@@ -730,6 +735,18 @@ IR_TITLE = {    # by seg[6]'s load address; the XL (r6 for r5, its stack frame u
         TARGET_STOCK={0x28dbebf0: bytes.fromhex('657b002d'), 0x28dbeddc: bytes.fromhex('6ff00102'),
                       0x28dbebfe: bytes.fromhex('16f083f9'), 0x28dbf734: bytes.fromhex('27b0bde8'),
                       0x28dbf7d8: bytes.fromhex('1b9b23b1')}),
+    0x28d92230: types.SimpleNamespace(      # HX Stomp XL
+        SITE_A=0x28dc1cd8, SITE_A_STOCK=bytes.fromhex('237b0f2b06d1'),
+        IR_REG=6,
+        IR_CONT=0x28dc1cde,      # stock IR path: ldrb r6,[r4,#13] ...
+        IR_NAME=0x28dc1f04,      # the IR Single name branch (r6 = 0); returns to 0x28dc1ce6
+        NON_IR=0x28dc1cec,
+        SITE_B=0x28dc281e, SITE_B_STOCK=bytes.fromhex('2b7b0f2b51d0'),
+        B_RET=0x28dc2824,
+        B_IR=0x28dc28c8,
+        TARGET_STOCK={0x28dc1cde: bytes.fromhex('667b002e'), 0x28dc1f04: bytes.fromhex('6ff00102'),
+                      0x28dc1cec: bytes.fromhex('1bf030fe'), 0x28dc2824: bytes.fromhex('27b0bde8'),
+                      0x28dc28c8: bytes.fromhex('1b9b23b1')}),
 }
 
 
@@ -765,14 +782,14 @@ def _cmp_r3(v):
 
 
 def ir_title_cave(cave_va, pids, X):
-    """The cave at cave_va: (bytes, caveA address, caveB address). Only r3 is used, and r5 on
-    the IR path (as the stock code there); every exit leaves r3 as the stock code would have
+    """The cave at cave_va: (bytes, caveA address, caveB address). Only r3 is used, and IR_REG
+    (r5 here) on the IR path (as the stock code there); every exit leaves r3 as the stock code would have
     or goes where r3 is written before it is read.
       caveA: ldrb r3,[r4,#12]; cmp r3,#15; bne 1f; b.w IR_CONT
           1: ldrb.w r3,[sp,#11]; cbnz r3,3f      @ the cab half of an Amp+Cab block: no
              ldr.w r3,[r4,#1]                    @ the block's preset_id (half 0)
              {cmp r3,#pid; beq 2f}...; b 3f
-          2: movs r5,#0; b.w IR_NAME             @ as an IR Single block, knob 0
+          2: movs r5,#0; b.w IR_NAME             @ as an IR Single block, knob 0 (r5: IR_REG)
           3: ldrb r3,[r4,#12]; b.w NON_IR
       caveB: ldrb r3,[r5,#12]; cmp r3,#15; beq 4f
              ldr.w r3,[r5,#1]; {cmp r3,#pid; beq 4f}...
@@ -801,7 +818,7 @@ def ir_title_cave(cave_va, pids, X):
         emit(_cmp_r3(p)); bcc(0, '2')
     fix.append((len(out), 'b', None, '3')); emit(b'\0\0')
     labels['2'] = len(out)
-    emit(bytes.fromhex('0025')); bw(X.IR_NAME)
+    emit(struct.pack('<H', 0x2000 | (X.IR_REG << 8))); bw(X.IR_NAME)
     labels['3'] = len(out)
     emit(bytes.fromhex('237b')); bw(X.NON_IR)
     labels['caveB'] = len(out)
@@ -839,7 +856,7 @@ def ir_title_entry0(e0, pids):
     A = e0_device(segs)
     X = IR_TITLE.get(segs[6][3])
     if X is None:
-        raise SystemExit(f'ir-title is made for the HX Stomp only; this is the {A.NAME}')
+        raise SystemExit(f'ir-title: no title sites known for the {A.NAME}')
 
     def vread(va, ln):
         fo = _e0_vaddr_to_foff(segs, va, ln)
@@ -1528,7 +1545,7 @@ def main():
                        help="DSP cost for Entry 0 Table 1 (default: the source's; stock amps 775..3700, "
                             "apparently hundredths of a per cent of the SHARC)")
 
-    p_irt = sub.add_parser('ir-title', help="HX Stomp: a NAM block's title shows its User IR's name")
+    p_irt = sub.add_parser('ir-title', help="A NAM block's title shows its User IR's name")
     p_irt.add_argument('input', help='Input .hxf or L6IA (after add-model)')
     p_irt.add_argument('output', help='Output .hxf or L6IA')
     p_irt.add_argument('--preset-id', type=int, action='append', required=True,

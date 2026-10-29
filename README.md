@@ -17,7 +17,7 @@ Watch it on YouTube: https://www.youtube.com/watch?v=zQzj0qahJ6E
 - **A Polarity knob** (Normal / Inverted), added after the other seven so older presets keep their settings.
 - **Several NAM blocks, each with its own capture.** NAM A2 Lite now runs as up to three blocks at once, each playing the capture in its own User IR slot (the HX Stomp allows two amp blocks in a preset, so two in practice). The earlier build ran one NAM block per unit.
 - **Input level trim.** A capture that records its interface's input level plays at the level it was captured at (see [Use](#use)).
-- **The capture's name in the block title** (HX Stomp only). The edit screen shows the name of the User IR the Model knob selects, as it does for an IR block.
+- **The capture's name in the block title.** The edit screen shows the name of the User IR the Model knob selects, as it does for an IR block.
 
 It is the same amp as before: **NAM A2 Lite**, preset ID 147, the same first seven knobs in the same order (Polarity is the eighth), so presets saved with an earlier build open with this one.
 
@@ -83,13 +83,13 @@ This writes `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (from the XL's file, `build
    - gives the copy its own eight parameters, and each block its own DDR2 block;
    - lists it in a new **NAM** folder under Amp;
    - enlarges the DSP's graph buffer to fit the extra graph.
-3. HX Stomp only: makes the block's title show the selected IR's name (`patch_amp.py ir-title`). The patch knows the HX Stomp's application only and refuses the XL's, so the XL build is made without it.
+3. Makes the block's title show the selected IR's name (`patch_amp.py ir-title`), with each unit's own addresses.
 4. Adds the kernel to the DSP's boot code and hooks it to an unused DSP primitive.
 5. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
-The HX Stomp result has MD5 `a54ace94a6a8f1ded17513cf7d0019fd` (pinned in `tests/test_firmware.py`), byte for byte what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`. Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
+The HX Stomp result has MD5 `0c65a863a1d9a3879581ac6d19f799db` (pinned in `tests/test_firmware.py`), byte for byte what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`. Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
 
-Only 4 of the 15 parts of the firmware change: the main application (its model tables, and on the HX Stomp the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
+Only 4 of the 15 parts of the firmware change: the main application (its model tables and the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
 ## Try it first, from RAM
 
@@ -115,7 +115,7 @@ Presets and IRs you change during the run are lost at power-off. [RAM_RUN.md](RA
 
 The XL's firmware 3.80.0 is the Stomp's with another build of the main application: the DSP program, the model list and the DSP graph library, the three parts the patch changes besides the application, are byte for byte the same. `tools/patch_amp.py` holds the XL's own addresses for the application's model tables, and checks each one against the table it points to. The XL image passes the same checks as the Stomp's, and every byte it changes in the application corresponds to one the Stomp build changes.
 
-**The one-block build has run on an XL from RAM** (see [RAM_RUN.md](RAM_RUN.md)); the current multi-block build has not run on an XL yet, and neither has been installed on one. Its kernel, graph and model-list bytes are exactly those of the HX Stomp build that runs two captures on an HX Stomp; it differs from the earlier XL build only in that DSP side and the declared DSP cost. It has no IR name in the block title: that patch is made for the HX Stomp's application only. If you install it on an XL, have the stock XL file ready for recovery. The XL has the same Page Right button, so holding it while powering on should give update mode as on the Stomp, but that has not been tried on an XL either.
+**The one-block build has run on an XL from RAM** (see [RAM_RUN.md](RAM_RUN.md)); the current multi-block build has not run on an XL yet, and neither has been installed on one. Its kernel, graph and model-list bytes are exactly those of the HX Stomp build that runs two captures on an HX Stomp; it differs from the earlier XL build only in that DSP side and the declared DSP cost. Its block title shows the IR name, as on the Stomp: the XL's two title functions are the Stomp's with the same stack frame and registers renamed, and `patch_amp.py` holds their XL addresses; that has not been seen on an XL screen yet. If you install it on an XL, have the stock XL file ready for recovery. The XL has the same Page Right button, so holding it while powering on should give update mode as on the Stomp, but that has not been tried on an XL either.
 
 ## Use
 
@@ -130,7 +130,7 @@ The XL's firmware 3.80.0 is the Stomp's with another build of the main applicati
 3. On the Stomp, add **Amp → NAM → NAM A2 Lite** and set **Model** to 5. For a second capture, import it into another slot and add a second NAM A2 Lite block set to that slot.
 
 Notes:
-- The Model knob shows slot numbers. On the HX Stomp the block's title shows the name of the IR in that slot (the name HX Edit gave it); on the XL it doesn't.
+- The Model knob shows slot numbers. The block's title shows the name of the IR in that slot (the name HX Edit gave it).
 - Changing Model (by hand or in a snapshot) crossfades with no gap: the new capture fades in over about 5 ms while the last few milliseconds of the old one play backwards and fade out.
 - Presets store the slot number. If you move a capture to another slot, update the presets that use it.
 

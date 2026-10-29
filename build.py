@@ -9,9 +9,8 @@ repository: the build reads it, adds NAM A2 Lite and writes a new .hxf
 (default build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf, or ..._XL_... for the XL) for Line 6 Updater.
 
 NAM A2 Lite runs as up to three blocks at once (at most two per preset, as any
-amp), each playing its own capture from a User IR slot. On the HX Stomp the
-block's title shows the selected IR's name; the XL build is made without that
-change (and has not run on an XL).
+amp), each playing its own capture from a User IR slot. The block's title
+shows the selected IR's name. (The XL build has not run on an XL.)
 
 Steps:
   1. tools/sharc/nam_multi.py: the SHARC kernel, checked in the simulator
@@ -19,7 +18,7 @@ Steps:
      (--no-check skips it, ~10 s)
   2. tools/patch_amp.py add-model: the "NAM A2 Lite" amp in Amp > NAM, each
      block with its own SDRAM block
-  3. tools/patch_amp.py ir-title (HX Stomp): the IR name in the block title
+  3. tools/patch_amp.py ir-title: the IR name in the block title
   4. tools/patch_amp.py patch: the kernel into the SHARC boot stream
   5. tools/l6ia_verify.py: every checksum of the result
   6. tools/hxf.py pack: the .hxf
@@ -39,8 +38,8 @@ STOCK_MD5 = {
 KERNEL = "tools/sharc/nam_multi.py"
 MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
          "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2700", "--sdram-words", "0x5000"]
-# ir-title per unit: the patch knows the HX Stomp's application only.
-IR_TITLE = {"HX_Stomp": ["--preset-id", "147"]}
+# ir-title per unit.
+IR_TITLE = {"HX_Stomp": ["--preset-id", "147"], "HX_Stomp_XL": ["--preset-id", "147"]}
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -77,11 +76,8 @@ def main():
 
     run(py, KERNEL, "-o", asm, *([] if "--no-check" in argv else ["--check"]))
     run(py, "tools/patch_amp.py", "add-model", stock, base, *MODEL)
-    if unit in IR_TITLE:
-        run(py, "tools/patch_amp.py", "ir-title", base, titled, *IR_TITLE[unit])
-        os.replace(titled, base)
-    else:
-        print("(no IR name in the block title: that patch is made for the HX Stomp only)")
+    run(py, "tools/patch_amp.py", "ir-title", base, titled, *IR_TITLE[unit])
+    os.replace(titled, base)
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:
