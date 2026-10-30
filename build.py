@@ -43,8 +43,8 @@ MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--displa
 FX_MODEL = ["--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion",
             "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2380", "--sdram-words", "0x5000"]
 # ir-title per unit.
-IR_TITLE = {"HX_Stomp": ["--preset-id", "147", "--preset-id", "148"],
-            "HX_Stomp_XL": ["--preset-id", "147", "--preset-id", "148"]}
+IR_TITLE = {"HX_Stomp": ["--preset-id", "147", "--fx-preset-id", "148"],
+            "HX_Stomp_XL": ["--preset-id", "147", "--fx-preset-id", "148"]}
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 

@@ -87,7 +87,7 @@ This writes `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (from the XL's file, `build
 4. Adds the kernel to the DSP's boot code and hooks it to an unused DSP primitive.
 5. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
-The HX Stomp result has MD5 `2265557caf5a5271d04058b99aa07a9a` (pinned in `tests/test_firmware.py`), byte for byte what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`. Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
+The HX Stomp result has MD5 `d450c571252d7fddec81430522fad891` (pinned in `tests/test_firmware.py`), byte for byte what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`. Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
 
 Only 4 of the 15 parts of the firmware change: the main application (its model tables and the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 

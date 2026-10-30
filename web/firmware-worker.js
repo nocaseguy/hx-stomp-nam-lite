@@ -26,8 +26,8 @@ var STOCK_MD5 = {
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "2265557caf5a5271d04058b99aa07a9a",
-  "HX_Stomp_XL": "32e9c2debea7764772755c2252a6235f",
+  "HX_Stomp": "d450c571252d7fddec81430522fad891",
+  "HX_Stomp_XL": "0f2a9cbf51804c857fc0486e7d3f9c6f",
 };
 
 // build.py's KERNEL, MODEL, FX_MODEL and IR_TITLE (tests/test_web_build.py keeps them equal).
@@ -37,8 +37,8 @@ var MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--di
 var FX_MODEL = ["--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion",
                 "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2380", "--sdram-words", "0x5000"];
 var IR_TITLE = {
-  "HX_Stomp": ["--preset-id", "147", "--preset-id", "148"],
-  "HX_Stomp_XL": ["--preset-id", "147", "--preset-id", "148"],
+  "HX_Stomp": ["--preset-id", "147", "--fx-preset-id", "148"],
+  "HX_Stomp_XL": ["--preset-id", "147", "--fx-preset-id", "148"],
 };
 
 // What build.py needs, relative to the repository root.

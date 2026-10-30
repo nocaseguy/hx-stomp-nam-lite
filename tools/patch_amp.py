@@ -783,12 +783,14 @@ def _cmp_r3(v):
     return struct.pack('<2H', 0xf1b3 | ((m >> 11) << 10), 0x0f00 | (((m >> 8) & 7) << 12) | (m & 0xff))
 
 
-def ir_title_cave(cave_va, pids, X):
+def ir_title_cave(cave_va, pids, X, fx_pids=()):
     """The cave at cave_va: (bytes, caveA address, caveB address). Only r3 is used, and IR_REG
     (r5 here) on the IR path (as the stock code there); every exit leaves r3 as the stock code would have
     or goes where r3 is written before it is read.
       caveA: ldrb r3,[r4,#12]; cmp r3,#15; bne 1f; b.w IR_CONT
-          1: ldrb.w r3,[sp,#11]; cbnz r3,3f      @ the cab half of an Amp+Cab block: no
+          1: [ldr.w r3,[r4,#1]; {cmp r3,#fx; beq 2f}...]   @ fx_pids: an effect, no cab half
+             ldrb.w r3,[sp,#11]; cbnz r3,3f      @ the cab half of an Amp+Cab block: no
+                                                 @ (a global UI byte: stale for an effect block)
              ldr.w r3,[r4,#1]                    @ the block's preset_id (half 0)
              {cmp r3,#pid; beq 2f}...; b 3f
           2: movs r5,#0; b.w IR_NAME             @ as an IR Single block, knob 0 (r5: IR_REG)
@@ -813,6 +815,10 @@ def ir_title_cave(cave_va, pids, X):
     labels['caveA'] = 0
     emit(bytes.fromhex('237b0f2b')); bcc(1, '1'); bw(X.IR_CONT)
     labels['1'] = len(out)
+    if fx_pids:
+        emit(bytes.fromhex('d4f80130'))
+        for p in fx_pids:
+            emit(_cmp_r3(p)); bcc(0, '2')
     emit(bytes.fromhex('9df80b30'))
     fix.append((len(out), 'cbnz', None, '3')); emit(b'\0\0')
     emit(bytes.fromhex('d4f80130'))
@@ -826,7 +832,7 @@ def ir_title_cave(cave_va, pids, X):
     labels['caveB'] = len(out)
     emit(bytes.fromhex('2b7b0f2b')); bcc(0, '4')
     emit(bytes.fromhex('d5f80130'))
-    for p in pids:
+    for p in list(pids) + list(fx_pids):
         emit(_cmp_r3(p)); bcc(0, '4')
     bw(X.B_RET)
     labels['4'] = len(out)
@@ -848,10 +854,10 @@ def ir_title_cave(cave_va, pids, X):
     return bytes(out), cave_va + labels['caveA'], cave_va + labels['caveB']
 
 
-def ir_title_entry0(e0, pids):
+def ir_title_entry0(e0, pids, fx_pids=()):
     """Entry 0 with the IR-name title for blocks of these preset_ids. Returns (e0, info)."""
-    pids = sorted(set(pids))
-    if not pids:
+    pids, fx_pids = sorted(set(pids)), sorted(set(fx_pids) - set(pids))
+    if not pids and not fx_pids:
         raise SystemExit('ir-title: no preset_ids')
     e0 = bytearray(e0)
     segs = _parse_e0_segments(e0)
@@ -883,9 +889,9 @@ def ir_title_entry0(e0, pids):
         lptr, lcnt = (struct.unpack('<I', vread(t + 4 * idx, 4))[0] for t in (A.BLIST_PTR_TAB, A.BLIST_CNT_TAB))
         for k in range(lcnt if lptr else 0):
             _, _, c_idx, u12 = struct.unpack('<IIiH', vread(lptr + 48 * k, 14))
-            if c_idx == -1 and u12 in pids:
+            if c_idx == -1 and (u12 in pids or u12 in fx_pids):
                 where[u12].append((idx // 4, idx % 4))
-    for p in pids:
+    for p in pids + fx_pids:
         if not where[p]:
             raise SystemExit(f'ir-title: preset_id {p} is in no browser list')
         bad = [cs for cs in where[p] if cs[0] == 15 or cs[1] == 1]
@@ -895,7 +901,7 @@ def ir_title_entry0(e0, pids):
     s6_hdr_off, s6_poff, s6_slen, s6_dst, s6_next_off = segs[6]
     assert s6_slen % 4 == 0 and s6_next_off <= len(e0)
     cave_va = s6_dst + s6_slen
-    cave, ca, cb = ir_title_cave(cave_va, pids, X)
+    cave, ca, cb = ir_title_cave(cave_va, pids, X, fx_pids)
     vwrite(X.SITE_A, thumb_bw(X.SITE_A, ca) + b'\x00\xbf')
     vwrite(X.SITE_B, thumb_bw(X.SITE_B, cb) + b'\x00\xbf')
     new_s6_slen = s6_slen + len(cave)
@@ -906,13 +912,13 @@ def ir_title_entry0(e0, pids):
     out_e0 = bytes(l6ia.fix_internal_crcs(out_e0))
     if len(out_e0) > E0_MAX:
         raise SystemExit(f'Entry 0 would be {len(out_e0):#x} bytes; its partition holds {E0_MAX:#x}')
-    return out_e0, {'pids': pids, 'cave': cave_va, 'caveA': ca, 'caveB': cb, 'cave_len': len(cave)}
+    return out_e0, {'pids': pids + fx_pids, 'fx_pids': fx_pids, 'cave': cave_va, 'caveA': ca, 'caveB': cb, 'cave_len': len(cave)}
 
 
-def ir_title(l6ia_bytes, pids, log=print):
+def ir_title(l6ia_bytes, pids, log=print, fx_pids=()):
     """ir_title_entry0 on an image's Entry 0. Returns (new l6ia bytes, info)."""
     e0 = get_entry_swapped(l6ia_bytes, 0)
-    new_e0, info = ir_title_entry0(e0, pids)
+    new_e0, info = ir_title_entry0(e0, pids, fx_pids)
     new_l6ia, _, _ = l6ia.rebuild_archive(l6ia_bytes, {0: new_e0})
     log(f"[+] Entry 0: IR-name title for preset_id {', '.join(map(str, info['pids']))}: "
         f"cave {info['cave_len']} B at {info['cave']:#x}; {len(e0):#x} -> {len(new_e0):#x} bytes")
@@ -1429,7 +1435,7 @@ def add_model_entry3(e3, src, new_name, display_name, blob_index, nam):
 
 def cmd_ir_title(args):
     l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
-    new_l6ia, _ = ir_title(l6ia_bytes, args.preset_id)
+    new_l6ia, _ = ir_title(l6ia_bytes, args.preset_id or [], fx_pids=args.fx_preset_id or [])
     donor = args.input if is_hxf else args.donor
     save_l6ia_to_any(new_l6ia, args.output, donor_hxf=donor)
     print(f"[+] Wrote {args.output}")
@@ -1597,8 +1603,10 @@ def main():
     p_irt = sub.add_parser('ir-title', help="A NAM block's title shows its User IR's name")
     p_irt.add_argument('input', help='Input .hxf or L6IA (after add-model)')
     p_irt.add_argument('output', help='Output .hxf or L6IA')
-    p_irt.add_argument('--preset-id', type=int, action='append', required=True,
+    p_irt.add_argument('--preset-id', type=int, action='append', 
                        help="the model's preset_id (add-model --preset-id); repeat for several models")
+    p_irt.add_argument('--fx-preset-id', type=int, action='append',
+                       help="a model added as an effect (add-fx-model): no cab-half test; repeatable")
     p_irt.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
 
     p_pat = sub.add_parser('patch', help='Inject the SHARC kernel into Entry 2 and hook primitive 0x9c75 to it')
