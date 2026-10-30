@@ -47,9 +47,13 @@ NL = len(KERNEL)
 CODE = 0xC4EF8                    # the kernel's address (48-bit, Block 2's free tail)
 NW0 = 0xC0000
 B2_END = 0xC8000
-B3 = 0xE4850                      # Block 3 from here (0xe4842..0xe4850 left free)
+B3 = 0xE4850                      # Block 3 from here (kit-probe keeps 0xe4842..0xe4850)
 B3_END = 0xE8000
-REP = 0xE4860                     # the report area: 16 words of counters
+NW3, PM3_END = 0xE0000, 0xE5555   # Block 3 starts here in both views; its last instruction + 1
+COLD_END = B3_END - 16            # the cold code ends here (the prof test images stamp 0xe7ffe..f)
+XHI = 64                          # X (48) and IN (16): in Block 2 when it has room
+WBUF_N = 156                      # a near layer's weights, copied each call (153, in 4-word steps)
+REP = 0xE4860                     # the kit report area (kit-probe plays these 16 words)
 DDR2 = 0x324500
 DDR2_END = 0x328000
 IR_FLAG, IR_TOP = 0x2AB56E, 0x2ABDED
@@ -100,11 +104,17 @@ def stream_offsets():
     return out
 
 
-def code_size():
-    src = open(os.path.join(here, "nam_multi_kernel.asm")).read()
+def code_sizes(meter=False, nodma=False, prof=None):
+    """(Block 2 instructions, cold instructions in Block 3)."""
+    src = _variant(open(os.path.join(here, "nam_multi_kernel.asm")).read(), meter, nodma, prof)
     secs, _ = sasm.assemble(src.replace("// EQUS (nam_multi.py puts the layout here)\n",
                                         equs({k: 0 for k in names()})), "nam_multi_kernel.asm")
-    return sum(len(s.words) for s in secs if s.kind == "pm")
+    pm = [len(s.words) for s in secs if s.kind == "pm"]
+    return pm[0], sum(pm[1:])
+
+
+def code_size(meter=False, nodma=False, prof=None):
+    return code_sizes(meter, nodma, prof)[0]
 
 
 def names():
@@ -116,7 +126,7 @@ def names():
         "SDR_NEED", "MAGIC", "POLLMAX", "LPOLLMAX", "BACKOFF_N", "T_MAX", "N_STREAM", "KM1", "T_SIZE",
         "TCB_EI", "TCB_IC", "TCB_II", "IR_FLAG", "IR_TOP", "DMAC0", "EIEP0", "EMEP0", "ICEP0", "IIEP0", "IMEP0",
         "CPEP0", "DFLSH", "DEN_CHEN", "TRAN", "BUSYM", "EXTSM", "EP0IMSK", "HXK_ENTRY_INST", "HXK_INST_SDRAM",
-        "HXK_INST_SDRAM_END"]
+        "HXK_INST_SDRAM_END", "COLD_PM", "WBUF"]
 
 
 def equs(v):
@@ -126,12 +136,13 @@ def equs(v):
 class Layout:
     """Every address of the kernel's memory, for `slots` slots."""
 
-    def __init__(self, slots=3, n_code=None, backoff=BACKOFF_N, staging="b2"):
+    def __init__(self, slots=3, n_code=None, backoff=BACKOFF_N, staging="b2", n_cold=None, wbuf=None):
         """staging: "b2" puts the staging buffers in Block 2 after the code (the far layers'
         tap reads then never meet their weights' block); "b3" in Block 3, which leaves
-        Block 2 free after the code for another kernel."""
+        Block 2 free after the code for another module (kit-probe)."""
         self.slots, self.far_d, self.staging = slots, FAR_D[slots], staging
         self.n_code = code_size() if n_code is None else n_code
+        self.n_cold = code_sizes()[1] if n_cold is None else n_cold
         n = self.n_code
         self.b2_data = NW0 + (CODE - NW0) * 3 // 2 + -(-(n + (n & 1)) * 3 // 2)
         self.far = [i for i, (k, d) in enumerate(zip(KERNEL, DILATION)) if k == 6 and d >= self.far_d]
@@ -163,6 +174,20 @@ class Layout:
         else:
             self.b2_to = a
             b3 = 2 * SB_WORDS
+        # X and IN after them in Block 2 when it has room: the pair loop reads them beside the
+        # weights' PM reads, a cycle more each in the weights' block. HS stays in Block 3: its
+        # accesses have no PM partner, and in Block 2 they would meet the code's fetch
+        # (research NAM_LITE_DSP_LOAD.md, tools/sharc/nam_stalls.py)
+        self.xhi_b2 = self.b2_to + XHI <= B2_END
+        if self.xhi_b2:
+            self.xhi = self.b2_to
+            self.b2_to += XHI
+        # a near layer's weights, copied there each call: its tap reads (rings in Block 3)
+        # then meet them in no block
+        self.wbuf_b2 = self.b2_to + WBUF_N <= B2_END and wbuf != "b3"
+        if self.wbuf_b2:
+            self.wbuf = self.b2_to
+            self.b2_to += WBUF_N
         # Block 3
         g = dict(G_SDR=B3, G_LEVEL=B3 + 1, J_NEXT=B3 + 2, J_BUSY=B3 + 3, J_DONE=B3 + 4, EVENTS=B3 + 5,
                  DMA_FAIL=B3 + 6, J_CHKADR=B3 + 7, J_CHKVAL=B3 + 8, FLAGL=B3 + 9)
@@ -181,9 +206,14 @@ class Layout:
 
         take("SAVE", 64)
         take("SLOTTAB", slots)
-        take("IN", 16)
-        take("X", 48)
+        if self.xhi_b2:
+            alloc.update(X=self.xhi, IN=self.xhi + 48)
+        else:
+            take("IN", 16)
+            take("X", 48)
         take("HS", 48)
+        if not self.wbuf_b2:
+            self.wbuf = take("WBUF", WBUF_N)
         if b3:
             take("SB", b3)
             self.sb = [alloc["SB"], alloc["SB"] + SB_WORDS]
@@ -213,8 +243,13 @@ class Layout:
         self.slot = [a + s * o for s in range(slots)]
         a += slots * o
         self.b3_to = a
-        if a > B3_END:
-            raise SystemExit(f"{slots} slots do not fit: Block 3 to {a:#x} (> {B3_END:#x})")
+        # the cold code at the top of Block 3, below COLD_END
+        cw = -(-(self.n_cold + (self.n_cold & 1)) * 3 // 2)
+        pm = NW3 + (COLD_END - cw - NW3) * 2 // 3
+        self.cold_pm = pm - (pm & 1)
+        self.cold_nw = NW3 + (self.cold_pm - NW3) * 3 // 2
+        if a > self.cold_nw:
+            raise SystemExit(f"{slots} slots do not fit: Block 3 to {a:#x} (> {self.cold_nw:#x}, the cold code)")
         # each instance's SDRAM block: the far rings (L' + a 16-word mirror each), HIST, sentinels
         self.lp = {i: rup16(self.ring[i]) for i in self.far}
         o, self.far_off = 0, {}
@@ -232,7 +267,7 @@ class Layout:
         v.update(SAVE=alloc["SAVE"], REP=REP, SLOTTAB=alloc["SLOTTAB"], NSLOTS=slots, IN=alloc["IN"], X=alloc["X"],
                  HS=alloc["HS"], TABLE=alloc["TABLE"], NLAYERS=NL, JOBS=alloc["JOBS"], NJOBS=F + len(self.groups), CLR=alloc["CLR"],
                  NCLR=self.nclr, DRIVE_TAB=alloc["DRIVE_TAB"], FADE_TAB=alloc["FADE_TAB"], EQ_TAB=self.eq_tab,
-                 STOMP_GAIN=self.stomp_gain,
+                 STOMP_GAIN=self.stomp_gain, COLD_PM=self.cold_pm, WBUF=self.wbuf,
                  LBUF=self.sb[0], LBUF_N=2 * SB_WORDS, LCH=alloc["LCH"],
                  LCH_CP=(alloc["LCH"] + TCB_II) & 0x7FFFF, FARTAB=alloc["FARTAB"],
                  WADDR=alloc["WADDR"], NFAR=F, S_STREAM=S_STREAM, S_HB0=self.hb[0], S_HB1=self.hb[1],
@@ -260,7 +295,11 @@ class Layout:
                 mem[a + i] = x & 0xFFFFFFFF
 
         put(B3, [0] * 13)
-        put(self.sb[0], [0] * (2 * SB_WORDS))                # static: part of the boot-loaded sections
+        put(self.sb[0], [0] * (2 * SB_WORDS))                # static, so the kit counts them as claimed
+        if self.xhi_b2:
+            put(self.xhi, [0] * XHI)                         # (the same for X and IN in Block 2,
+        if self.wbuf_b2:
+            put(self.wbuf, [0] * WBUF_N)                     # and WBUF)
         put(REP, [MAGIC] + [0] * 15)
         put(al["SLOTTAB"], self.slot)
         for s in self.slot:
@@ -350,24 +389,176 @@ class Layout:
         """[start, end) ranges the kernel writes at run time (module.toml [[memory]] and its
         static sections must cover them)."""
         sb = (self.sb[0], self.sb[0] + 2 * SB_WORDS)
-        return [sb, (B3, self.b3_to), (DDR2, self.ddr2_to), (DMAC0, DMAC0 + 1), (EIEP0, CPEP0 + 1)]
+        xhi = [(self.xhi, self.xhi + XHI)] if self.xhi_b2 else []
+        xhi += [(self.wbuf, self.wbuf + WBUF_N)] if self.wbuf_b2 else []
+        return [sb, (B3, self.b3_to), (DDR2, self.ddr2_to), (DMAC0, DMAC0 + 1), (EIEP0, CPEP0 + 1)] + xhi
+
+    def v_x(self):
+        return self.alloc["X"]
 
     def report(self):
         return {"slots": self.slots, "far layers": len(self.far), "far d >=": self.far_d,
                 "code instructions": self.n_code, "staging": f"{self.sb[0]:#x}..{self.sb[0] + 2 * SB_WORDS:#x}",
                 "block 2 free after": f"{self.b2_to:#x} ({B2_END - self.b2_to} words)",
-                "block 3": f"{B3:#x}..{self.b3_to:#x} ({B3_END - self.b3_to} words free)",
+                "block 3": f"{B3:#x}..{self.b3_to:#x} ({self.cold_nw - self.b3_to} words free below the cold code)",
+                "cold code": f"{self.n_cold} instructions at PM {self.cold_pm:#x} (nw {self.cold_nw:#x}..)",
+                "X, IN": f"{self.v_x():#x}.. ({'Block 2' if self.xhi_b2 else 'Block 3'})",
+                "WBUF": f"{self.wbuf:#x}.. ({'Block 2' if self.wbuf_b2 else 'Block 3'})",
                 "slot words": self.slot_size, "sdram words needed": self.sdr_need,
                 "DDR2": f"{DDR2:#x}..{self.ddr2_to:#x}"}
 
 
-def build(slots=3, backoff=BACKOFF_N, staging="b2"):
+# The meter (build(meter=True), a test image only): a block whose Treble is at 10 plays,
+# instead of its output, groups of 64 blocks: 0.5; this call's cycles (EMUCLK) x 0.25 /
+# 150,000; 0.35; the stock idle word (the DSP's idle %, DM 0xC2FD5) x 0.0025; 0.2; this
+# call's DMA wait polls (REP + R_POLLS) x 2.5e-4; then the cycles again (8 groups). Each group a
+# 1.5 kHz square wave; tools/nam_meter.py reads it from a USB recording. DM(16..17, I0),
+# which no knob writes, keep the call's start and the block count.
+METER_ENTRY = """    R0 = EMUCLK;                        // (meter) this call's start
+    DM(16, I0) = R0;
+"""
+METER_EXIT = """    R0 = DM(SAVE + 31);                 // (meter) the instance's I0
+    I4 = R0;
+    R0 = DM(10, I4);                    // Treble at 10 (1.0): this block is the meter
+    F1 = 0.999;
+    COMP(F0, F1);
+    IF LT JUMP mt_end;
+    R0 = EMUCLK;
+    R1 = DM(16, I4);
+    R0 = R0 - R1;                       // this call's cycles
+    R2 = DM(17, I4);
+    R2 = R2 + 1;
+    DM(17, I4) = R2;
+    R3 = LSHIFT R2 BY -6;
+    R1 = 7;
+    R3 = R3 AND R1;                     // groups: 0 6 marker, 1 7 cycles, 2 marker, 3 idle, 4 marker, 5 polls
+    F8 = 0.5;
+    R1 = 1;
+    COMP(R3, R1);
+    IF EQ JUMP mt_cyc;
+    R1 = 7;
+    COMP(R3, R1);
+    IF EQ JUMP mt_cyc;
+    R1 = 3;
+    COMP(R3, R1);
+    IF EQ JUMP mt_idle;
+    R1 = 5;
+    COMP(R3, R1);
+    IF EQ JUMP mt_poll;
+    R1 = 2;
+    COMP(R3, R1);
+    IF NE JUMP mt_m4;
+    F8 = 0.35;                          // the marker before the idle group
+    JUMP mt_w;
+mt_m4:
+    R1 = 4;
+    COMP(R3, R1);
+    IF NE JUMP mt_w;
+    F8 = 0.2;                           // the marker before the polls group
+    JUMP mt_w;
+mt_cyc:
+    F8 = FLOAT R0;
+    F1 = 1.6666667e-6;
+    F8 = F8 * F1;
+    JUMP mt_w;
+mt_poll:
+    R8 = DM(REP + R_POLLS);
+    F8 = FLOAT R8;
+    F1 = 2.5e-4;
+    F8 = F8 * F1;
+    JUMP mt_w;
+mt_idle:
+    F8 = DM(0xC2FD5);
+    F1 = 0.0025;
+    F8 = F8 * F1;
+mt_w:
+    R1 = 1;
+    R1 = R2 AND R1;
+    IF NE F8 = -F8;
+    I11 = B11;
+    M9 = 1;
+    LCNTR = 16, DO mt_l UNTIL LCE;
+mt_l: PM(I11, M9) = F8;
+mt_end:
+"""
+# The small meter (build(meter=2), a test image only): every block plays the stock idle
+# word x 0.0025 (a 24 kHz square wave) instead of its output. 6 instructions, so the
+# release layout (staging in Block 2, 17 words left) is kept; read at unity gain (nothing
+# after the block): tools/nam_meter.py --idle.
+METER_IDLE_EXIT = """    F8 = DM(0xC2FD5);                   // (meter 2) the idle word x 0.0025
+    F1 = 0.0025;
+    F8 = F8 * F1;
+    I11 = B11;
+    LCNTR = 16, DO mt_l UNTIL LCE;
+mt_l: F8 = -F8, PM(I11, M9) = F8;
+"""
+# The section probe (build(prof=(A, B)), a test image only): EMUCLK stored at point A
+# (and at B, or read at the exit for B = "back"); every block then plays (B - A) cycles
+# x 0.25 / 150,000 (a 24 kHz square wave) instead of its output: tools/nam_meter.py
+# --cycles, at unity gain. At most 11 instructions: the release layout is kept.
+PROF_AT = {                       # where a stamp goes: (text, before or after it)
+    "entry": ("    M9 = 1; M10 = 2;\n", "after"),
+    "jobs": ("    // ---- the DMA jobs of this block, then the model\n", "before"),
+    "layers": ("    F5 = 0.01; S5 = 0.01;", "before"),
+    "head": ("    // ---- the head: 16 taps", "before"),
+    "mix": ("    // ---- the mix: the model's output", "before"),
+    "endwait": ("    // ---- the block's DMA jobs all done", "before"),
+}
+PROF_A, PROF_B = 0xE7FFE, 0xE7FFF  # the top of Block 3, free in every layout
+
+
+def _prof(src, a, b):
+    for name, addr in ((a, PROF_A), (b, PROF_B)):
+        if name == "back":
+            continue
+        text, where = PROF_AT[name]
+        assert src.count(text) == 1, text
+        stamp = f"    DM({addr:#x}) = EMUCLK;              // (prof)\n"
+        src = src.replace(text, text + stamp if where == "after" else stamp + text)
+    end = "    R0 = EMUCLK;\n" if b == "back" else f"    R0 = DM({PROF_B:#x});\n"
+    return src.replace("// METER_EXIT\n", end + f"""    R1 = DM({PROF_A:#x});                 // (prof) B - A
+    R0 = R0 - R1;
+    F8 = FLOAT R0;
+    F1 = 1.6666667e-6;
+    F8 = F8 * F1;
+    I11 = B11;
+    LCNTR = 16, DO mt_l UNTIL LCE;
+mt_l: F8 = -F8, PM(I11, M9) = F8;
+""")
+
+
+# nodma (a test image only, with the meter): after the model's load, no tap staging and
+# no write-back DMA: the layers read stale staging buffers (the output is wrong), so the
+# meter shows the call's compute and core SDRAM accesses alone.
+NODMA = (("pump:\n", "pump:\n    RTS;                                // (nodma)\n"),
+         ("fwait:\n", "fwait:\n    RTS;                                // (nodma)\n"),
+         ("    R9 = POLLMAX;\nn_ew:", "    JUMP n_ewd;                         // (nodma)\n    R9 = POLLMAX;\nn_ew:"))
+
+
+def _variant(src, meter=False, nodma=False, prof=None):
+    if prof:
+        src = _prof(src, *prof)
+    elif meter == 2:
+        src = src.replace("// METER_EXIT\n", METER_IDLE_EXIT)
+    elif meter:
+        src = src.replace("// METER_ENTRY\n", METER_ENTRY).replace("// METER_EXIT\n", METER_EXIT)
+    for a, b in (NODMA if nodma else ()):
+        assert src.count(a) == 1, a
+        src = src.replace(a, b)
+    return src
+
+
+def build(slots=3, backoff=BACKOFF_N, staging="b2", meter=False, nodma=False, prof=None, wbuf=None):
     """(asm, layout): the kernel with its addresses and tables."""
-    lay = Layout(slots, backoff=backoff, staging=staging)
+    hot, cold = code_sizes(meter, nodma, prof)
+    lay = Layout(slots, n_code=hot, n_cold=cold, backoff=backoff, staging=staging, wbuf=wbuf)
     src = open(os.path.join(here, "nam_multi_kernel.asm")).read()
     src = src.replace("// EQUS (nam_multi.py puts the layout here)\n", equs(lay.v))
+    src = _variant(src, meter, nodma, prof)
     secs, _ = sasm.assemble(src, "nam_multi_kernel.asm")
-    assert sum(len(s.words) for s in secs if s.kind == "pm") == lay.n_code
+    pm = [s for s in secs if s.kind == "pm"]
+    assert pm[0].addr == CODE and len(pm[0].words) == lay.n_code
+    assert all(s.addr == lay.cold_pm for s in pm[1:]) and sum(len(s.words) for s in pm[1:]) == lay.n_cold
     mem = lay.words()
     lines = ["", "// ---- tables, written by nam_multi.py ----"]
     last = None
@@ -1004,6 +1195,21 @@ class KernelCheck:
         ld = [c for _, c in self.loads]
         return dict(steady_worst=max(st), steady_mean=sum(st) / len(st), load_worst=max(ld),
                     worst=max(c for _, c in self.rig.cycles), timeout=getattr(self, "timeout_cycles", None))
+
+
+def contract_with_dma(placed, blocks=4, **dma):
+    """The kit's contract suite (hxkit/conformance.py) with ChainDma on its simulator:
+    with the channel modelled, every case runs the model (two instances, each in a
+    slot), not the silent DMA-failure path the plain suite sees. IR slots 1 and 128
+    (Model's test values) hold the test model: there is no built-in model."""
+    import conformance
+    s = conformance.Suite(placed, blocks)
+    s.sim.wr(DMAC0, 0)                                   # its reset value (the suite starts claims random)
+    for slot in (1, 128):
+        set_ir(s.sim, slot, nam_lite.ir_samples(nam_lite.placeholder(), None))
+    s.dma = ChainDma(s.sim, **dma)
+    n = s.run()
+    return s, n
 
 
 def check(asm, lay, w, **kw):

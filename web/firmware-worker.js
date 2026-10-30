@@ -26,14 +26,14 @@ var STOCK_MD5 = {
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "939b1dfeeab2bcc22cb819a5b092bd7b",
-  "HX_Stomp_XL": "55b3df60280ec9232f63a5d873515ad9",
+  "HX_Stomp": "a819de1c0d5edfcc78ca334764ed3f03",
+  "HX_Stomp_XL": "441028761949f6fdd29435197f9d7077",
 };
 
 // build.py's KERNEL, MODEL and IR_TITLE (tests/test_web_build.py keeps them equal).
 var KERNEL = "tools/sharc/nam_multi.py";
 var MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
-             "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2700", "--sdram-words", "0x5000"];
+             "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2500", "--sdram-words", "0x5000"];
 var IR_TITLE = {
   "HX_Stomp": ["--preset-id", "147"],
   "HX_Stomp_XL": ["--preset-id", "147"],

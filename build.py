@@ -37,7 +37,7 @@ STOCK_MD5 = {
 # saved with an earlier one open with this one.
 KERNEL = "tools/sharc/nam_multi.py"
 MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
-         "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2700", "--sdram-words", "0x5000"]
+         "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2500", "--sdram-words", "0x5000"]
 # ir-title per unit.
 IR_TITLE = {"HX_Stomp": ["--preset-id", "147"], "HX_Stomp_XL": ["--preset-id", "147"]}
 HERE = os.path.dirname(os.path.abspath(__file__))

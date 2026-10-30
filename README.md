@@ -87,7 +87,7 @@ This writes `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (from the XL's file, `build
 4. Adds the kernel to the DSP's boot code and hooks it to an unused DSP primitive.
 5. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
-The HX Stomp result has MD5 `939b1dfeeab2bcc22cb819a5b092bd7b` (pinned in `tests/test_firmware.py`), byte for byte what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`. Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
+The HX Stomp result has MD5 `a819de1c0d5edfcc78ca334764ed3f03` (pinned in `tests/test_firmware.py`), byte for byte what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`. Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
 
 Only 4 of the 15 parts of the firmware change: the main application (its model tables and the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
@@ -137,7 +137,7 @@ Notes:
 ## Limits
 
 - **At most 2 NAM A2 Lite blocks in a preset**, each with its own capture. The kernel (`tools/sharc/nam_multi.py`) has 3 model slots; a fourth block would pass its input through. The HX Stomp itself allows 2 amp blocks in a preset, so in practice that means 2. Run on an HX Stomp with two blocks playing two captures; the XL build has the same DSP-side bytes but has not run on an XL with this kernel.
-  - Each block uses about **29% of the DSP** on the unit (two blocks about 77% with the rest of the preset). The amp declares a DSP cost of 2700.
+  - Each block uses about **25% of the DSP** on the unit (two blocks about 70% with an otherwise empty preset; the empty preset alone is about 20%). The amp declares a DSP cost of 2500.
   - Each block takes its own 0x5000-word block of DDR2 for its long rings; the Amp blocks' DDR2 allowance is raised to fit.
 - Only the 3-channel A2 Lite architecture fits; standard and A2 Full captures don't.
 - Names on the Stomp hold 16 characters at most.

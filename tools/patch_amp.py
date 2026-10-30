@@ -393,7 +393,9 @@ def cmd_patch(args):
     entry_addr = syms.get('CUSTOM_AMP_ENTRY', pm_secs[0].addr if pm_secs else secs[0].addr)
     for s in secs:
         if s.kind == 'pm':
-            assert s.addr + len(s.words) <= 0x0c5554, f'PM kernel at {s.addr:#x} exceeds Block 2 tail 0x0c5554'
+            assert any(lo <= s.addr and s.addr + len(s.words) <= hi
+                       for lo, hi in ((0x0c4ef8, 0x0c5554), (0x0e302c, 0x0e5555))), \
+                f'PM kernel at {s.addr:#x}: neither in Block 2\'s tail nor in Block 3\'s free region'
             ldr_words += pack_init_l48(s.addr, s.words)
             print(f"[+] Entry 2: assembled {len(s.words)} 48-bit instructions from {os.path.basename(args.asm)} @ PM {s.addr:#x}")
         elif s.kind == 'dm':

@@ -119,11 +119,14 @@ CUSTOM_AMP_ENTRY:
     DM(SAVE + 59) = M5;
     DM(SAVE + 60) = M6;
     DM(SAVE + 61) = M7;
+    DM(SAVE + 62) = I12;                // (fcopy reads X through PM with I12)
+    DM(SAVE + 63) = L12;
     L0 = 0; L1 = 0; L2 = 0; L3 = 0; L4 = 0; L5 = 0;
-    L8 = 0; L9 = 0; L10 = 0; L11 = 0;
+    L8 = 0; L9 = 0; L10 = 0; L11 = 0; L12 = 0;
     B10 = I1;                           // the block's input and output, through PM
     B11 = I2;
     M9 = 1; M10 = 2;
+// METER_ENTRY
 
     R0 = 0;
     DM(G_JOBS) = R0;                    // no DMA jobs in this call (yet)
@@ -350,21 +353,6 @@ n_same:
     R0 = MIN(R0, R1);
     DM(S_G1, I6) = R0;
     JUMP n_have;
-n_none:
-    R0 = DM(S_SIG, I6);                 // no model in that slot: silence (after the tail)
-    R0 = PASS R0;
-    IF EQ JUMP n_zero;
-    CALL n_cut;
-    R0 = 0;
-    DM(S_SIG, I6) = R0;
-n_zero:                                 // no model this block: the tail alone
-    R0 = 0;
-    DM(S_G1, I6) = R0;
-    DM(P_SIGN, I0) = R0;                // the next call checks the model
-    I11 = B11;
-    LCNTR = 16, DO n_ldz UNTIL LCE;
-n_ldz: PM(I11, M9) = R0;
-    JUMP n_mix;
 
 n_have:
     // ---- the tone knobs, each step's five coefficients from EQ_TAB when it moves
@@ -546,6 +534,29 @@ n_conv:
       R15 = R15 + R0;
       I9 = R15;
       M8 = DM(T_NW, I4);                // back to them after each pair: -(words a layer)
+      R2 = DM(T_FAR, I4);               // a near layer: its weights into WBUF (Block 2), so its
+      R2 = PASS R2;                     // taps' ring reads (Block 3) do not meet them in one block
+      IF NE JUMP n_wfar;                // (a far layer's taps read Block 2's staging buffers)
+      I3 = R15;
+      I9 = WBUF;
+      R0 = M8;
+      R0 = -R0;
+      R1 = 3;
+      R0 = R0 + R1;
+      R0 = LSHIFT R0 BY -2;             // word pairs / 2 (WBUF_N: up to 3 more words read
+      R0 = R0 - 1;                      // and written), the loop's count
+      BIT SET MODE1 PEYEN;              // two words a move (M7 = M10 = 2), in F2 and F3
+      NOP;                              // by turns: no store of a register loaded just before
+      F2 = DM(I3, M7);
+      F3 = DM(I3, M7);
+      LCNTR = R0, DO n_wc UNTIL LCE;
+        F2 = DM(I3, M7), PM(I9, M10) = F2;
+n_wc:   F3 = DM(I3, M7), PM(I9, M10) = F3;
+      PM(I9, M10) = F2;
+      PM(I9, M10) = F3;
+      BIT CLR MODE1 PEYEN;
+      I9 = WBUF;
+n_wfar:
       R0 = DM(T_S, I4);
       M0 = R0;
       R1 = 2;
@@ -858,19 +869,6 @@ n_ewd:
     DM(S_T, I6) = R0;
     JUMP n_back;
 
-// ---- the block passes its input through (no slot)
-m_pass:
-    LCNTR = 16, DO m_passw UNTIL LCE;
-      R0 = DM(I1, 1);
-m_passw: DM(I2, 1) = R0;
-    JUMP n_back;
-
-// ---- no SDRAM block of the size it needs (the build did not raise the budget)
-m_nosdr:
-    R0 = DM(REP + R_NOSDR);
-    R0 = R0 + 1;
-    DM(REP + R_NOSDR) = R0;
-    JUMP m_pass;
 
 // ---- a DMA failed or the channel was not free: silence; the slot starts again
 // after BACKOFF_N calls of any instance
@@ -886,6 +884,7 @@ m_silent:
 m_silw: PM(I11, M9) = R0;
 
 n_back:
+// METER_EXIT
     R0 = DM(SAVE + 1);
     R1 = DM(SAVE + 2);
     R2 = DM(SAVE + 3);
@@ -949,9 +948,265 @@ n_back:
     M5 = DM(SAVE + 59);
     M6 = DM(SAVE + 60);
     M7 = DM(SAVE + 61);
+    I12 = DM(SAVE + 62);
+    L12 = DM(SAVE + 63);
     MODE1 = DM(SAVE + 0);
     NOP;
     RTS (LR);
+
+// ---- the DMA jobs: one chain at a time on EP DMA channel 0. pump notices the
+// running chain's end (its sentinel) and starts the next job when it is ready
+// (EVENTS: +1 when a far layer has its newest tap, +1 when it is computed).
+// Uses R0-R3, R6, R8, R10, I0-I3, I5, M4, L1, L2.
+pump:
+    I5 = DM(J_CHKADR);                  // (early: an I register used just after its load stalls)
+    R0 = DM(DMA_FAIL);
+    R0 = PASS R0;
+    IF NE RTS;
+    R0 = DM(J_BUSY);
+    R0 = PASS R0;
+    IF EQ JUMP p_next;
+    R1 = DM(0, I5);
+    R0 = DM(J_CHKVAL);
+    COMP(R0, R1);
+    IF NE RTS;
+    R0 = 0;
+    DM(J_BUSY) = R0;
+    R0 = DM(J_DONE);
+    R0 = R0 + 1;
+    DM(J_DONE) = R0;
+p_next:
+    R0 = DM(J_NEXT);
+    R1 = NJOBS;
+    COMP(R0, R1);
+    IF GE RTS;
+    R1 = LSHIFT R0 BY 3;
+    R2 = JOBS;
+    R1 = R1 + R2;
+    I5 = R1;
+    R3 = DM(EVENTS);
+    R2 = DM(J_READY, I5);
+    COMP(R3, R2);
+    IF LT RTS;
+    R0 = R0 + 1;
+    DM(J_NEXT) = R0;
+    R0 = 1;
+    DM(J_BUSY) = R0;
+    R0 = DM(J_TYPE, I5);
+    R0 = PASS R0;
+    IF NE JUMP p_w;
+    // a far layer's taps: TCB 3t + c reads tap t (oldest first) of channel c
+    I3 = DM(J_ROW, I5);
+    I0 = DM(J_CHAIN, I5);
+    MODIFY(I0, TCB_EI);
+    R8 = DM(G_SDR);
+    R1 = DM(T_RB, I3);
+    R8 = R8 + R1;                       // channel 0's ring
+    M4 = DM(T_LW, I3);
+    R2 = DM(M4, I6);                    // this block's write offset
+    R10 = DM(T_L, I3);
+    R1 = DM(T_KD, I3);
+    R2 = R2 + R1;                       // the oldest tap's window
+    IF LT R2 = R2 + R10;
+    R3 = DM(T_D, I3);
+    R6 = DM(T_STRIDE, I3);
+    LCNTR = KM1, DO p_rl UNTIL LCE;
+      R1 = R8 + R2;
+      DM(I0, 6) = R1;
+      R1 = R1 + R6;
+      DM(I0, 6) = R1;
+      R1 = R1 + R6;
+      DM(I0, 6) = R1;
+      R2 = R2 + R3;
+      COMP(R2, R10);
+p_rl: IF GE R2 = R2 - R10;
+    R1 = DM(G_SDR);                     // the sentinel TCB: MAGIC from SENT into the flag
+    R2 = SENT_OFF;
+    R1 = R1 + R2;
+    DM(0, I0) = R1;
+    I0 = DM(J_FLAG, I5);
+    R1 = 0;
+    DM(0, I0) = R1;
+    R1 = I0;
+    DM(J_CHKADR) = R1;
+    R1 = MAGIC;
+    DM(J_CHKVAL) = R1;
+    R0 = 0;                             // external -> internal
+    JUMP p_go;
+p_w:
+    // a write-back: each far layer's 16 new words per channel, then the sequence number
+    L1 = 0;
+    L2 = 0;
+    R1 = DM(J_CHAIN, I5);
+    R2 = TCB_EI;
+    R1 = R1 + R2;
+    I0 = R1;
+    I1 = DM(J_ROW, I5);                 // (FARTAB + the group's first far layer)
+    I2 = DM(J_FLAG, I5);                // (WADDR + the same)
+    R2 = DM(J_N, I5);
+    LCNTR = R2, DO p_wl UNTIL LCE;
+      R1 = DM(I1, 1);
+      I3 = R1;
+      R6 = DM(T_STRIDE, I3);
+      R1 = DM(I2, 1);
+      DM(I0, 6) = R1;
+      R1 = R1 + R6;
+      DM(I0, 6) = R1;
+      R1 = R1 + R6;
+p_wl: DM(I0, 6) = R1;
+    R1 = DM(G_SDR);
+    R2 = SENT2_OFF;
+    R1 = R1 + R2;
+    DM(0, I0) = R1;
+    DM(J_CHKADR) = R1;
+    R1 = I6;
+    R2 = S_SEQ;
+    R1 = R1 + R2;
+    DM(3, I0) = R1;                     // (TCB_II - TCB_EI)
+    R1 = DM(S_SEQ, I6);
+    R1 = R1 + 1;
+    DM(S_SEQ, I6) = R1;
+    DM(J_CHKVAL) = R1;
+    R0 = TRAN;                          // internal -> external
+p_go:
+    R1 = DFLSH;                         // HRM: flush, clear CP, enable with CHEN, then CP
+    DM(DMAC0) = R1;                     // starts the chain
+    R1 = 0;
+    DM(CPEP0) = R1;
+    R1 = DEN_CHEN;
+    R1 = R1 OR R0;
+    DM(DMAC0) = R1;
+    R1 = DM(J_CP, I5);
+    DM(CPEP0) = R1;
+    RTS;
+
+// Wait (bounded) for this far layer's taps (job J_DONE > T_RPOS).
+fwait:
+    R9 = POLLMAX;
+fw_l: CALL pump;
+    R0 = DM(J_DONE);
+    R1 = DM(T_RPOS, I4);
+    COMP(R0, R1);
+    IF GT RTS;
+    R0 = DM(DMA_FAIL);
+    R0 = PASS R0;
+    IF NE RTS;
+    R0 = DM(REP + R_POLLS);
+    R0 = R0 + 1;
+    DM(REP + R_POLLS) = R0;
+    R9 = R9 - 1;
+    IF NE JUMP fw_l;
+    JUMP dma_abort;
+
+// A far layer has its taps: the newest (this block's x) into the staging buffer
+// and the write-back buffer; the windows from before the load to the silence
+// state; the mirror when the write offset is 0; then the next job may start.
+fcopy:
+    R3 = DM(T_SB, I4);
+    R1 = 80;                            // tap K-1 of channel 0
+    R3 = R3 + R1;
+    I0 = R3;
+    I8 = DM(T_OB, I4);                  // and the write-back buffer (through PM)
+    I12 = X;                            // X read through PM: X shares Block 2 with this code
+    BIT SET MODE1 PEYEN;                // two words a move (M7 = M10 = 2)
+    NOP;
+    LCNTR = 3, DO fc_c UNTIL LCE;
+      LCNTR = 8, DO fc_l UNTIL LCE;
+        F0 = PM(I12, M10);
+fc_l:   DM(I0, M7) = F0, PM(I8, M10) = F0;
+      MODIFY(I0, 80);
+fc_c: NOP;
+    BIT CLR MODE1 PEYEN;
+    NOP;
+    M4 = DM(T_LW, I4);                  // where the write-back goes
+    R2 = DM(M4, I6);
+    I5 = DM(T_WA, I4);
+    R8 = DM(G_SDR);
+    R1 = DM(T_RB, I4);
+    R8 = R8 + R1;
+    R1 = R8 + R2;
+    DM(0, I5) = R1;
+    R2 = PASS R2;
+    IF NE JUMP fc_nomir;
+    R1 = DM(T_L, I4);                   // the mirror of the ring's first 16 words
+    R1 = R1 + R8;
+    R6 = DM(T_STRIDE, I4);
+    I3 = X;
+    LCNTR = 3, DO fc_mc UNTIL LCE;
+      I0 = R1;
+      LCNTR = 16, DO fc_mw UNTIL LCE;
+        F0 = DM(I3, 1);
+fc_mw:  DM(I0, 1) = F0;
+      R1 = R1 + R6;
+fc_mc: NOP;
+fc_nomir:
+    R0 = DM(S_T, I6);                   // windows from before the load: the silence state
+    R1 = DM(T_KD, I4);
+    R1 = R0 + R1;
+    IF GE JUMP fc_nopatch;
+    R11 = DM(T_D, I4);
+    R3 = DM(T_SB, I4);
+    R2 = DM(T_SIL, I4);
+    R6 = I6;
+    R2 = R2 + R6;
+    I5 = R2;
+    F6 = 16.0;
+    F8 = DM(0, I5);
+    F8 = F8 * F6;
+    F9 = DM(1, I5);
+    F9 = F9 * F6;
+    F10 = DM(2, I5);
+    F10 = F10 * F6;
+    LCNTR = KM1, DO fp_t UNTIL LCE;
+      R2 = -R1;                         // the window's samples before the load
+      R6 = 16;
+      R2 = MIN(R2, R6);
+      R2 = PASS R2;
+      IF LE JUMP fp_skip;
+      I0 = R3;
+      LCNTR = R2, DO fp_0 UNTIL LCE;
+fp_0:   DM(I0, 1) = F8;
+      R6 = 96;
+      R6 = R6 + R3;
+      I0 = R6;
+      LCNTR = R2, DO fp_1 UNTIL LCE;
+fp_1:   DM(I0, 1) = F9;
+      R6 = 192;
+      R6 = R6 + R3;
+      I0 = R6;
+      LCNTR = R2, DO fp_2 UNTIL LCE;
+fp_2:   DM(I0, 1) = F10;
+fp_skip:
+      R6 = 16;
+      R3 = R3 + R6;
+fp_t: R1 = R1 + R11;
+fc_nopatch:
+    R0 = DM(EVENTS);
+    R0 = R0 + 1;
+    DM(EVENTS) = R0;
+    CALL pump;
+    RTS;
+
+// The 16 words at I3 (DM, step M0 = 1) into the ring B8 (L8 = its length,
+// already set) from offset M8, then its guard (B8 + M11, M11 = the length) =
+// its first word.
+n_put:
+    MODIFY(I8, M8);
+    F0 = DM(I3, M0);
+    LCNTR = 16, DO n_putw UNTIL LCE;
+n_putw: F0 = DM(I3, M0), PM(I8, M9) = F0;
+    I8 = B8;                            // (before L8's save: I8 then is not used just after its load)
+    R1 = L8;
+    L8 = 0;
+    F0 = PM(0, I8);
+    PM(M11, I8) = F0;
+    L8 = R1;
+    RTS;
+
+// ---- cold code: a slot's start and a model's load only, in Block 3 (COLD_PM, the top
+// of the module's region), so that Block 2 keeps X, HS and IN beside the hot code: the
+// pair loop then reads them without DM/PM block conflicts against the weights in Block 3.
+.section pm COLD_PM
 
 // ---- a slot's first call (and after a failure): its state, sentinels, HIST
 m_init:
@@ -1121,236 +1376,6 @@ ld_clr: MODIFY(I4, 3);
 ld_lw: DM(I5, 1) = R0;
     RTS;
 
-// ---- the DMA jobs: one chain at a time on EP DMA channel 0. pump notices the
-// running chain's end (its sentinel) and starts the next job when it is ready
-// (EVENTS: +1 when a far layer has its newest tap, +1 when it is computed).
-// Uses R0-R3, R6, R8, R10, I0-I3, I5, M4, L1, L2.
-pump:
-    I5 = DM(J_CHKADR);                  // (early: an I register used just after its load stalls)
-    R0 = DM(DMA_FAIL);
-    R0 = PASS R0;
-    IF NE RTS;
-    R0 = DM(J_BUSY);
-    R0 = PASS R0;
-    IF EQ JUMP p_next;
-    R1 = DM(0, I5);
-    R0 = DM(J_CHKVAL);
-    COMP(R0, R1);
-    IF NE RTS;
-    R0 = 0;
-    DM(J_BUSY) = R0;
-    R0 = DM(J_DONE);
-    R0 = R0 + 1;
-    DM(J_DONE) = R0;
-p_next:
-    R0 = DM(J_NEXT);
-    R1 = NJOBS;
-    COMP(R0, R1);
-    IF GE RTS;
-    R1 = LSHIFT R0 BY 3;
-    R2 = JOBS;
-    R1 = R1 + R2;
-    I5 = R1;
-    R3 = DM(EVENTS);
-    R2 = DM(J_READY, I5);
-    COMP(R3, R2);
-    IF LT RTS;
-    R0 = R0 + 1;
-    DM(J_NEXT) = R0;
-    R0 = 1;
-    DM(J_BUSY) = R0;
-    R0 = DM(J_TYPE, I5);
-    R0 = PASS R0;
-    IF NE JUMP p_w;
-    // a far layer's taps: TCB 3t + c reads tap t (oldest first) of channel c
-    I3 = DM(J_ROW, I5);
-    I0 = DM(J_CHAIN, I5);
-    MODIFY(I0, TCB_EI);
-    R8 = DM(G_SDR);
-    R1 = DM(T_RB, I3);
-    R8 = R8 + R1;                       // channel 0's ring
-    M4 = DM(T_LW, I3);
-    R2 = DM(M4, I6);                    // this block's write offset
-    R10 = DM(T_L, I3);
-    R1 = DM(T_KD, I3);
-    R2 = R2 + R1;                       // the oldest tap's window
-    IF LT R2 = R2 + R10;
-    R3 = DM(T_D, I3);
-    R6 = DM(T_STRIDE, I3);
-    LCNTR = KM1, DO p_rl UNTIL LCE;
-      R1 = R8 + R2;
-      DM(I0, 6) = R1;
-      R1 = R1 + R6;
-      DM(I0, 6) = R1;
-      R1 = R1 + R6;
-      DM(I0, 6) = R1;
-      R2 = R2 + R3;
-      COMP(R2, R10);
-p_rl: IF GE R2 = R2 - R10;
-    R1 = DM(G_SDR);                     // the sentinel TCB: MAGIC from SENT into the flag
-    R2 = SENT_OFF;
-    R1 = R1 + R2;
-    DM(0, I0) = R1;
-    I0 = DM(J_FLAG, I5);
-    R1 = 0;
-    DM(0, I0) = R1;
-    R1 = I0;
-    DM(J_CHKADR) = R1;
-    R1 = MAGIC;
-    DM(J_CHKVAL) = R1;
-    R0 = 0;                             // external -> internal
-    JUMP p_go;
-p_w:
-    // a write-back: each far layer's 16 new words per channel, then the sequence number
-    L1 = 0;
-    L2 = 0;
-    R1 = DM(J_CHAIN, I5);
-    R2 = TCB_EI;
-    R1 = R1 + R2;
-    I0 = R1;
-    I1 = DM(J_ROW, I5);                 // (FARTAB + the group's first far layer)
-    I2 = DM(J_FLAG, I5);                // (WADDR + the same)
-    R2 = DM(J_N, I5);
-    LCNTR = R2, DO p_wl UNTIL LCE;
-      R1 = DM(I1, 1);
-      I3 = R1;
-      R6 = DM(T_STRIDE, I3);
-      R1 = DM(I2, 1);
-      DM(I0, 6) = R1;
-      R1 = R1 + R6;
-      DM(I0, 6) = R1;
-      R1 = R1 + R6;
-p_wl: DM(I0, 6) = R1;
-    R1 = DM(G_SDR);
-    R2 = SENT2_OFF;
-    R1 = R1 + R2;
-    DM(0, I0) = R1;
-    DM(J_CHKADR) = R1;
-    R1 = I6;
-    R2 = S_SEQ;
-    R1 = R1 + R2;
-    DM(3, I0) = R1;                     // (TCB_II - TCB_EI)
-    R1 = DM(S_SEQ, I6);
-    R1 = R1 + 1;
-    DM(S_SEQ, I6) = R1;
-    DM(J_CHKVAL) = R1;
-    R0 = TRAN;                          // internal -> external
-p_go:
-    R1 = DFLSH;                         // HRM: flush, clear CP, enable with CHEN, then CP
-    DM(DMAC0) = R1;                     // starts the chain
-    R1 = 0;
-    DM(CPEP0) = R1;
-    R1 = DEN_CHEN;
-    R1 = R1 OR R0;
-    DM(DMAC0) = R1;
-    R1 = DM(J_CP, I5);
-    DM(CPEP0) = R1;
-    RTS;
-
-// Wait (bounded) for this far layer's taps (job J_DONE > T_RPOS).
-fwait:
-    R9 = POLLMAX;
-fw_l: CALL pump;
-    R0 = DM(J_DONE);
-    R1 = DM(T_RPOS, I4);
-    COMP(R0, R1);
-    IF GT RTS;
-    R0 = DM(DMA_FAIL);
-    R0 = PASS R0;
-    IF NE RTS;
-    R0 = DM(REP + R_POLLS);
-    R0 = R0 + 1;
-    DM(REP + R_POLLS) = R0;
-    R9 = R9 - 1;
-    IF NE JUMP fw_l;
-    JUMP dma_abort;
-
-// A far layer has its taps: the newest (this block's x) into the staging buffer
-// and the write-back buffer; the windows from before the load to the silence
-// state; the mirror when the write offset is 0; then the next job may start.
-fcopy:
-    R3 = DM(T_SB, I4);
-    R1 = 80;                            // tap K-1 of channel 0
-    R3 = R3 + R1;
-    I0 = R3;
-    I8 = DM(T_OB, I4);                  // and the write-back buffer (through PM)
-    I3 = X;
-    M4 = 1;
-    LCNTR = 3, DO fc_c UNTIL LCE;
-      LCNTR = 16, DO fc_l UNTIL LCE;
-        F0 = DM(I3, M4);
-fc_l:   DM(I0, M4) = F0, PM(I8, M9) = F0;
-      MODIFY(I0, 80);
-fc_c: NOP;
-    M4 = DM(T_LW, I4);                  // where the write-back goes
-    R2 = DM(M4, I6);
-    I5 = DM(T_WA, I4);
-    R8 = DM(G_SDR);
-    R1 = DM(T_RB, I4);
-    R8 = R8 + R1;
-    R1 = R8 + R2;
-    DM(0, I5) = R1;
-    R2 = PASS R2;
-    IF NE JUMP fc_nomir;
-    R1 = DM(T_L, I4);                   // the mirror of the ring's first 16 words
-    R1 = R1 + R8;
-    R6 = DM(T_STRIDE, I4);
-    I3 = X;
-    LCNTR = 3, DO fc_mc UNTIL LCE;
-      I0 = R1;
-      LCNTR = 16, DO fc_mw UNTIL LCE;
-        F0 = DM(I3, 1);
-fc_mw:  DM(I0, 1) = F0;
-      R1 = R1 + R6;
-fc_mc: NOP;
-fc_nomir:
-    R0 = DM(S_T, I6);                   // windows from before the load: the silence state
-    R1 = DM(T_KD, I4);
-    R1 = R0 + R1;
-    IF GE JUMP fc_nopatch;
-    R11 = DM(T_D, I4);
-    R3 = DM(T_SB, I4);
-    R2 = DM(T_SIL, I4);
-    R6 = I6;
-    R2 = R2 + R6;
-    I5 = R2;
-    F6 = 16.0;
-    F8 = DM(0, I5);
-    F8 = F8 * F6;
-    F9 = DM(1, I5);
-    F9 = F9 * F6;
-    F10 = DM(2, I5);
-    F10 = F10 * F6;
-    LCNTR = KM1, DO fp_t UNTIL LCE;
-      R2 = -R1;                         // the window's samples before the load
-      R6 = 16;
-      R2 = MIN(R2, R6);
-      R2 = PASS R2;
-      IF LE JUMP fp_skip;
-      I0 = R3;
-      LCNTR = R2, DO fp_0 UNTIL LCE;
-fp_0:   DM(I0, 1) = F8;
-      R6 = 96;
-      R6 = R6 + R3;
-      I0 = R6;
-      LCNTR = R2, DO fp_1 UNTIL LCE;
-fp_1:   DM(I0, 1) = F9;
-      R6 = 192;
-      R6 = R6 + R3;
-      I0 = R6;
-      LCNTR = R2, DO fp_2 UNTIL LCE;
-fp_2:   DM(I0, 1) = F10;
-fp_skip:
-      R6 = 16;
-      R3 = R3 + R6;
-fp_t: R1 = R1 + R11;
-fc_nopatch:
-    R0 = DM(EVENTS);
-    R0 = R0 + 1;
-    DM(EVENTS) = R0;
-    CALL pump;
-    RTS;
-
 // A chain that did not end: off as HRM p. 3-124 says (DEN off, wait for EXTS,
 // count 0), and the block fails.
 dma_abort:
@@ -1378,18 +1403,33 @@ da_ok:
     DM(REP + R_TIMEOUTS) = R0;
     RTS;
 
-// The 16 words at I3 (DM, step M0 = 1) into the ring B8 (L8 = its length,
-// already set) from offset M8, then its guard (B8 + M11, M11 = the length) =
-// its first word.
-n_put:
-    MODIFY(I8, M8);
-    F0 = DM(I3, M0);
-    LCNTR = 16, DO n_putw UNTIL LCE;
-n_putw: F0 = DM(I3, M0), PM(I8, M9) = F0;
-    I8 = B8;                            // (before L8's save: I8 then is not used just after its load)
-    R1 = L8;
-    L8 = 0;
-    F0 = PM(0, I8);
-    PM(M11, I8) = F0;
-    L8 = R1;
-    RTS;
+// (no model, pass-through, no SDRAM block: rare paths)
+n_none:
+    R0 = DM(S_SIG, I6);                 // no model in that slot: silence (after the tail)
+    R0 = PASS R0;
+    IF EQ JUMP n_zero;
+    CALL n_cut;
+    R0 = 0;
+    DM(S_SIG, I6) = R0;
+n_zero:                                 // no model this block: the tail alone
+    R0 = 0;
+    DM(S_G1, I6) = R0;
+    DM(P_SIGN, I0) = R0;                // the next call checks the model
+    I11 = B11;
+    LCNTR = 16, DO n_ldz UNTIL LCE;
+n_ldz: PM(I11, M9) = R0;
+    JUMP n_mix;
+
+// ---- the block passes its input through (no slot)
+m_pass:
+    LCNTR = 16, DO m_passw UNTIL LCE;
+      R0 = DM(I1, 1);
+m_passw: DM(I2, 1) = R0;
+    JUMP n_back;
+
+// ---- no SDRAM block of the size it needs (the build did not raise the budget)
+m_nosdr:
+    R0 = DM(REP + R_NOSDR);
+    R0 = R0 + 1;
+    DM(REP + R_NOSDR) = R0;
+    JUMP m_pass;
