@@ -48,6 +48,7 @@
 .equ PEYEN,    0x200000
 .equ BDCST9,   0x400000
 .equ CBUFEN,   0x1000000
+.equ SIGCHK_N, 64                       // the model check's period in calls, at most
 
 // EQUS (nam_multi.py puts the layout here)
 
@@ -281,7 +282,17 @@ m_ready:
     DM(G_LEVEL) = F0;                   // output level, 4 k^2
 
     // ---- the model: 1..128 a User IR slot; 0 (the knob's range is 1..128) or a slot
-    // without a NAM capture: silence
+    // without a NAM capture: silence. Its check (~20 SDRAM reads) only after a knob
+    // write, with no model known, or every SIGCHK_N calls; else the slot's model stands.
+    // P_SIGN is 0 whenever S_SIG is (m_init, n_zero), so no model known means a check.
+    R0 = DM(3, I0);
+    R0 = PASS R0, R1 = DM(P_SIGN, I0);
+    IF NE JUMP n_chk;
+    R1 = R1 - 1;
+    IF GT JUMP n_same (DB);
+    DM(P_SIGN, I0) = R1;
+n_chk: R0 = SIGCHK_N;                   // (also the branch's second delay slot)
+    DM(P_SIGN, I0) = R0;
     R0 = DM(7, I0);
     R1 = 0x800000;
     COMP(R0, R1);
@@ -349,6 +360,7 @@ n_none:
 n_zero:                                 // no model this block: the tail alone
     R0 = 0;
     DM(S_G1, I6) = R0;
+    DM(P_SIGN, I0) = R0;                // the next call checks the model
     I11 = B11;
     LCNTR = 16, DO n_ldz UNTIL LCE;
 n_ldz: PM(I11, M9) = R0;
@@ -558,12 +570,10 @@ n_conv:
         F1 = DM(I4, M7), F8 = PM(I9, M9);   // in(t), in(t + 1); a = bias + mixin * in, + 0
         F4 = PM(I9, M9);
         F12 = F1 * F4, F9 = PM(I9, M9);
-        F4 = PM(I9, M9);
+        F12 = F3 * F7, F8 = F8 + F12, F4 = PM(I9, M9);
         F13 = F1 * F4, F10 = PM(I9, M9);
-        F4 = PM(I9, M9);
+        F13 = F3 * F7, F9 = F9 + F13, F4 = PM(I9, M9);
         F14 = F1 * F4, F0 = DM(I0, M0), F4 = PM(I9, M9);
-        F12 = F3 * F7, F8 = F8 + F12;
-        F13 = F3 * F7, F9 = F9 + F13;
         F14 = F3 * F7, F10 = F10 + F14;
         LCNTR = M11, DO n_tap UNTIL LCE;  // + w . taps: tap k, channel j, output i
           F12 = F0 * F4, F8 = F8 + F12, F4 = PM(I9, M9);
@@ -590,6 +600,8 @@ n_tap:    F14 = F0 * F4, F10 = F10 + F14, F0 = DM(I0, M0), F4 = PM(I9, M9);
         F13 = F13 + F2, DM(0, I5) = F12;
         F8 = PASS F4, DM(16, I5) = F13;     // x += bias1 + w1 . a, per output channel
         F12 = F0 * F6, F6 = PM(I9, M9);
+        NOP;                            // (two NOPs: no instruction-cache set gets a third
+        NOP;                            // PM-data instruction of this loop, nam_stalls.py)
         F12 = F1 * F6, F8 = F8 + F12, F6 = PM(I9, M9);
         F12 = F2 * F6, F8 = F8 + F12, F9 = PM(I9, M9);
         F8 = F8 + F12, F13 = DM(I3, M4), F6 = PM(I9, M9);
@@ -945,6 +957,7 @@ n_back:
 m_init:
     R0 = 0;
     DM(S_SIG, I6) = R0;                 // no model loaded: the next block loads one
+    DM(P_SIGN, I0) = R0;
     DM(S_GAIN, I6) = R0;
     DM(S_G1, I6) = R0;
     DM(S_MG, I6) = R0;
@@ -1113,13 +1126,13 @@ ld_lw: DM(I5, 1) = R0;
 // (EVENTS: +1 when a far layer has its newest tap, +1 when it is computed).
 // Uses R0-R3, R6, R8, R10, I0-I3, I5, M4, L1, L2.
 pump:
+    I5 = DM(J_CHKADR);                  // (early: an I register used just after its load stalls)
     R0 = DM(DMA_FAIL);
     R0 = PASS R0;
     IF NE RTS;
     R0 = DM(J_BUSY);
     R0 = PASS R0;
     IF EQ JUMP p_next;
-    I5 = DM(J_CHKADR);
     R1 = DM(0, I5);
     R0 = DM(J_CHKVAL);
     COMP(R0, R1);
@@ -1138,8 +1151,8 @@ p_next:
     R2 = JOBS;
     R1 = R1 + R2;
     I5 = R1;
-    R2 = DM(J_READY, I5);
     R3 = DM(EVENTS);
+    R2 = DM(J_READY, I5);
     COMP(R3, R2);
     IF LT RTS;
     R0 = R0 + 1;
@@ -1271,11 +1284,11 @@ fc_l:   DM(I0, M4) = F0, PM(I8, M9) = F0;
 fc_c: NOP;
     M4 = DM(T_LW, I4);                  // where the write-back goes
     R2 = DM(M4, I6);
+    I5 = DM(T_WA, I4);
     R8 = DM(G_SDR);
     R1 = DM(T_RB, I4);
     R8 = R8 + R1;
     R1 = R8 + R2;
-    I5 = DM(T_WA, I4);
     DM(0, I5) = R1;
     R2 = PASS R2;
     IF NE JUMP fc_nomir;
@@ -1373,9 +1386,9 @@ n_put:
     F0 = DM(I3, M0);
     LCNTR = 16, DO n_putw UNTIL LCE;
 n_putw: F0 = DM(I3, M0), PM(I8, M9) = F0;
+    I8 = B8;                            // (before L8's save: I8 then is not used just after its load)
     R1 = L8;
     L8 = 0;
-    I8 = B8;
     F0 = PM(0, I8);
     PM(M11, I8) = F0;
     L8 = R1;

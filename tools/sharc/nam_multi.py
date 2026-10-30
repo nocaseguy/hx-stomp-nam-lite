@@ -80,7 +80,9 @@ REPW = dict(R_MAGIC=0, R_CALLS=1, R_TIMEOUTS=2, R_SKIPS=3, R_LOADS=4, R_CLAIMS=5
 T = dict(T_RB=0, T_STRIDE=1, T_L=2, T_LW=3, T_K=4, T_S=5, T_WT=6, T_KD=7, T_FAR=8, T_RPOS=9, T_KS=10,
          T_D=11, T_SB=12, T_OB=13, T_WA=14, T_SIL=15, T_NW=16)
 J = dict(J_TYPE=0, J_READY=1, J_ROW=2, J_CHAIN=3, J_FLAG=4, J_CP=5, J_N=6)
-P = dict(P_SLOT=12, P_SEEN=13, P_MET=14, P_PHASE=15)   # P_PHASE: the Polarity knob (patch_amp pid 15)
+SIGCHK_N = 64                     # the kernel's model-check period (nam_multi_kernel.asm .equ)
+P = dict(P_SLOT=12, P_SEEN=13, P_MET=14, P_PHASE=15, P_SIGN=18)   # P_PHASE: the Polarity knob (patch_amp
+# pid 15); P_SIGN: calls to the model's next check (16, 17: the meter test images')
 FAR_D = {2: 41, 3: 17}            # with 3 slots the d = 17 rings go to SDRAM too, to fit
 
 
@@ -746,7 +748,7 @@ class KernelCheck:
 
     STEPS = ("silence_fixed_point", "two_models_load", "two_models_play", "model_change_crossfades",
              "polarity_inverts", "cab_ir_is_silent", "model_0_is_silent", "third_and_fourth", "takeover", "recreated",
-             "dma_timeout", "busy_channel", "cycle_budget")
+             "dma_timeout", "busy_channel", "cycle_budget", "capture_replaced")
 
     def __init__(self, asm, lay, w, nblk=8, **dma):
         self.lay, self.w, self.nblk = lay, w, nblk
@@ -979,6 +981,23 @@ class KernelCheck:
         worst = max(c for _, c in self.steady)
         if worst > MAX_STEADY:
             raise CheckFailed(f"{worst} instructions a steady block, over {MAX_STEADY}")
+
+    def capture_replaced(self):
+        """Another capture written into a playing block's IR slot, no knob touched: the
+        kernel checks the model only every SIGCHK_N calls then (or after a knob write), so
+        it loads the new one within that many calls."""
+        r, B = self.rig, self.B
+        while r.rep()[REPW["R_BACKOFF"]]:                # (busy_channel's failure: silent a while)
+            B.call(self.zero, "B, backoff")
+        for b in range(SIGCHK_N + 4):                    # reloaded and playing again
+            B.call(self.zero, "B, settles")
+        loads = r.rep()[REPW["R_LOADS"]]
+        set_ir(r.sim, B.model, nam_lite.ir_samples(variant(self.w, 9), None))
+        for b in range(SIGCHK_N + 1):
+            B.call(self.zero, f"B, capture replaced {b}")
+            if r.rep()[REPW["R_LOADS"]] != loads:
+                return
+        raise CheckFailed(f"a capture replaced in its slot was not loaded within {SIGCHK_N + 1} calls")
 
     def summary(self):
         st = [c for _, c in self.steady]
