@@ -1520,6 +1520,38 @@ def cmd_add_model(args):
     print(f"[+] Wrote {args.output} (L6IA {old_end:#x} -> {new_end:#x} bytes, delta {new_end - old_end:+d} B)")
 
 
+# The same kernel under an effect category (a NAM block in Distortion > NAM): the kit's
+# effect-host add_model (kit_patch_amp.py, a copy of hx-stomp-kit's hxkit/patch_amp.py),
+# with nam-a2-lite's knobs (module.toml [[param]], in its param_spec form) and instance.
+NAM_FX_PARAMS = ((1, 'HD2_ImpulseResponse2048Mono', 'Index', 7, 'Model', None),
+                 (2, 'HD2_AmpLine6Clarity', 'Drive', 5, 'Input', 0.5),
+                 (3, 'HD2_AmpLine6Clarity', 'Bass', 8, None, 0.5),
+                 (4, 'HD2_AmpLine6Clarity', 'Mid', 9, None, 0.5),
+                 (5, 'HD2_AmpLine6Clarity', 'Treble', 10, None, 0.5),
+                 (6, 'HD2_AmpLine6Clarity', 'Presence', 11, None, 0.5),
+                 (7, 'HD2_AmpLine6Clarity', 'ChVol', 6, None, 0.5),
+                 (8, 'HD2_PreampVintagePre', 'Polarity', 15, None, None))
+FX_CATEGORY_IDS = {'distortion': 2, 'dynamics': 3, 'eq': 4, 'modulation': 5, 'delay': 6, 'reverb': 7,
+                   'pitch': 8, 'filter': 9, 'wah': 10, 'volume': 16}
+FX_CLONES = {2: 'HD2_DistMinotaurMono', 3: 'HD2_CompressorAutoSwellMono', 4: 'HD2_EQSimple3BandMono',
+             5: 'HD2_ChorusMono', 6: 'HD2_DelaySimpleDelayMono', 7: 'HD2_ReverbGanymedeMono',
+             8: 'HD2_PitchSimplePitchMono', 9: 'HD2_FilterMutantFilterMono', 10: 'HD2_WahChromeMono',
+             16: 'HD2_VolPanGainMono'}
+
+
+def cmd_add_fx_model(args):
+    import kit_patch_amp
+    l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
+    cat = FX_CATEGORY_IDS[args.category]
+    new_l6ia, info = kit_patch_amp.add_model(
+        l6ia_bytes, args.clone or FX_CLONES[cat], args.name, args.display_name, folder=args.folder,
+        short_name=args.short_name, preset_id=args.preset_id, dsp_cost=args.dsp_cost, params=NAM_FX_PARAMS,
+        prim_id=0x9c75, instance={'dm_words': 0x91, 'pm_words': 0x0d, 'sdram_words': args.sdram_words},
+        host='HD2_VolPanVolMono', category=cat, log=print)
+    save_l6ia_to_any(new_l6ia, args.output, donor_hxf=args.input if is_hxf else args.donor)
+    print(f"[+] Wrote {args.output}: {args.display_name} as an effect (kind {info['kind']}, preset_id {info['preset_id']})")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -1527,6 +1559,21 @@ def main():
     p_ins = sub.add_parser('inspect', help='List the amps, or show one amp across Entry 3 and Entry 4')
     p_ins.add_argument('input', help='Path to .hxf or L6IA')
     p_ins.add_argument('model', nargs='?', help='Model name (e.g. HD2_AmpNAMLite), displayName, or ID')
+
+    p_fx = sub.add_parser('add-fx-model', help="A NAM block's kernel (primitive 0x9c75) as a mono effect too "
+                          "(a third NAM block: a preset holds two amps)")
+    p_fx.add_argument('input', help='Input .hxf or L6IA (after add-model)')
+    p_fx.add_argument('output', help='Output .hxf or L6IA')
+    p_fx.add_argument('--name', required=True, help='Internal name (e.g. HD2_DistNAMLite)')
+    p_fx.add_argument('--display-name', required=True)
+    p_fx.add_argument('--category', default='distortion', choices=sorted(FX_CATEGORY_IDS))
+    p_fx.add_argument('--folder', help='A new folder of this name under the category')
+    p_fx.add_argument('--clone', help="The stock effect whose browser item and Table 2 row it copies (default: the category's)")
+    p_fx.add_argument('--short-name')
+    p_fx.add_argument('--preset-id', type=int, required=True)
+    p_fx.add_argument('--dsp-cost', type=int, required=True)
+    p_fx.add_argument('--sdram-words', type=lambda x: int(x, 0), default=0x5000)
+    p_fx.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
 
     p_add = sub.add_parser('add-model', help='Add the NAM host amp to Entry 0, 2, 3 and 4')
     p_add.add_argument('input', help='Input .hxf or L6IA (the stock HX Stomp or HX Stomp XL v3.80.0 firmware)')
@@ -1561,7 +1608,8 @@ def main():
     p_pat.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
 
     args = ap.parse_args()
-    {'add-model': cmd_add_model, 'inspect': cmd_inspect, 'ir-title': cmd_ir_title, 'patch': cmd_patch}[args.cmd](args)
+    {'add-model': cmd_add_model, 'add-fx-model': cmd_add_fx_model, 'inspect': cmd_inspect, 'ir-title': cmd_ir_title,
+     'patch': cmd_patch}[args.cmd](args)
 
 
 if __name__ == '__main__':

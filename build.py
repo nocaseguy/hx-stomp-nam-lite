@@ -38,8 +38,13 @@ STOCK_MD5 = {
 KERNEL = "tools/sharc/nam_multi.py"
 MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
          "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2500", "--sdram-words", "0x5000"]
+# A third NAM block: the same kernel as a mono effect under Distortion > NAM (a preset
+# holds two amps). Preset ID 148 is fixed for ever, as 147.
+FX_MODEL = ["--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion",
+            "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2500", "--sdram-words", "0x5000"]
 # ir-title per unit.
-IR_TITLE = {"HX_Stomp": ["--preset-id", "147"], "HX_Stomp_XL": ["--preset-id", "147"]}
+IR_TITLE = {"HX_Stomp": ["--preset-id", "147", "--preset-id", "148"],
+            "HX_Stomp_XL": ["--preset-id", "147", "--preset-id", "148"]}
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -76,6 +81,8 @@ def main():
 
     run(py, KERNEL, "-o", asm, *([] if "--no-check" in argv else ["--check"]))
     run(py, "tools/patch_amp.py", "add-model", stock, base, *MODEL)
+    run(py, "tools/patch_amp.py", "add-fx-model", base, titled, *FX_MODEL)
+    os.replace(titled, base)
     run(py, "tools/patch_amp.py", "ir-title", base, titled, *IR_TITLE[unit])
     os.replace(titled, base)
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)

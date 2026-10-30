@@ -31,7 +31,7 @@ def js_value(name):
 
 
 def test_build_steps_as_build_py():
-    for name in ("KERNEL", "MODEL", "IR_TITLE"):
+    for name in ("KERNEL", "MODEL", "FX_MODEL", "IR_TITLE"):
         assert js_value(name) == py_dict("build.py", name), name
 
 
@@ -44,7 +44,7 @@ def test_sources_cover_the_build():
     listed = set(re.findall(r'"(tools/[\w/.]+)"', WORKER.split("var SOURCES")[1].split("];")[0]))
     assert all((ROOT / p).is_file() for p in listed)
     # every module the build's scripts import, and every file they open next to themselves
-    need = {"tools/hxf.py", "tools/l6ia.py", "tools/l6ia_verify.py", "tools/patch_amp.py",
+    need = {"tools/hxf.py", "tools/l6ia.py", "tools/l6ia_verify.py", "tools/patch_amp.py", "tools/kit_patch_amp.py",
             "tools/sharc/nam_lite.py",
             "tools/sharc/nam_multi.py", "tools/sharc/nam_multi_kernel.asm"}
     for d in ("tools", "tools/sharc"):

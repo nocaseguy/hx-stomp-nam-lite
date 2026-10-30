@@ -26,17 +26,19 @@ var STOCK_MD5 = {
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "a819de1c0d5edfcc78ca334764ed3f03",
-  "HX_Stomp_XL": "441028761949f6fdd29435197f9d7077",
+  "HX_Stomp": "d119ad50c91451d3ccc49d9c70443bc4",
+  "HX_Stomp_XL": "8c264d78f4a4c2479cba868f535c8b03",
 };
 
-// build.py's KERNEL, MODEL and IR_TITLE (tests/test_web_build.py keeps them equal).
+// build.py's KERNEL, MODEL, FX_MODEL and IR_TITLE (tests/test_web_build.py keeps them equal).
 var KERNEL = "tools/sharc/nam_multi.py";
 var MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
              "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2500", "--sdram-words", "0x5000"];
+var FX_MODEL = ["--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion",
+                "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2500", "--sdram-words", "0x5000"];
 var IR_TITLE = {
-  "HX_Stomp": ["--preset-id", "147"],
-  "HX_Stomp_XL": ["--preset-id", "147"],
+  "HX_Stomp": ["--preset-id", "147", "--preset-id", "148"],
+  "HX_Stomp_XL": ["--preset-id", "147", "--preset-id", "148"],
 };
 
 // What build.py needs, relative to the repository root.
@@ -46,6 +48,7 @@ var SOURCES = [
   "tools/hxf_ram.py",
   "tools/l6ia_verify.py",
   "tools/patch_amp.py",
+  "tools/kit_patch_amp.py",
   "tools/sharc/entry4_blob.py",
   "tools/sharc/nam_lite.py",
   "tools/sharc/nam_multi.py",
@@ -127,6 +130,10 @@ async function build(stock) {
     step(3, "Building the NAM kernel…", [KERNEL, "-o", "build/nam_lite.asm"]);
     step(4, "Adding the NAM A2 Lite amp…",
          ["tools/patch_amp.py", "add-model", "build/stock.hxf", base].concat(MODEL));
+    step(4, "Adding the NAM A2 Lite amp…",
+         ["tools/patch_amp.py", "add-fx-model", base, "build/nam_lite_fx.l6ia"].concat(FX_MODEL));
+    p.FS.unlink("/repo/" + base);
+    base = "build/nam_lite_fx.l6ia";
     if (IR_TITLE[unit]) {
       step(4, "Adding the NAM A2 Lite amp…",
            ["tools/patch_amp.py", "ir-title", base, "build/nam_lite_title.l6ia"].concat(IR_TITLE[unit]));

@@ -15,7 +15,7 @@ Watch it on YouTube: https://www.youtube.com/watch?v=zQzj0qahJ6E
 ## What's new
 
 - **A Polarity knob** (Normal / Inverted), added after the other seven so older presets keep their settings.
-- **Several NAM blocks, each with its own capture.** NAM A2 Lite now runs as up to three blocks at once, each playing the capture in its own User IR slot (the HX Stomp allows two amp blocks in a preset, so two in practice). The earlier build ran one NAM block per unit.
+- **Several NAM blocks, each with its own capture.** NAM A2 Lite now runs as up to three blocks at once, each playing the capture in its own User IR slot. The HX Stomp allows two amp blocks in a preset, so the third is the same NAM A2 Lite under **Distortion > NAM**. The earlier build ran one NAM block per unit.
 - **Input level trim.** A capture that records its interface's input level plays at the level it was captured at (see [Use](#use)).
 - **The capture's name in the block title.** The edit screen shows the name of the User IR the Model knob selects, as it does for an IR block.
 
@@ -35,8 +35,8 @@ It is the same amp as before: **NAM A2 Lite**, preset ID 147, the same first sev
 
 - **A converter** (on the [setup page](https://nocaseguy.github.io/hx-stomp-nam-lite/web/), or `tools/nam2ir.py`) turns a `.nam` file into a `.wav`. HX Edit imports that `.wav` as a User IR. The "IR" is not a sound: it carries the capture's 1,871 weights, and the amp loads them from the slot.
 
-- Up to three NAM A2 Lite blocks at once, each with its own capture (two per preset).
-- On the HX Stomp, the block's title on the edit screen shows the name of the IR in the selected slot (the knob itself shows the number).
+- Up to three NAM A2 Lite blocks at once, each with its own capture: two from Amp > NAM, the third from Distortion > NAM.
+- The block's title on the edit screen shows the name of the IR in the selected slot (the knob itself shows the number).
 
 Everything else in the firmware stays stock 3.80.0.
 
@@ -87,7 +87,7 @@ This writes `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (from the XL's file, `build
 4. Adds the kernel to the DSP's boot code and hooks it to an unused DSP primitive.
 5. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
-The HX Stomp result has MD5 `a819de1c0d5edfcc78ca334764ed3f03` (pinned in `tests/test_firmware.py`), byte for byte what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`. Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
+The HX Stomp result has MD5 `d119ad50c91451d3ccc49d9c70443bc4` (pinned in `tests/test_firmware.py`), byte for byte what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`. Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
 
 Only 4 of the 15 parts of the firmware change: the main application (its model tables and the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
@@ -136,8 +136,9 @@ Notes:
 
 ## Limits
 
-- **At most 2 NAM A2 Lite blocks in a preset**, each with its own capture. The kernel (`tools/sharc/nam_multi.py`) has 3 model slots; a fourth block would pass its input through. The HX Stomp itself allows 2 amp blocks in a preset, so in practice that means 2. Run on an HX Stomp with two blocks playing two captures; the XL build has the same DSP-side bytes but has not run on an XL with this kernel.
-  - Each block uses about **25% of the DSP** on the unit (two blocks about 70% with an otherwise empty preset; the empty preset alone is about 20%). The amp declares a DSP cost of 2500.
+- **At most 3 NAM A2 Lite blocks in a preset**, each with its own capture. The kernel (`tools/sharc/nam_multi.py`) has 3 model slots; a fourth block would pass its input through. The HX Stomp allows 2 amp blocks in a preset, so the third is the Distortion > NAM entry (preset ID 148, the same knobs and kernel). Run on an HX Stomp with three blocks (from RAM); the XL build has the same DSP-side bytes but has not run on an XL with this kernel.
+  - Each block uses about **25% of the DSP** on the unit (two blocks about 70% with an otherwise empty preset; the empty preset alone is about 20%). Both entries declare a DSP cost of 2500, close to what they measure.
+  - **Three blocks fill the DSP** (about 95%, where the Stomp's own limit sits for any preset): the browser then greys out every other effect. With two NAM blocks there is room for other effects.
   - Each block takes its own 0x5000-word block of DDR2 for its long rings; the Amp blocks' DDR2 allowance is raised to fit.
 - Only the 3-channel A2 Lite architecture fits; standard and A2 Full captures don't.
 - Names on the Stomp hold 16 characters at most.
