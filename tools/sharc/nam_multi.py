@@ -51,6 +51,7 @@ B3 = 0xE4850                      # Block 3 from here (kit-probe keeps 0xe4842..
 B3_END = 0xE8000
 NW3, PM3_END = 0xE0000, 0xE5555   # Block 3 starts here in both views; its last instruction + 1
 COLD_END = B3_END - 16            # the cold code ends here (the prof test images stamp 0xe7ffe..f)
+HEADL = 32                        # the head's rings (even: n_put moves word pairs)
 XHI = 64                          # X (48) and IN (16): in Block 2 when it has room
 WBUF_N = 156                      # a near layer's weights, copied each call (153, in 4-word steps)
 REP = 0xE4860                     # the kit report area (kit-probe plays these 16 words)
@@ -126,7 +127,7 @@ def names():
         "SDR_NEED", "MAGIC", "POLLMAX", "LPOLLMAX", "BACKOFF_N", "T_MAX", "N_STREAM", "KM1", "T_SIZE",
         "TCB_EI", "TCB_IC", "TCB_II", "IR_FLAG", "IR_TOP", "DMAC0", "EIEP0", "EMEP0", "ICEP0", "IIEP0", "IMEP0",
         "CPEP0", "DFLSH", "DEN_CHEN", "TRAN", "BUSYM", "EXTSM", "EP0IMSK", "HXK_ENTRY_INST", "HXK_INST_SDRAM",
-        "HXK_INST_SDRAM_END", "COLD_PM", "WBUF"]
+        "HXK_INST_SDRAM_END", "COLD_PM", "WBUF", "HEADL"]
 
 
 def equs(v):
@@ -163,6 +164,9 @@ class Layout:
                 self.queue.append(("W", first[j] - 1))
         self.queue.append(("W", len(self.groups) - 1))
         self.ring = [(k - 1) * d + 16 for k, d in zip(KERNEL, DILATION)]
+        # a near ring's length rounded up to even, and its stride (the ring, its guard word and
+        # a pad word): n_put writes word pairs, and none may straddle the ring's end
+        self.nring = [L + (L & 1) for L in self.ring]
         v = {k: x for k, x in list(S.items()) + list(ST.items()) + list(REPW.items()) + list(T.items())
              + list(J.items()) + list(P.items())}
         # Block 2: the staging buffers, contiguous (they are the load's chunk buffer too)
@@ -233,13 +237,17 @@ class Layout:
         take("FADE_TAB", 18)
         self.alloc = alloc
         # the slots
-        self.hb = [S_STREAM + N_STREAM + 32 * j for j in range(C)]
-        o = self.hb[-1] + 32
+        h0 = S_STREAM + N_STREAM
+        h0 += h0 & 1                                     # (even: the slots' bases are even too)
+        self.hb = [h0 + (HEADL + 2) * j for j in range(C)]
+        o = self.hb[-1] + HEADL + 2
         self.near_off = {}
         for i in near:
             self.near_off[i] = o
-            o += C * (self.ring[i] + 1)
+            o += C * (self.nring[i] + 2)
+        o += o & 1
         self.slot_size = o
+        a += a & 1
         self.slot = [a + s * o for s in range(slots)]
         a += slots * o
         self.b3_to = a
@@ -267,7 +275,7 @@ class Layout:
         v.update(SAVE=alloc["SAVE"], REP=REP, SLOTTAB=alloc["SLOTTAB"], NSLOTS=slots, IN=alloc["IN"], X=alloc["X"],
                  HS=alloc["HS"], TABLE=alloc["TABLE"], NLAYERS=NL, JOBS=alloc["JOBS"], NJOBS=F + len(self.groups), CLR=alloc["CLR"],
                  NCLR=self.nclr, DRIVE_TAB=alloc["DRIVE_TAB"], FADE_TAB=alloc["FADE_TAB"], EQ_TAB=self.eq_tab,
-                 STOMP_GAIN=self.stomp_gain, COLD_PM=self.cold_pm, WBUF=self.wbuf,
+                 STOMP_GAIN=self.stomp_gain, COLD_PM=self.cold_pm, WBUF=self.wbuf, HEADL=HEADL,
                  LBUF=self.sb[0], LBUF_N=2 * SB_WORDS, LCH=alloc["LCH"],
                  LCH_CP=(alloc["LCH"] + TCB_II) & 0x7FFFF, FARTAB=alloc["FARTAB"],
                  WADDR=alloc["WADDR"], NFAR=F, S_STREAM=S_STREAM, S_HB0=self.hb[0], S_HB1=self.hb[1],
@@ -330,9 +338,9 @@ class Layout:
                 row[T["T_WA"]] = al["WADDR"] + j
                 row[T["T_SIL"]] = S_STREAM + nam_lite.N_WEIGHTS + C + C * i
             else:
-                L = self.ring[i]
+                L = self.nring[i]
                 row[T["T_RB"]] = self.near_off[i]
-                row[T["T_STRIDE"]] = L + 1
+                row[T["T_STRIDE"]] = L + 2
                 row[T["T_L"]] = L
                 row[T["T_S"]] = d
                 row[T["T_KS"]] = -(k - 1) * d
@@ -342,10 +350,10 @@ class Layout:
         put(al["TABLE"], tab)
         put(al["FARTAB"], [al["TABLE"] + T_SIZE * i for i in self.far])
         put(al["WADDR"], [0] * F)
-        clr = [(self.hb[c], 32, c) for c in range(C)]
+        clr = [(self.hb[c], HEADL + 1, c) for c in range(C)]
         for i in sorted(self.near_off):
             for c in range(C):
-                clr.append((self.near_off[i] + c * (self.ring[i] + 1), self.ring[i] + 1, C + C * i + c))
+                clr.append((self.near_off[i] + c * (self.nring[i] + 2), self.nring[i] + 1, C + C * i + c))
         assert len(clr) == self.nclr
         put(al["CLR"], [x for r in clr for x in r])
         put(al["DRIVE_TAB"], [nam_pack.f2b(10.0 ** ((step - 50) * 0.4 / 20)) for step in range(101)])
@@ -527,6 +535,17 @@ mt_l: F8 = -F8, PM(I11, M9) = F8;
 """)
 
 
+# The polls meter (build(meter=3), a test image only): every block plays this call's DMA wait
+# polls (REP + R_POLLS: fwait's and the end's) x 0.001 instead of its output; 7 instructions,
+# the release layout kept; tools/nam_meter.py --polls.
+METER_POLLS_EXIT = """    R8 = DM(REP + R_POLLS);             // (meter 3) the call's DMA wait polls x 0.001
+    F8 = FLOAT R8;
+    F1 = 0.001;
+    F8 = F8 * F1;
+    I11 = B11;
+    LCNTR = 16, DO mt_l UNTIL LCE;
+mt_l: F8 = -F8, PM(I11, M9) = F8;
+"""
 # nodma (a test image only, with the meter): after the model's load, no tap staging and
 # no write-back DMA: the layers read stale staging buffers (the output is wrong), so the
 # meter shows the call's compute and core SDRAM accesses alone.
@@ -540,6 +559,8 @@ def _variant(src, meter=False, nodma=False, prof=None):
         src = _prof(src, *prof)
     elif meter == 2:
         src = src.replace("// METER_EXIT\n", METER_IDLE_EXIT)
+    elif meter == 3:
+        src = src.replace("// METER_EXIT\n", METER_POLLS_EXIT)
     elif meter:
         src = src.replace("// METER_ENTRY\n", METER_ENTRY).replace("// METER_EXIT\n", METER_EXIT)
     for a, b in (NODMA if nodma else ()):

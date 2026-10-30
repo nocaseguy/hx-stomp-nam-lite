@@ -475,6 +475,8 @@ n_in: MODIFY(I5, M7);
       R9 = DM(T_STRIDE, I4);
       B8 = R10;
       I3 = X;
+      BIT SET MODE1 PEYEN;
+      NOP;
       CALL n_put;
       R10 = R10 + R9;
       B8 = R10;
@@ -484,6 +486,7 @@ n_in: MODIFY(I5, M7);
       B8 = R10;
       I3 = X + 32;
       CALL n_put;
+      BIT CLR MODE1 PEYEN;
       L8 = 0;
       M1 = R2;
       M0 = DM(T_KD, I4);
@@ -643,7 +646,7 @@ n_layer: MODIFY(I4, T_SIZE);
     R2 = DM(S_HHW, I6);
     M8 = R2;
     M0 = 1;
-    R0 = 31;
+    R0 = HEADL;
     L8 = R0;
     M11 = R0;
     R10 = I6;
@@ -651,6 +654,8 @@ n_layer: MODIFY(I4, T_SIZE);
     R1 = R1 + R10;
     B8 = R1;
     I3 = HS;
+    BIT SET MODE1 PEYEN;
+    NOP;
     CALL n_put;
     R1 = S_HB1;
     R1 = R1 + R10;
@@ -662,30 +667,31 @@ n_layer: MODIFY(I4, T_SIZE);
     B8 = R1;
     I3 = HS + 32;
     CALL n_put;
+    BIT CLR MODE1 PEYEN;
     L8 = 0;
     M1 = R2;
     M0 = -15;
     R1 = S_HB0;
     R1 = R1 + R10;
     B0 = R1;
-    L0 = 31;
+    L0 = HEADL;
     MODIFY(I0, M1);
     MODIFY(I0, M0);
     R1 = S_HB1;
     R1 = R1 + R10;
     B1 = R1;
-    L1 = 31;
+    L1 = HEADL;
     MODIFY(I1, M1);
     MODIFY(I1, M0);
     R1 = S_HB2;
     R1 = R1 + R10;
     B2 = R1;
-    L2 = 31;
+    L2 = HEADL;
     MODIFY(I2, M1);
     MODIFY(I2, M0);
     R0 = 16;
     R2 = R2 + R0;
-    R0 = 31;
+    R0 = HEADL;
     COMP(R2, R0);
     IF GE R2 = R2 - R0;
     DM(S_HHW, I6) = R2;
@@ -694,6 +700,19 @@ n_layer: MODIFY(I4, T_SIZE);
     M2 = -14;
     R7 = S_STREAM + ST_HEAD;
     R7 = R7 + R10;
+    I3 = R7;                            // the head's 49 weights into WBUF (Block 2), so its ring
+    I9 = WBUF;                          // reads (Block 3) do not meet them in one block; 26 word
+    BIT SET MODE1 PEYEN;                // pairs (3 words more), two moves a pass, F12 and F13 by turns
+    NOP;
+    F12 = DM(I3, M7);
+    F13 = DM(I3, M7);
+    LCNTR = 12, DO n_hc UNTIL LCE;
+      F12 = DM(I3, M7), PM(I9, M10) = F12;
+n_hc: F13 = DM(I3, M7), PM(I9, M10) = F13;
+    PM(I9, M10) = F12;
+    PM(I9, M10) = F13;
+    BIT CLR MODE1 PEYEN;
+    R7 = WBUF;
     F2 = DM(S_STREAM + ST_SCALE, I6);
     S2 = R2;
     F3 = DM(G_LEVEL);
@@ -1012,12 +1031,9 @@ p_next:
     R6 = DM(T_STRIDE, I3);
     LCNTR = KM1, DO p_rl UNTIL LCE;
       R1 = R8 + R2;
-      DM(I0, 6) = R1;
-      R1 = R1 + R6;
-      DM(I0, 6) = R1;
-      R1 = R1 + R6;
-      DM(I0, 6) = R1;
-      R2 = R2 + R3;
+      R1 = R1 + R6, DM(I0, 6) = R1;     // (each store with the next channel's address)
+      R1 = R1 + R6, DM(I0, 6) = R1;
+      R2 = R2 + R3, DM(I0, 6) = R1;
       COMP(R2, R10);
 p_rl: IF GE R2 = R2 - R10;
     R1 = DM(G_SDR);                     // the sentinel TCB: MAGIC from SENT into the flag
@@ -1191,16 +1207,13 @@ fc_nopatch:
 // already set) from offset M8, then its guard (B8 + M11, M11 = the length) =
 // its first word.
 n_put:
-    MODIFY(I8, M8);
-    F0 = DM(I3, M0);
-    LCNTR = 16, DO n_putw UNTIL LCE;
-n_putw: F0 = DM(I3, M0), PM(I8, M9) = F0;
-    I8 = B8;                            // (before L8's save: I8 then is not used just after its load)
-    R1 = L8;
-    L8 = 0;
-    F0 = PM(0, I8);
-    PM(M11, I8) = F0;
-    L8 = R1;
+    MODIFY(I8, M8);                     // (SIMD on, by the caller: two words a move, M7 = M10 = 2;
+    I12 = B8;                           // the ring's length and the offset are even, so no pair
+    F0 = DM(I3, M7);                    // straddles its end)
+    LCNTR = 8, DO n_putw UNTIL LCE;
+n_putw: F0 = DM(I3, M7), PM(I8, M10) = F0;
+    F0 = PM(0, I12);                    // the guard (and the pad word after it), from the ring's
+    PM(M11, I12) = F0;                  // base in I12 (L12 is 0): pre-modify, no wrap
     RTS;
 
 // ---- cold code: a slot's start and a model's load only, in Block 3 (COLD_PM, the top
