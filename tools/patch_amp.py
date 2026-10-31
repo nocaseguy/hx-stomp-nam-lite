@@ -1101,9 +1101,9 @@ def nam_params(e3, info):
     return out
 
 
-def nam_host_member(b0, comp_id, sdram_words=0, dm_words=0x91):
+def nam_host_member(b0, comp_id, sdram_words=0, dm_words=0x91, pm_words=0x0d):
     """Make member 1 of composite `comp_id` (a clone of NAM_HOST_COMPOSITE) the
-    primitive 0x9c75 (dm dm_words, pm 13, SDRAM sdram_words), keeping its ports (1 in, 1 out).
+    primitive 0x9c75 (dm dm_words, pm pm_words, SDRAM sdram_words), keeping its ports (1 in, 1 out).
     dm_words: its I0 block (word 13; the Amp harness allows up to 0x596)."""
     ct = b0[0x10]
     hdr = b0[ct + 7 * (comp_id - 0x600000): ct + 7 * (comp_id - 0x600000) + 7]
@@ -1114,7 +1114,7 @@ def nam_host_member(b0, comp_id, sdram_words=0, dm_words=0x91):
     b0[r + 11] = 0                  # no static init parameters
     for k in range(15, 20):         # sub-arena sizes: 0 for a primitive, as stock primitive members have
         b0[r + k] = 0
-    b0[r + 13], b0[r + 14], b0[r + 15] = dm_words, 0x0d, sdram_words   # the instance's DM, PM, SDRAM
+    b0[r + 13], b0[r + 14], b0[r + 15] = dm_words, pm_words, sdram_words   # the instance's DM, PM, SDRAM
 
 
 # The Amp harnesses: their model placeholder (member 3, composite 0x6000c8) gives the
@@ -1224,7 +1224,7 @@ def pmap_slots_without_param(e4, blob_index, params):
     return sorted(slots - {p['slot'] for p in params})
 
 
-def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, dm_words=0x91):
+def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, dm_words=0x91, pm_words=0x0d):
     """Entry 4 with one more blob, the NAM host: a copy of the model's composite
     (NAM_HOST_COMPOSITE) appended to Blob 0 (0x6001c6, 0x6001c7, ...;
     clone_composite_in_blob0) with its amp member made primitive 0x9c75
@@ -1250,7 +1250,7 @@ def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, dm_words=0x91):
     assert src_comp_id == NAM_HOST_COMPOSITE, \
         f'the NAM host wants a model on composite {NAM_HOST_COMPOSITE:#x} (HD2_AmpLine6Clarity), not {src_comp_id:#x}'
     b0_words, new_comp_id = clone_composite_in_blob0(b0_words, src_comp_id)
-    nam_host_member(b0_words, new_comp_id, sdram_words, dm_words)
+    nam_host_member(b0_words, new_comp_id, sdram_words, dm_words, pm_words)
     if sdram_words:
         raise_amp_harness_sdram(b0_words, sdram_words)
     err = sharc_blob0_check(b0_words, SHARC_BLOB0_MAX_WORDS)
@@ -1452,7 +1452,7 @@ def cmd_add_model(args):
 
     nam = nam_params(e3, info)
     e4 = get_entry_swapped(l6ia_bytes, 4)
-    new_e4, blob, new_comp_id = add_model_entry4(e4, src['blob_index'], nam, args.sdram_words, args.dm_words)
+    new_e4, blob, new_comp_id = add_model_entry4(e4, src['blob_index'], nam, args.sdram_words, args.dm_words, args.pm_words)
     replaced = {4: new_e4}
     print(f"[+] Entry 4: NAM host blob {blob} on composite {new_comp_id:#x} (a copy of {src['name']}'s); "
           f"{len(e4):#x} -> {len(new_e4):#x} bytes")
@@ -1553,7 +1553,7 @@ def cmd_add_fx_model(args):
     new_l6ia, info = kit_patch_amp.add_model(
         l6ia_bytes, args.clone or FX_CLONES[cat], args.name, args.display_name, folder=args.folder,
         short_name=args.short_name, preset_id=args.preset_id, dsp_cost=args.dsp_cost, params=NAM_FX_PARAMS,
-        prim_id=0x9c75, instance={'dm_words': args.dm_words, 'pm_words': 0x0d, 'sdram_words': args.sdram_words},
+        prim_id=0x9c75, instance={'dm_words': args.dm_words, 'pm_words': args.pm_words, 'sdram_words': args.sdram_words},
         host='HD2_VolPanVolMono', category=cat, log=print)
     save_l6ia_to_any(new_l6ia, args.output, donor_hxf=args.input if is_hxf else args.donor)
     print(f"[+] Wrote {args.output}: {args.display_name} as an effect (kind {info['kind']}, preset_id {info['preset_id']})")
@@ -1582,6 +1582,8 @@ def main():
     p_fx.add_argument('--sdram-words', type=lambda x: int(x, 0), default=0x5000)
     p_fx.add_argument('--dm-words', type=lambda x: int(x, 0), default=0x91,
                       help="each block's I0 block in words (the mono FX slot allows up to 0x38b)")
+    p_fx.add_argument('--pm-words', type=lambda x: int(x, 0), default=0x0d,
+                      help="each block's I8 (PM) block in words (the mono FX slot allows up to 0x14e)")
     p_fx.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
 
     p_add = sub.add_parser('add-model', help='Add the NAM host amp to Entry 0, 2, 3 and 4')
@@ -1601,6 +1603,9 @@ def main():
     p_add.add_argument('--dm-words', type=lambda x: int(x, 0), default=0x91,
                        help="each block's I0 block in words (default 0x91; the Amp harness allows up to "
                             "0x596; 0x303 for tools/sharc/nam_multi.py's DM rings)")
+    p_add.add_argument('--pm-words', type=lambda x: int(x, 0), default=0x0d,
+                       help="each block's I8 (PM) block in words (default 0x0d; the Amp harness allows "
+                            "up to 0x1fa; 0x147 for tools/sharc/nam_multi.py's PM rings)")
     p_add.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
     p_add.add_argument('--dsp-cost', type=int,
                        help="DSP cost for Entry 0 Table 1 (default: the source's; stock amps 775..3700, "

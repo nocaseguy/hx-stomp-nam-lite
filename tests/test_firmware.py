@@ -17,8 +17,8 @@ pytestmark = pytest.mark.firmware
 # kernel is that of the image (then preset ID 148, "NAM Lite Multi") that ran on an HX Stomp
 # from RAM (two blocks, two captures, the IR names in the titles), plus the Polarity knob.
 BUILT_MD5 = {
-    "HX_STOMP_HXF": "76ffd01469999d563d3077677ba4ee2a",
-    "HX_STOMP_XL_HXF": "c04b2af56a0824a61e6800dc719f1988",     # not run on an XL
+    "HX_STOMP_HXF": "3dd9379ca9bf66c3b48fd5e71531bd93",
+    "HX_STOMP_XL_HXF": "3c859c455721ac02e451610a56798392",     # not run on an XL
 }
 
 

@@ -78,7 +78,8 @@ EP0IMSK = 0x2000
 # slot state (offsets in a slot)
 S = dict(S_OWNER=0, S_LAST=1, S_INIT=2, S_SIG=3, S_GAIN=4, S_G1=5, S_MG=6, S_MR=7, S_HW=8, S_T=9,
          S_SEQ=10, S_HHW=11, S_SDR=12, S_FRESH=13, S_EQDIRTY=14, S_TRIM=15, S_EQIDX=16, S_EQC=20, S_EQS=40, S_LW=48,
-         S_SELF=71, S_DMB=72)   # S_SELF: the slot's own address; S_DMB: its owner's DM rings (DM_LAYERS)
+         S_SELF=71, S_DMB=72, S_PMB=73)   # S_SELF: the slot's own address; S_DMB, S_PMB: its owner's
+                                          # DM and PM rings (DM_LAYERS, PM_LAYERS)
 S_STREAM = 74
 ST = dict(ST_RECH=0, ST_HEAD=3, ST_SCALE=52, ST_SIL=nam_lite.N_WEIGHTS)
 REPW = dict(R_MAGIC=0, R_CALLS=1, R_TIMEOUTS=2, R_SKIPS=3, R_LOADS=4, R_CLAIMS=5, R_OWNERS=6, R_POLLS=9,
@@ -99,6 +100,13 @@ FAR_D = {2: 41, 3: 17}            # with 3 slots the d = 17 rings go to SDRAM to
 DM_LAYERS = 2
 DM_BASE = 0x92                    # the rings start at (I0 + DM_BASE) & ~1, past the 0x91 stock words
 DM_MAX = 0x38B - DM_BASE - 1
+# PM rings: the next smallest far layer's ring in the instance's PM block (I8, Block 3: 0xE33C4
+# for an amp, 0xE1B15 for the Distortion entry on the unit) above its 13 stock words, from
+# (I8 + PM_BASE) & ~1, the member's word 14 (pm_words) making it that long (the mono FX slot
+# allows 0x14e, the Amp harness 0x1fa).
+PM_LAYERS = 1
+PM_BASE = 0xE
+PM_MAX = 0x14E - PM_BASE - 1
 
 
 def rup16(x):
@@ -134,7 +142,7 @@ def names():
         "J_CHKVAL", "FLAGL", "SLOTTAB", "NSLOTS", "IN", "X", "HS", "TABLE", "NLAYERS", "JOBS", "NJOBS", "CLR",
         "NCLR", "DRIVE_TAB", "FADE_TAB", "EQ_TAB", "STOMP_GAIN", "LBUF", "LBUF_N", "LCH", "LCH_CP",
         "FARTAB", "WADDR", "NFAR", "S_STREAM", "S_HB0", "S_HB1", "S_HB2", "HIST_OFF", "SENT_OFF", "SENT2_OFF",
-        "SDR_NEED", "DM_BASE", "MAGIC", "POLLMAX", "LPOLLMAX", "BACKOFF_N", "T_MAX", "N_STREAM", "KM1", "T_SIZE",
+        "SDR_NEED", "DM_BASE", "PM_BASE", "MAGIC", "POLLMAX", "LPOLLMAX", "BACKOFF_N", "T_MAX", "N_STREAM", "KM1", "T_SIZE",
         "TCB_EI", "TCB_IC", "TCB_II", "IR_FLAG", "IR_TOP", "DMAC0", "EIEP0", "EMEP0", "ICEP0", "IIEP0", "IMEP0",
         "CPEP0", "DFLSH", "DEN_CHEN", "TRAN", "BUSYM", "EXTSM", "EP0IMSK", "HXK_ENTRY_INST", "HXK_INST_SDRAM",
         "HXK_INST_SDRAM_END", "COLD_PM", "WBUF", "HEADL"]
@@ -148,7 +156,7 @@ class Layout:
     """Every address of the kernel's memory, for `slots` slots."""
 
     def __init__(self, slots=3, n_code=None, backoff=BACKOFF_N, staging="b2", n_cold=None, wbuf=None,
-                 dm_layers=DM_LAYERS):
+                 dm_layers=DM_LAYERS, pm_layers=PM_LAYERS):
         """staging: "b2" puts the staging buffers in Block 2 after the code (the far layers'
         tap reads then never meet their weights' block); "b3" in Block 3, which leaves
         Block 2 free after the code for another module (kit-probe)."""
@@ -167,7 +175,15 @@ class Layout:
                 used += dsz(i)
         self.dml.sort()
         self.dm_words = DM_BASE + 1 + used if self.dml else 0   # the model member's word 13 needed
-        self.far = [i for i in far if i not in self.dml]
+        self.pml, used = [], 0
+        for i in sorted((i for i in far if i not in self.dml), key=lambda i: (ring[i], i)):
+            if len(self.pml) < pm_layers and used + dsz(i) <= PM_MAX:
+                self.pml.append(i)
+                used += dsz(i)
+        self.pml.sort()
+        self.pm_words = PM_BASE + 1 + used if self.pml else 0   # the model member's word 14 needed
+        self.own = {i: "S_DMB" for i in self.dml} | {i: "S_PMB" for i in self.pml}
+        self.far = [i for i in far if i not in self.own]
         F = self.nfar = len(self.far)
         self.groups = []                  # far layers next to each other: one write-back each
         for j, i in enumerate(self.far):
@@ -262,11 +278,11 @@ class Layout:
         h0 += h0 & 1                                     # (even: the slots' bases are even too)
         self.hb = [h0 + (HEADL + 2) * j for j in range(C)]
         o = self.hb[-1] + HEADL + 2
-        self.near_off, self.dm_off, od = {}, {}, 0
+        self.near_off, self.dm_off, od = {}, {}, {"S_DMB": 0, "S_PMB": 0}
         for i in near:
-            if i in self.dml:
-                self.dm_off[i] = od
-                od += C * (self.nring[i] + 2)
+            if i in self.own:
+                self.dm_off[i] = od[self.own[i]]
+                od[self.own[i]] += C * (self.nring[i] + 2)
                 continue
             self.near_off[i] = o
             o += C * (self.nring[i] + 2)
@@ -305,7 +321,7 @@ class Layout:
                  LCH_CP=(alloc["LCH"] + TCB_II) & 0x7FFFF, FARTAB=alloc["FARTAB"],
                  WADDR=alloc["WADDR"], NFAR=F, S_STREAM=S_STREAM, S_HB0=self.hb[0], S_HB1=self.hb[1],
                  S_HB2=self.hb[2], HIST_OFF=self.hist_off, SENT_OFF=self.sent_off, SENT2_OFF=self.sent_off + 1,
-                 SDR_NEED=self.sdr_need, DM_BASE=DM_BASE, MAGIC=MAGIC, POLLMAX=POLLMAX, LPOLLMAX=LPOLLMAX, BACKOFF_N=backoff,
+                 SDR_NEED=self.sdr_need, DM_BASE=DM_BASE, PM_BASE=PM_BASE, MAGIC=MAGIC, POLLMAX=POLLMAX, LPOLLMAX=LPOLLMAX, BACKOFF_N=backoff,
                  T_MAX=T_MAX, N_STREAM=N_STREAM, KM1=5, T_SIZE=T_SIZE, TCB_EI=TCB_EI, TCB_IC=TCB_IC,
                  TCB_II=TCB_II, IR_FLAG=IR_FLAG, IR_TOP=IR_TOP, DMAC0=DMAC0, EIEP0=EIEP0, EMEP0=EMEP0,
                  ICEP0=ICEP0, IIEP0=IIEP0, IMEP0=IMEP0, CPEP0=CPEP0, DFLSH=DFLSH, DEN_CHEN=DEN | CHEN, TRAN=TRAN,
@@ -364,8 +380,8 @@ class Layout:
                 row[T["T_SIL"]] = S_STREAM + nam_lite.N_WEIGHTS + C + C * i
             else:
                 L = self.nring[i]
-                row[T["T_RB"]] = self.dm_off[i] if i in self.dml else self.near_off[i]
-                row[T["T_BS"]] = S["S_DMB"] if i in self.dml else S["S_SELF"]
+                row[T["T_RB"]] = self.dm_off[i] if i in self.own else self.near_off[i]
+                row[T["T_BS"]] = S[self.own.get(i, "S_SELF")]
                 row[T["T_STRIDE"]] = L + 2
                 row[T["T_L"]] = L
                 row[T["T_S"]] = d
@@ -377,8 +393,8 @@ class Layout:
         put(al["FARTAB"], [al["TABLE"] + T_SIZE * i for i in self.far])
         put(al["WADDR"], [0] * F)
         clr = [(self.hb[c], HEADL + 1, c, S["S_SELF"]) for c in range(C)]
-        for i in sorted(list(self.near_off) + self.dml):
-            off, bs = (self.dm_off[i], S["S_DMB"]) if i in self.dml else (self.near_off[i], S["S_SELF"])
+        for i in sorted(list(self.near_off) + list(self.own)):
+            off, bs = (self.dm_off[i], S[self.own[i]]) if i in self.own else (self.near_off[i], S["S_SELF"])
             for c in range(C):
                 clr.append((off + c * (self.nring[i] + 2), self.nring[i] + 1, C + C * i + c, bs))
         assert len(clr) == self.nclr
@@ -441,6 +457,7 @@ class Layout:
                 "WBUF": f"{self.wbuf:#x}.. ({'Block 2' if self.wbuf_b2 else 'Block 3'})",
                 "slot words": self.slot_size, "sdram words needed": self.sdr_need,
                 "dm rings": f"layers {self.dml}, dm_words {self.dm_words:#x}",
+                "pm rings": f"layers {self.pml}, pm_words {self.pm_words:#x}",
                 "DDR2": f"{DDR2:#x}..{self.ddr2_to:#x}"}
 
 
@@ -825,6 +842,8 @@ class Inst:
         sim.wr(i0 + 3, 1)
         for k in range(13):
             sim.wr(i8 + k, 0)
+        for k in range(13, max(13, rig.lay.pm_words)):   # the PM rings' words: stale
+            sim.dm[i8 + k] = rig.rnd.getrandbits(32)
         sim.wr(entry + 2, entry + 0x10)
         sim.wr(entry + 0x10 + 6, sdram)
         sim.wr(entry + 0x10 + 7, sdram + sdram_words)
@@ -886,7 +905,7 @@ class Rig:
 
     def inst(self, name, k):
         """Instance k (0..7): blocks far apart, an SDRAM block of the manifest's size."""
-        return Inst(self, name, 0xB3000 + 0x400 * k + (k & 1), 0x91000 + 0x200 * k, 0xB6000 + 0x40 * k,
+        return Inst(self, name, 0xB3000 + 0x400 * k + (k & 1), 0x91000 + 0x200 * k + (k & 1), 0xB6000 + 0x40 * k,
                     0x400000 + 0x10000 * k, self.lay.sdram_words())
 
     def call(self, inst, block, label):

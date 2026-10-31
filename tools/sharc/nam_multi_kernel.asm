@@ -18,7 +18,9 @@
 //   through.
 // - DM rings (nam_multi.py DM_LAYERS): the smallest long rings are near rings in the
 //   instance's own DM block instead, from (I0 + DM_BASE) & ~1 (S_DMB; T_BS picks a near
-//   ring's base: S_SELF or S_DMB); the model member's dm_words makes the block that long.
+//   ring's base: S_SELF, S_DMB or S_PMB); the model member's dm_words makes the block that
+//   long. PM rings (PM_LAYERS): the next in the instance's PM block, from (I8 + PM_BASE) & ~1
+//   (S_PMB), pm_words long.
 // - The long rings (d >= FAR_D) are in the instance's own SDRAM block (DM(2, I3)
 //   words 6 and 7). Per far layer, external-port DMA channel 0 brings each
 //   channel's K-1 older tap windows (16 words each) into a staging buffer, as a
@@ -1236,6 +1238,12 @@ m_init:
     R1 = -2;
     R0 = R0 AND R1;
     DM(S_DMB, I6) = R0;
+    R0 = DM(SAVE + 46);                 // the PM rings: the instance's I8 block past the stock words
+    R1 = PM_BASE;
+    R0 = R0 + R1;
+    R1 = -2;
+    R0 = R0 AND R1;
+    DM(S_PMB, I6) = R0;
     R0 = 0;
     DM(S_SIG, I6) = R0;                 // no model loaded: the next block loads one
     DM(P_SIGN, I0) = R0;
