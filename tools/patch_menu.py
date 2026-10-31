@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""patch_menu.py - Global Settings additions for the HX Stomp 3.80.0 firmware (a CustomOS section, Tuner Activation), not the XL."""
+"""patch_menu.py - Global Settings additions for the HX Stomp 3.80.0 firmware (a CustomOS section, Tuner Activation, Lock Tuner Settings), not the XL."""
 import argparse
 import struct
 
@@ -28,6 +28,11 @@ STRCPY, VALUE_LEN = 0x28e24c78, 20                               # the function'
 # The tap in the footswitch case for function TAP/Tunr is a tail call; Press mode turns it into a tuner request.
 TAP_SITE, TAP_SITE_STOCK, TAP_CORE = 0x28dd1656, bytes.fromhex('caf7 a7bc'), 0x28d9bfa8
 GUARD, REQUEST_TUNER, GET_VALUE = 0x28d96134, 0x28d96588, 0x28e1f844
+
+# The tuner's settings (Output, Refrnc, Type, Trails, Offsets): knob turns are handled at TURN_FN, and a knob press resets the
+# item to its default in one of three cases of the event handler. Lock Tuner Settings On skips both; page changes stay.
+TURN_FN, TURN_FN_STOCK, TURN_FN_CONT = 0x28d916d4, bytes.fromhex('f8b5 4678'), 0x28d916d8      # push {r3-r7,lr}; ldrb r6,[r0,#1]
+RESET_SITES, RESET_STOCK, RESET_RET = (0x28d917fa, 0x28d9183e, 0x28d91854), bytes.fromhex('91f8 7430'), 0x28d9176e   # ldrb.w r3,[r1,#0x74]; pop {r3,r4,r5,pc}
 
 # CustomOS is category 6; the icon strip stays at six, so no icon is lit there. Each array below has one entry per category.
 NAV_CMP, NAV_CMP_STOCK = 0x28dcf162, bytes.fromhex('052b')       # cmp r3,#5 (last category)
@@ -199,6 +204,36 @@ def tap_cave(at):
     return a.bytes()
 
 
+def turn_cave(at):
+    """Knob turns on the tuner's settings: nothing happens while Lock Tuner Settings is On."""
+    a = Asm(at)
+    a.h(0xb507, 0xb082, 0x2000 | LOCK_ID, 0x4669)       # push {r0-r2,lr}; sub sp,#8; Lock Tuner Settings into [sp+4]
+    a.bl(GET_VALUE)
+    a.h(0x9b01, 0xb002)                                 # ldr r3,[sp,#4]; add sp,#8
+    a.raw(bytes.fromhex('bde8 0740'))                   # pop.w {r0-r2,lr}
+    a.h(0x2b01)                                         # cmp r3,#1
+    a.b16('eq', 'locked')
+    a.raw(TURN_FN_STOCK)
+    a.bw(TURN_FN_CONT)
+    a.label('locked')
+    a.h(0x4770)                                         # bx lr
+    return a.bytes()
+
+
+def reset_cave(at, site):
+    """A knob press that resets a tuner setting to its default: skipped while Lock Tuner Settings is On."""
+    a = Asm(at)
+    a.h(0xb082, 0x2000 | LOCK_ID, 0x4669)               # sub sp,#8; Lock Tuner Settings into [sp+4]
+    a.bl(GET_VALUE)
+    a.h(0x9b01, 0xb002, 0x4621, 0x2b01)                 # ldr r3,[sp,#4]; add sp,#8; mov r1,r4; cmp r3,#1
+    a.b16('eq', 'locked')
+    a.raw(RESET_STOCK)
+    a.bw(site + 4)
+    a.label('locked')
+    a.bw(RESET_RET)
+    return a.bytes()
+
+
 def padded(s):
     return s.ljust(VALUE_LEN, b'\0')
 
@@ -258,6 +293,10 @@ def menu_entry0(e0):
     expect(NAV_CMP, NAV_CMP_STOCK, 'the category navigation')
     expect(NAV_WRAP, NAV_WRAP_STOCK, 'the category navigation')
     expect(SLOT2, b'\x02\x24', 'the knob handler slot-2 path')
+    expect(TURN_FN, TURN_FN_STOCK, 'the tuner settings knob handler')
+    expect(RESET_RET, b'\x38\xbd', 'the tuner event handler epilogue')
+    for site in RESET_SITES:
+        expect(site, RESET_STOCK, 'a tuner settings reset case')
     for site in SITES.values():
         expect(site[0], bytes([5, 0x2b if site[1] == 3 else 0x2c]) + b'', 'a category dispatch')
 
@@ -286,6 +325,9 @@ def menu_entry0(e0):
     put(HOOK, pa.thumb_bw(HOOK, cave.add(knob_cave(cave.next()))))
     put(TEXT_FN, pa.thumb_bw(TEXT_FN, cave.add(text_cave(cave.next(), values))))
     put(TAP_SITE, pa.thumb_bw(TAP_SITE, cave.add(tap_cave(cave.next()))))
+    put(TURN_FN, pa.thumb_bw(TURN_FN, cave.add(turn_cave(cave.next()))))
+    for site in RESET_SITES:
+        put(site, pa.thumb_bw(site, cave.add(reset_cave(cave.next(), site))))
 
     out = bytearray(e0[:nxt]) + cave.buf
     out += b'\x00' * ((-len(out)) & 3)
