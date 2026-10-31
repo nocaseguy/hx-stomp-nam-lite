@@ -48,10 +48,8 @@ Settings this build adds to the HX Stomp's Global Settings menu (HX Stomp only; 
 
 | Setting | Where | Values | What it does |
 |---|---|---|---|
-| **Tuner Activation** | CustomOS, and Global Settings > Footswitches (second page) | **Hold** (default), **Press** | A footswitch assigned TAP/Tunr normally taps the tempo, and holding it opens the tuner. On **Press**, pressing it opens the tuner at once and the tempo is no longer tapped. It follows the assignment, so it works on whichever footswitch has TAP/Tunr. |
+| **Tuner Activation** | CustomOS | **Hold** (default), **Press** | A footswitch assigned TAP/Tunr normally taps the tempo, and holding it opens the tuner. On **Press**, pressing it opens the tuner at once and the tempo is no longer tapped. It follows the assignment, so it works on whichever footswitch has TAP/Tunr. |
 | **Lock Tuner Settings** | CustomOS | **Off** (default), **On** | On stops the tuner's settings (Output, Refrnc, Type, Trails, Offsets) from changing: knob turns and the knob presses that reset an item to its default are ignored. Paging between the tuner's settings screens still works. |
-
-There is also a placeholder, **Setting Test**, on the Displays page (the one with LED Ring and Tap Tempo LED). It shows a 0 to 127 value and does nothing; it was the proof of concept for adding a setting.
 
 Labels in these menus take at most 8 characters before the newline of the stored `Page\nName` and 9 after it; the unit shows the part after the newline first.
 
@@ -102,7 +100,7 @@ This writes `build/HX_Stomp_v3.80.0_CustomOS.hxf` (from the XL's file, `build/HX
 4. Adds the kernel to the DSP's boot code and hooks it to an unused DSP primitive.
 5. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
-The HX Stomp result has MD5 `eaf7c00277e1957b8920e3706c72e5c7` (pinned in `tests/test_firmware.py`), what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`, plus the Global Settings entries of `tools/patch_menu.py` (HX Stomp only; the XL build is unchanged by it): a test setting, and Footswitches > Tuner Activation (Hold or Press). On Press, a press of a TAP/Tunr footswitch opens the tuner at once and no longer taps the tempo. Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
+The HX Stomp result has MD5 `3670f1662290098c3071e64aa25c88eb` (pinned in `tests/test_firmware.py`), what the hx-stomp-kit project builds for its `nam-a2-lite` module with `--ir-title`, plus the Global Settings entries of `tools/patch_menu.py` (HX Stomp only; the XL build is unchanged by it): see [Custom settings](#custom-settings). Its DSP program is that of the image that ran on an HX Stomp from RAM with two NAM blocks, each playing its own capture, the titles showing the captures' names, plus the Polarity knob's three instructions (that test image named the amp "NAM Lite Multi", preset ID 148, and had no Polarity knob). **The Polarity knob has not run on a unit yet** (simulator only); try the build from RAM first.
 
 Only 4 of the 15 parts of the firmware change: the main application (its model tables and the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 

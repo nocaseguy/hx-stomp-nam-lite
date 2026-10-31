@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""patch_menu.py - Global Settings additions for the HX Stomp 3.80.0 firmware (a CustomOS section, Tuner Activation, Lock Tuner Settings), not the XL."""
+"""patch_menu.py - Global Settings additions for the HX Stomp 3.80.0 firmware (a CustomOS section with Tuner Activation and Lock Tuner Settings), not the XL."""
 import argparse
 import struct
 
@@ -10,16 +10,9 @@ STOCK_BASE = 0x28d8fa80          # Entry 0 code segment of the HX Stomp 3.80.0 (
 NAMES_LONG, NAMES_SHORT, NAME_LEN = 0x28e25624, 0x28e26498, 27   # 'Page\nName' char[27] per parameter ID, shown name first
 EMPTY_SLOT = 0x17e
 
-# Test setting (ID 28) on the LED page; its knob handler compares IDs 0x19 and 0x1a by hand, so a third ID needs a cave.
-TEST_ID, TEST_LABEL = 28, b'Setting\nTest'
-LED_SLOT = 0x28e3b544            # third slot of the {25, 26, 0x17e} page
-HOOK, HOOK_STOCK = 0x28dceb7e, bytes.fromhex('1a29 f8d1')       # cmp r1,#0x1a; bne EXIT
-SLOT1, SLOT2, EXIT = 0x28dceb82, 0x28dcec66, 0x28dceb74
-
 # Parameter IDs of the CustomOS settings (stock labels stay within 8 characters before the newline and 9 after it); limits come from the tbh table at 0x28e1ead4 (ID 18's entry is an enum 0..1).
 TUNER_ID, TUNER_LABEL, TUNER_VALUES = 29, b'Activate\nTuner', (b'Hold', b'Press')
 LOCK_ID, LOCK_LABEL, LOCK_VALUES = 104, b'Settings\nLock Tnr', (b'Off', b'On')
-FOOT_SLOT = 0x28e3b558           # page 1, slot 1 of the Footswitches table {17, 97, 98, 99, 0x17e, 0x17e}
 LIMITS_TAB_LOW, LIMITS_TAB_HIGH = 0x28e1ebbc, 0x28e1eaf0         # tbh bases for IDs 1..0x37 and 0x3f..0x9a
 ENUM01_TARGET = 0x28e1ec66       # limits code for an integer 0..1, default 0
 TEXT_FN, TEXT_FN_STOCK, TEXT_FN_CONT = 0x28d9775c, bytes.fromhex('30b5 85b0'), 0x28d97760   # (ID, value) -> text; push {r4,r5,lr}; sub sp,#0x14
@@ -148,21 +141,6 @@ def dispatch_cave(at, site, table):
     return a.bytes()
 
 
-def knob_cave(at):
-    """The LED page's slot test: Tap LED and our test ID take slots 1 and 2, anything else exits as stock."""
-    a = Asm(at)
-    a.h(cmp_imm(1, 0x1a))
-    a.b16('ne', 'next')
-    a.bw(SLOT1)
-    a.label('next')
-    a.h(cmp_imm(1, TEST_ID))
-    a.b16('ne', 'other')
-    a.bw(SLOT2)
-    a.label('other')
-    a.bw(EXIT)
-    return a.bytes()
-
-
 def text_cave(at, tables):
     """Runs the two instructions the hook replaced, then answers our IDs with their value strings and leaves other IDs to stock."""
     a = Asm(at)
@@ -264,18 +242,11 @@ def menu_entry0(e0):
     for tab in (NAMES_LONG, NAMES_SHORT):
         if e0[off(tab + NAME_LEN * 22, 8):][:8] != b'Main LCD':
             raise SystemExit(f'patch-menu: label array at {tab:#x} is not the stock one')
-        for pid, label in ((TEST_ID, TEST_LABEL), (TUNER_ID, TUNER_LABEL), (LOCK_ID, LOCK_LABEL)):
+        for pid, label in ((TUNER_ID, TUNER_LABEL), (LOCK_ID, LOCK_LABEL)):
             o = off(tab + NAME_LEN * pid, NAME_LEN)
             if any(e0[o:o + NAME_LEN]):
                 raise SystemExit(f'patch-menu: label {pid} at {tab:#x} is not empty (the patch is already applied?)')
             e0[o:o + len(label)] = label
-
-    if struct.unpack_from('<3H', e0, off(LED_SLOT - 4, 6)) != (25, 26, EMPTY_SLOT):
-        raise SystemExit('patch-menu: the {25, 26, 0x17e} page is not at its stock address')
-    put(LED_SLOT, struct.pack('<H', TEST_ID))
-    if struct.unpack_from('<3H', e0, off(FOOT_SLOT - 2, 6)) != (99, EMPTY_SLOT, EMPTY_SLOT):
-        raise SystemExit('patch-menu: the Footswitches page is not at its stock address')
-    put(FOOT_SLOT, struct.pack('<H', TUNER_ID))
 
     enum01 = struct.unpack_from('<H', e0, off(LIMITS_TAB_LOW + 2 * 17, 2))[0]    # ID 18's entry
     if LIMITS_TAB_LOW + 2 * enum01 != ENUM01_TARGET:
@@ -287,12 +258,10 @@ def menu_entry0(e0):
     if LIMITS_TAB_HIGH + 2 * lock_entry != ENUM01_TARGET:
         raise SystemExit('patch-menu: the lock setting has no enum limits entry')
 
-    expect(HOOK, HOOK_STOCK, 'the LED page knob handler')
     expect(TEXT_FN, TEXT_FN_STOCK, 'the value-text function')
     expect(TAP_SITE, TAP_SITE_STOCK, 'the tap-tempo call')
     expect(NAV_CMP, NAV_CMP_STOCK, 'the category navigation')
     expect(NAV_WRAP, NAV_WRAP_STOCK, 'the category navigation')
-    expect(SLOT2, b'\x02\x24', 'the knob handler slot-2 path')
     expect(TURN_FN, TURN_FN_STOCK, 'the tuner settings knob handler')
     expect(RESET_RET, b'\x38\xbd', 'the tuner event handler epilogue')
     for site in RESET_SITES:
@@ -322,7 +291,6 @@ def menu_entry0(e0):
     for site in SITES.values():
         va = cave.add(dispatch_cave(cave.next(), site, table_va))
         put(site[0], pa.thumb_bw(site[0], va))
-    put(HOOK, pa.thumb_bw(HOOK, cave.add(knob_cave(cave.next()))))
     put(TEXT_FN, pa.thumb_bw(TEXT_FN, cave.add(text_cave(cave.next(), values))))
     put(TAP_SITE, pa.thumb_bw(TAP_SITE, cave.add(tap_cave(cave.next()))))
     put(TURN_FN, pa.thumb_bw(TURN_FN, cave.add(turn_cave(cave.next()))))
@@ -341,8 +309,7 @@ def menu_entry0(e0):
 def patch_menu(l6ia_bytes, log=print):
     e0 = pa.get_entry_swapped(l6ia_bytes, 0)
     new_l6ia, _, _ = l6ia.rebuild_archive(l6ia_bytes, {0: menu_entry0(e0)})
-    log('[+] Entry 0: Global Settings > CustomOS (Tuner Activation, Lock Tuner Settings), Footswitches > Tuner Activation, '
-        f'Displays > "Setting Test" (parameter {TEST_ID})')
+    log('[+] Entry 0: Global Settings > CustomOS (Tuner Activation, Lock Tuner Settings)')
     return new_l6ia
 
 
