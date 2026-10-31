@@ -26,16 +26,16 @@ var STOCK_MD5 = {
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "d450c571252d7fddec81430522fad891",
-  "HX_Stomp_XL": "0f2a9cbf51804c857fc0486e7d3f9c6f",
+  "HX_Stomp": "fd18c1b0fda16c73c0f096d9b9edbdc7",
+  "HX_Stomp_XL": "fb3a7b523e4b909de9d1e83162acd403",
 };
 
 // build.py's KERNEL, MODEL, FX_MODEL and IR_TITLE (tests/test_web_build.py keeps them equal).
 var KERNEL = "tools/sharc/nam_multi.py";
 var MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
-             "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2380", "--sdram-words", "0x5000"];
+             "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2345", "--sdram-words", "0x5000"];
 var FX_MODEL = ["--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion",
-                "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2380", "--sdram-words", "0x5000"];
+                "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2345", "--sdram-words", "0x5000"];
 var IR_TITLE = {
   "HX_Stomp": ["--preset-id", "147", "--fx-preset-id", "148"],
   "HX_Stomp_XL": ["--preset-id", "147", "--fx-preset-id", "148"],
