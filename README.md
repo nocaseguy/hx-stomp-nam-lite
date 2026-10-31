@@ -40,6 +40,16 @@ It is the same amp as before: **NAM A2 Lite**, preset ID 147, the same first sev
 
 Everything else in the firmware stays stock 3.80.0.
 
+## Custom settings
+
+Settings this build adds to the HX Stomp's Global Settings menu (HX Stomp only; the XL build doesn't have them). `tools/patch_menu.py` adds them, and each has run from RAM on a unit.
+
+| Setting | Where | Values | What it does |
+|---|---|---|---|
+| **Tuner Activation** | Global Settings > Footswitches (second page) | **Hold** (default), **Press** | A footswitch assigned TAP/Tunr normally taps the tempo, and holding it opens the tuner. On **Press**, pressing it opens the tuner at once and the tempo is no longer tapped. It follows the assignment, so it works on whichever footswitch has TAP/Tunr. |
+
+There is also a placeholder, **Setting Test**, on the Displays page (the one with LED Ring and Tap Tempo LED). It shows a 0 to 127 value and does nothing; it was the proof of concept for adding a setting.
+
 ## What this repository contains, and what it doesn't
 
 **No Line 6 code or data is in this repository**, and no firmware file is distributed. You need your own copy of the official firmware file. The build reads it on your computer, applies the changes and writes a new `.hxf` for you. Please don't share the built `.hxf`: it is Line 6's firmware with changes, and it isn't yours or ours to redistribute.
