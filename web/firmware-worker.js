@@ -26,7 +26,7 @@ var STOCK_MD5 = {
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "fd18c1b0fda16c73c0f096d9b9edbdc7",
+  "HX_Stomp": "554e82a8efc05aa5d22b3182676318d7",
   "HX_Stomp_XL": "fb3a7b523e4b909de9d1e83162acd403",
 };
 
@@ -48,6 +48,7 @@ var SOURCES = [
   "tools/hxf_ram.py",
   "tools/l6ia_verify.py",
   "tools/patch_amp.py",
+  "tools/patch_menu.py",
   "tools/kit_patch_amp.py",
   "tools/sharc/entry4_blob.py",
   "tools/sharc/nam_lite.py",
@@ -139,6 +140,12 @@ async function build(stock) {
            ["tools/patch_amp.py", "ir-title", base, "build/nam_lite_title.l6ia"].concat(IR_TITLE[unit]));
       p.FS.unlink("/repo/" + base);
       base = "build/nam_lite_title.l6ia";
+    }
+    if (unit === "HX_Stomp") {
+      step(4, "Adding the NAM A2 Lite amp…",
+           ["tools/patch_menu.py", base, "build/nam_lite_menu.l6ia"]);
+      p.FS.unlink("/repo/" + base);
+      base = "build/nam_lite_menu.l6ia";
     }
     step(5, "Adding the kernel to the DSP program…",
          ["tools/patch_amp.py", "patch", base, "build/nam_lite.l6ia", "--asm", "build/nam_lite.asm"]);
