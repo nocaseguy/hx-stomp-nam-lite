@@ -6,7 +6,7 @@ usage: python3 build.py <HX_Stomp_v3.80.0_0x103966115.hxf | HX_Stomp_XL_v3.80.0_
 The input is Line 6's own firmware file for your unit, version 3.80.0
 (Line 6 Updater keeps a copy; see README.md). Nothing of it is in this
 repository: the build reads it, adds NAM A2 Lite and writes a new .hxf
-(default build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf, or ..._XL_... for the XL) for Line 6 Updater.
+(default build/HX_Stomp_v3.80.0_CustomOS.hxf, or ..._XL_... for the XL) for Line 6 Updater.
 
 NAM A2 Lite runs as up to three blocks at once (at most two per preset, as any
 amp), each playing its own capture from a User IR slot. The block's title
@@ -70,7 +70,7 @@ def main():
     unit = STOCK_MD5[md5]
     print(f"stock firmware: {unit.replace('_', ' ')} 3.80.0")
     out = os.path.abspath(argv[argv.index("-o") + 1]) if "-o" in argv else \
-        os.path.join(HERE, "build", f"{unit}_v3.80.0_NAM_A2_Lite.hxf")
+        os.path.join(HERE, "build", f"{unit}_v3.80.0_CustomOS.hxf")
     build = os.path.join(HERE, "build")
     os.makedirs(build, exist_ok=True)
     asm = os.path.join(build, "nam_lite.asm")

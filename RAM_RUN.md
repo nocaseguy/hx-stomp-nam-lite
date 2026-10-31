@@ -22,7 +22,7 @@ On Windows the browser may not see the Stomp, because Line 6's driver holds it. 
 pip install pyusb                    # and libusb
 # Hold Page Right while you turn the Stomp on (update mode, dark screen), then:
 dfu-util -d 1fc9:000c -a 0 -D tools/ramboot/firmware-ramboot.dfu
-python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf --stock HX_Stomp_v3.80.0_0x103966115.hxf
+python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_CustomOS.hxf --stock HX_Stomp_v3.80.0_0x103966115.hxf
 ```
 
 dfu-util may report an I/O error at the end: the loader has started and left update mode. `hxf_ram.py plan` makes the same checks and layout without a unit (`--out DIR` writes what would be sent), and `hxf_ram.py info` shows what the loader reports.

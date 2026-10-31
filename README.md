@@ -75,7 +75,7 @@ The page is `web/index.html`; GitHub Pages publishes it with `tools/` (`.github/
 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
 ```
 
-This writes `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (from the XL's file, `build/HX_Stomp_XL_v3.80.0_NAM_A2_Lite.hxf`). It takes about 30 seconds. The build:
+This writes `build/HX_Stomp_v3.80.0_CustomOS.hxf` (from the XL's file, `build/HX_Stomp_XL_v3.80.0_CustomOS.hxf`). It takes about 30 seconds. The build:
 
 1. Assembles the kernel and runs it in the SHARC simulator. Each block's output must match a reference NAM A2 implementation (`src/sharc/nam_a2.asm`) bit for bit, on its own capture and input trim; the check also covers the tone stack, the crossfades, model changes, a fourth block, and the DMA that fetches the long rings and its failure path. Add `--no-check` to skip this step.
 2. Adds the amp, with the steps below:
@@ -99,7 +99,7 @@ You can run the built firmware from the Stomp's memory for one session before yo
 - **From the command line:** hold Page Right while you power on, then
   ```sh
   dfu-util -d 1fc9:000c -a 0 -D tools/ramboot/firmware-ramboot.dfu
-  python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf --stock HX_Stomp_v3.80.0_0x103966115.hxf
+  python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_CustomOS.hxf --stock HX_Stomp_v3.80.0_0x103966115.hxf
   ```
 
 Presets and IRs you change during the run are lost at power-off. [RAM_RUN.md](RAM_RUN.md) explains how it works and its limits.
@@ -107,7 +107,7 @@ Presets and IRs you change during the run are lost at power-off. [RAM_RUN.md](RA
 ## Install
 
 1. Back up your presets and IRs in HX Edit, then **close HX Edit**.
-2. Open Line 6 Updater, choose **Choose File**, and pick `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (on an XL, the `_XL_` file; never the other unit's).
+2. Open Line 6 Updater, choose **Choose File**, and pick `build/HX_Stomp_v3.80.0_CustomOS.hxf` (on an XL, the `_XL_` file; never the other unit's).
 3. Let it finish and restart the Stomp.
 
 
