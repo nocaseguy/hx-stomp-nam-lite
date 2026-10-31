@@ -69,7 +69,7 @@ TCB = 6                           # EP TCB: CP, EMEP, EIEP, ICEP, IMEP, IIEP (HR
 TCB_EI, TCB_IC, TCB_II = 2, 3, 5
 SB_WORDS = C * 6 * 16             # a staging buffer: [channel][tap][16]
 JOB = 8
-T_SIZE = 17
+T_SIZE = 18
 
 DMAC0, EIEP0, EMEP0, ECEP0, IIEP0, IMEP0, ICEP0, CPEP0 = 0x180B, 0x1820, 0x1821, 0x1822, 0x1823, 0x1824, 0x1825, 0x1826
 DEN, TRAN, CHEN, DFLSH, DMAS, CHS, EXTS = 1, 2, 4, 0x20, 1 << 20, 1 << 21, 1 << 24
@@ -77,18 +77,28 @@ EP0IMSK = 0x2000
 
 # slot state (offsets in a slot)
 S = dict(S_OWNER=0, S_LAST=1, S_INIT=2, S_SIG=3, S_GAIN=4, S_G1=5, S_MG=6, S_MR=7, S_HW=8, S_T=9,
-         S_SEQ=10, S_HHW=11, S_SDR=12, S_FRESH=13, S_EQDIRTY=14, S_TRIM=15, S_EQIDX=16, S_EQC=20, S_EQS=40, S_LW=48)
-S_STREAM = 72
+         S_SEQ=10, S_HHW=11, S_SDR=12, S_FRESH=13, S_EQDIRTY=14, S_TRIM=15, S_EQIDX=16, S_EQC=20, S_EQS=40, S_LW=48,
+         S_SELF=71, S_DMB=72)   # S_SELF: the slot's own address; S_DMB: its owner's DM rings (DM_LAYERS)
+S_STREAM = 74
 ST = dict(ST_RECH=0, ST_HEAD=3, ST_SCALE=52, ST_SIL=nam_lite.N_WEIGHTS)
 REPW = dict(R_MAGIC=0, R_CALLS=1, R_TIMEOUTS=2, R_SKIPS=3, R_LOADS=4, R_CLAIMS=5, R_OWNERS=6, R_POLLS=9,
             R_MAXPOLLS=10, R_BACKOFF=11, R_NOSLOT=12, R_NOSDR=13, R_DMAC=14, R_ICEP=15)
 T = dict(T_RB=0, T_STRIDE=1, T_L=2, T_LW=3, T_K=4, T_S=5, T_WT=6, T_KD=7, T_FAR=8, T_RPOS=9, T_KS=10,
-         T_D=11, T_SB=12, T_OB=13, T_WA=14, T_SIL=15, T_NW=16)
+         T_D=11, T_SB=12, T_OB=13, T_WA=14, T_SIL=15, T_NW=16, T_BS=17)   # T_BS: the slot word with a near ring's base
 J = dict(J_TYPE=0, J_READY=1, J_ROW=2, J_CHAIN=3, J_FLAG=4, J_CP=5, J_N=6)
 SIGCHK_N = 64                     # the kernel's model-check period (nam_multi_kernel.asm .equ)
 P = dict(P_SLOT=12, P_SEEN=13, P_MET=14, P_PHASE=15, P_SIGN=18)   # P_PHASE: the Polarity knob (patch_amp
 # pid 15); P_SIGN: calls to the model's next check (16, 17: the meter test images')
 FAR_D = {2: 41, 3: 17}            # with 3 slots the d = 17 rings go to SDRAM too, to fit
+# DM rings: the smallest far layers' rings (up to DM_LAYERS of them) go instead into the
+# instance's own DM block above the stock words (I0 + 0x92, even, to I0 + dm_words): no DMA
+# staging for them. The stock graph carves that block from the slot's DM budget per the
+# model member's word 13 (dm_words; hx_firmware research/KIT_HEAP_USE.md), not zeroed: the
+# load writes their silence state like the other near rings. The Distortion entry's mono FX
+# slot allows dm_words 0x38b at most, so DM_MAX (words for rings) keeps both entries alike.
+DM_LAYERS = 2
+DM_BASE = 0x92                    # the rings start at (I0 + DM_BASE) & ~1, past the 0x91 stock words
+DM_MAX = 0x38B - DM_BASE - 1
 
 
 def rup16(x):
@@ -124,7 +134,7 @@ def names():
         "J_CHKVAL", "FLAGL", "SLOTTAB", "NSLOTS", "IN", "X", "HS", "TABLE", "NLAYERS", "JOBS", "NJOBS", "CLR",
         "NCLR", "DRIVE_TAB", "FADE_TAB", "EQ_TAB", "STOMP_GAIN", "LBUF", "LBUF_N", "LCH", "LCH_CP",
         "FARTAB", "WADDR", "NFAR", "S_STREAM", "S_HB0", "S_HB1", "S_HB2", "HIST_OFF", "SENT_OFF", "SENT2_OFF",
-        "SDR_NEED", "MAGIC", "POLLMAX", "LPOLLMAX", "BACKOFF_N", "T_MAX", "N_STREAM", "KM1", "T_SIZE",
+        "SDR_NEED", "DM_BASE", "MAGIC", "POLLMAX", "LPOLLMAX", "BACKOFF_N", "T_MAX", "N_STREAM", "KM1", "T_SIZE",
         "TCB_EI", "TCB_IC", "TCB_II", "IR_FLAG", "IR_TOP", "DMAC0", "EIEP0", "EMEP0", "ICEP0", "IIEP0", "IMEP0",
         "CPEP0", "DFLSH", "DEN_CHEN", "TRAN", "BUSYM", "EXTSM", "EP0IMSK", "HXK_ENTRY_INST", "HXK_INST_SDRAM",
         "HXK_INST_SDRAM_END", "COLD_PM", "WBUF", "HEADL"]
@@ -137,7 +147,8 @@ def equs(v):
 class Layout:
     """Every address of the kernel's memory, for `slots` slots."""
 
-    def __init__(self, slots=3, n_code=None, backoff=BACKOFF_N, staging="b2", n_cold=None, wbuf=None):
+    def __init__(self, slots=3, n_code=None, backoff=BACKOFF_N, staging="b2", n_cold=None, wbuf=None,
+                 dm_layers=DM_LAYERS):
         """staging: "b2" puts the staging buffers in Block 2 after the code (the far layers'
         tap reads then never meet their weights' block); "b3" in Block 3, which leaves
         Block 2 free after the code for another module (kit-probe)."""
@@ -146,7 +157,17 @@ class Layout:
         self.n_cold = code_sizes()[1] if n_cold is None else n_cold
         n = self.n_code
         self.b2_data = NW0 + (CODE - NW0) * 3 // 2 + -(-(n + (n & 1)) * 3 // 2)
-        self.far = [i for i, (k, d) in enumerate(zip(KERNEL, DILATION)) if k == 6 and d >= self.far_d]
+        far = [i for i, (k, d) in enumerate(zip(KERNEL, DILATION)) if k == 6 and d >= self.far_d]
+        ring = [(k - 1) * d + 16 for k, d in zip(KERNEL, DILATION)]
+        dsz = lambda i: C * (ring[i] + (ring[i] & 1) + 2)
+        self.dml, used = [], 0
+        for i in sorted(far, key=lambda i: (ring[i], i)):
+            if len(self.dml) < dm_layers and used + dsz(i) <= DM_MAX:
+                self.dml.append(i)
+                used += dsz(i)
+        self.dml.sort()
+        self.dm_words = DM_BASE + 1 + used if self.dml else 0   # the model member's word 13 needed
+        self.far = [i for i in far if i not in self.dml]
         F = self.nfar = len(self.far)
         self.groups = []                  # far layers next to each other: one write-back each
         for j, i in enumerate(self.far):
@@ -232,7 +253,7 @@ class Layout:
         take("WADDR", F)
         near = [i for i in range(NL) if i not in self.far]
         self.nclr = 3 + 3 * len(near)
-        take("CLR", 3 * self.nclr)
+        take("CLR", 4 * self.nclr)
         take("DRIVE_TAB", 101)
         take("FADE_TAB", 18)
         self.alloc = alloc
@@ -241,8 +262,12 @@ class Layout:
         h0 += h0 & 1                                     # (even: the slots' bases are even too)
         self.hb = [h0 + (HEADL + 2) * j for j in range(C)]
         o = self.hb[-1] + HEADL + 2
-        self.near_off = {}
+        self.near_off, self.dm_off, od = {}, {}, 0
         for i in near:
+            if i in self.dml:
+                self.dm_off[i] = od
+                od += C * (self.nring[i] + 2)
+                continue
             self.near_off[i] = o
             o += C * (self.nring[i] + 2)
         o += o & 1
@@ -280,7 +305,7 @@ class Layout:
                  LCH_CP=(alloc["LCH"] + TCB_II) & 0x7FFFF, FARTAB=alloc["FARTAB"],
                  WADDR=alloc["WADDR"], NFAR=F, S_STREAM=S_STREAM, S_HB0=self.hb[0], S_HB1=self.hb[1],
                  S_HB2=self.hb[2], HIST_OFF=self.hist_off, SENT_OFF=self.sent_off, SENT2_OFF=self.sent_off + 1,
-                 SDR_NEED=self.sdr_need, MAGIC=MAGIC, POLLMAX=POLLMAX, LPOLLMAX=LPOLLMAX, BACKOFF_N=backoff,
+                 SDR_NEED=self.sdr_need, DM_BASE=DM_BASE, MAGIC=MAGIC, POLLMAX=POLLMAX, LPOLLMAX=LPOLLMAX, BACKOFF_N=backoff,
                  T_MAX=T_MAX, N_STREAM=N_STREAM, KM1=5, T_SIZE=T_SIZE, TCB_EI=TCB_EI, TCB_IC=TCB_IC,
                  TCB_II=TCB_II, IR_FLAG=IR_FLAG, IR_TOP=IR_TOP, DMAC0=DMAC0, EIEP0=EIEP0, EMEP0=EMEP0,
                  ICEP0=ICEP0, IIEP0=IIEP0, IMEP0=IMEP0, CPEP0=CPEP0, DFLSH=DFLSH, DEN_CHEN=DEN | CHEN, TRAN=TRAN,
@@ -339,7 +364,8 @@ class Layout:
                 row[T["T_SIL"]] = S_STREAM + nam_lite.N_WEIGHTS + C + C * i
             else:
                 L = self.nring[i]
-                row[T["T_RB"]] = self.near_off[i]
+                row[T["T_RB"]] = self.dm_off[i] if i in self.dml else self.near_off[i]
+                row[T["T_BS"]] = S["S_DMB"] if i in self.dml else S["S_SELF"]
                 row[T["T_STRIDE"]] = L + 2
                 row[T["T_L"]] = L
                 row[T["T_S"]] = d
@@ -350,10 +376,11 @@ class Layout:
         put(al["TABLE"], tab)
         put(al["FARTAB"], [al["TABLE"] + T_SIZE * i for i in self.far])
         put(al["WADDR"], [0] * F)
-        clr = [(self.hb[c], HEADL + 1, c) for c in range(C)]
-        for i in sorted(self.near_off):
+        clr = [(self.hb[c], HEADL + 1, c, S["S_SELF"]) for c in range(C)]
+        for i in sorted(list(self.near_off) + self.dml):
+            off, bs = (self.dm_off[i], S["S_DMB"]) if i in self.dml else (self.near_off[i], S["S_SELF"])
             for c in range(C):
-                clr.append((self.near_off[i] + c * (self.nring[i] + 2), self.nring[i] + 1, C + C * i + c))
+                clr.append((off + c * (self.nring[i] + 2), self.nring[i] + 1, C + C * i + c, bs))
         assert len(clr) == self.nclr
         put(al["CLR"], [x for r in clr for x in r])
         put(al["DRIVE_TAB"], [nam_pack.f2b(10.0 ** ((step - 50) * 0.4 / 20)) for step in range(101)])
@@ -413,6 +440,7 @@ class Layout:
                 "X, IN": f"{self.v_x():#x}.. ({'Block 2' if self.xhi_b2 else 'Block 3'})",
                 "WBUF": f"{self.wbuf:#x}.. ({'Block 2' if self.wbuf_b2 else 'Block 3'})",
                 "slot words": self.slot_size, "sdram words needed": self.sdr_need,
+                "dm rings": f"layers {self.dml}, dm_words {self.dm_words:#x}",
                 "DDR2": f"{DDR2:#x}..{self.ddr2_to:#x}"}
 
 
@@ -784,7 +812,7 @@ MAX_STEADY = 33000                # instructions a steady block, at most (Kernel
 
 class Inst:
     """An instance as the stock graph makes one: its DM block (I0, 145 words zeroed,
-    DM(3) = 1), PM block (I8), call-list entry (I3) -> instance struct -> SDRAM block
+    DM(3) = 1, then dm_words - 145 stale words for the DM rings; odd I0s too), PM block (I8), call-list entry (I3) -> instance struct -> SDRAM block
     (stale: random words), and what it should play."""
 
     def __init__(self, rig, name, i0, i8, entry, sdram, sdram_words):
@@ -792,6 +820,8 @@ class Inst:
         sim = rig.sim
         for k in range(145):
             sim.wr(i0 + k, 0)
+        for k in range(145, max(145, rig.lay.dm_words)):   # the DM rings' words: stale
+            sim.dm[i0 + k] = rig.rnd.getrandbits(32)
         sim.wr(i0 + 3, 1)
         for k in range(13):
             sim.wr(i8 + k, 0)
@@ -856,7 +886,7 @@ class Rig:
 
     def inst(self, name, k):
         """Instance k (0..7): blocks far apart, an SDRAM block of the manifest's size."""
-        return Inst(self, name, 0xB3000 + 0x400 * k, 0x91000 + 0x200 * k, 0xB6000 + 0x40 * k,
+        return Inst(self, name, 0xB3000 + 0x400 * k + (k & 1), 0x91000 + 0x200 * k, 0xB6000 + 0x40 * k,
                     0x400000 + 0x10000 * k, self.lay.sdram_words())
 
     def call(self, inst, block, label):
