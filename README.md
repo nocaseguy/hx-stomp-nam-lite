@@ -138,7 +138,7 @@ Notes:
 
 - **At most 3 NAM A2 Lite blocks in a preset**, each with its own capture. The kernel (`tools/sharc/nam_multi.py`) has 3 model slots; a fourth block would pass its input through. The HX Stomp allows 2 amp blocks in a preset, so the third is the Distortion > NAM entry (preset ID 148, the same knobs and kernel). Run on an HX Stomp with three blocks (from RAM); the XL build has the same DSP-side bytes but has not run on an XL with this kernel.
   - Each block uses about **24% of the DSP** on the unit (two blocks about 69% with an otherwise empty preset; the empty preset alone is about 20%). Both entries declare a DSP cost of 2345, a little under what they measure, so three blocks leave room for a stereo Simple Delay (about 97% of the DSP, played clean on the unit).
-  - **Three blocks nearly fill the DSP** (about 93%): beside them there is room for a light effect such as the mono Simple Delay (about 95% in all, where the Stomp's own limit sits for any preset), and the browser greys out anything heavier. With two NAM blocks there is room for more.
+  - **Three blocks nearly fill the DSP** (about 93%): beside them there is room for a light effect such as a stereo Simple Delay (about 97% in all, measured on the unit), and the browser greys out anything heavier. With two NAM blocks there is room for more.
   - Each block takes its own 0x5000-word block of DDR2 for its long rings; the Amp blocks' DDR2 allowance is raised to fit.
 - Only the 3-channel A2 Lite architecture fits; standard and A2 Full captures don't.
 - Names on the Stomp hold 16 characters at most.
