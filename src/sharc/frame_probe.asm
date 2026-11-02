@@ -21,7 +21,7 @@
 .equ SCAN_D,  0x330000
 .equ ORIG,    0x8d9c9                  // the stock process code of primitive 0x271a
 .equ SLICE,   256                       // words looked at per call
-.equ WINDOW,  128                       // blocks per window peak: longer than a cycle of a low E
+.equ WINDOW,  64                        // blocks per window peak: longer than a cycle of a low E; 1024 samples, as the Release power assumes
 
 .section dm 0xe4850
 FP_SAVE:  .space 24
@@ -31,7 +31,8 @@ FP_N:     .space 1                      // candidates
 FP_WA:    .space 1                      // the window peaks so far: A before, B after
 FP_WB:    .space 1
 FP_WN:    .space 1
-FP_LOG:   .space 18                     // what goes to words 200..217
+FP_WC:    .space 1                      // windows so far
+FP_LOG:   .space 53                     // what goes to words 200..252
 FP_LIST:  .space 96                     // candidate addresses + 1
 
 .section pm 0x0c4ef8
@@ -113,11 +114,48 @@ CUSTOM_AMP_ENTRY:
     DM(FP_LOG + 16) = R1;
     R1 = DM(FP_WB);
     DM(FP_LOG + 17) = R1;
+    R1 = DM(FP_WC);                     // a new window, for the M4 to tell apart from repeated frames
+    R1 = R1 + 1;
+    DM(FP_WC) = R1;
+    DM(FP_LOG + 50) = R1;
+    R1 = DM(FP_LOG + 21);               // the comp's Release, a per-sample coefficient: to the power of a window's 1024 samples
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    DM(FP_LOG + 51) = R1;
+    R1 = DM(FP_LOG + 20);               // the comp's Attack: to the power of half a window, the meter's rise twice its time constant
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    DM(FP_LOG + 52) = R1;
     R0 = 0;
     DM(FP_WA) = R0;
     DM(FP_WB) = R0;
 fp_wkeep:
     DM(FP_WN) = R0;
+
+    I4 = DM(FP_LOG + 6);                // the core's state: 16 words at I0, then 16 at I3, as called
+    I5 = FP_LOG + 18;
+    LCNTR = 16, DO fp_s0 UNTIL LCE;
+      R0 = DM(I4, 1);
+fp_s0: DM(I5, 1) = R0;
+    I4 = DM(FP_LOG + 5);
+    LCNTR = 16, DO fp_s1 UNTIL LCE;
+      R0 = DM(I4, 1);
+fp_s1: DM(I5, 1) = R0;
 
     R7 = DM(FP_CALLS);
     R7 = R7 + 1;
@@ -230,6 +268,76 @@ fp_chk:
       DM(216, I4) = R2;
       R2 = DM(FP_LOG + 17);
       DM(217, I4) = R2;
+      R2 = DM(FP_LOG + 18);
+      DM(218, I4) = R2;
+      R2 = DM(FP_LOG + 19);
+      DM(219, I4) = R2;
+      R2 = DM(FP_LOG + 20);
+      DM(220, I4) = R2;
+      R2 = DM(FP_LOG + 21);
+      DM(221, I4) = R2;
+      R2 = DM(FP_LOG + 22);
+      DM(222, I4) = R2;
+      R2 = DM(FP_LOG + 23);
+      DM(223, I4) = R2;
+      R2 = DM(FP_LOG + 24);
+      DM(224, I4) = R2;
+      R2 = DM(FP_LOG + 25);
+      DM(225, I4) = R2;
+      R2 = DM(FP_LOG + 26);
+      DM(226, I4) = R2;
+      R2 = DM(FP_LOG + 27);
+      DM(227, I4) = R2;
+      R2 = DM(FP_LOG + 28);
+      DM(228, I4) = R2;
+      R2 = DM(FP_LOG + 29);
+      DM(229, I4) = R2;
+      R2 = DM(FP_LOG + 30);
+      DM(230, I4) = R2;
+      R2 = DM(FP_LOG + 31);
+      DM(231, I4) = R2;
+      R2 = DM(FP_LOG + 32);
+      DM(232, I4) = R2;
+      R2 = DM(FP_LOG + 33);
+      DM(233, I4) = R2;
+      R2 = DM(FP_LOG + 34);
+      DM(234, I4) = R2;
+      R2 = DM(FP_LOG + 35);
+      DM(235, I4) = R2;
+      R2 = DM(FP_LOG + 36);
+      DM(236, I4) = R2;
+      R2 = DM(FP_LOG + 37);
+      DM(237, I4) = R2;
+      R2 = DM(FP_LOG + 38);
+      DM(238, I4) = R2;
+      R2 = DM(FP_LOG + 39);
+      DM(239, I4) = R2;
+      R2 = DM(FP_LOG + 40);
+      DM(240, I4) = R2;
+      R2 = DM(FP_LOG + 41);
+      DM(241, I4) = R2;
+      R2 = DM(FP_LOG + 42);
+      DM(242, I4) = R2;
+      R2 = DM(FP_LOG + 43);
+      DM(243, I4) = R2;
+      R2 = DM(FP_LOG + 44);
+      DM(244, I4) = R2;
+      R2 = DM(FP_LOG + 45);
+      DM(245, I4) = R2;
+      R2 = DM(FP_LOG + 46);
+      DM(246, I4) = R2;
+      R2 = DM(FP_LOG + 47);
+      DM(247, I4) = R2;
+      R2 = DM(FP_LOG + 48);
+      DM(248, I4) = R2;
+      R2 = DM(FP_LOG + 49);
+      DM(249, I4) = R2;
+      R2 = DM(FP_LOG + 50);
+      DM(250, I4) = R2;
+      R2 = DM(FP_LOG + 51);
+      DM(251, I4) = R2;
+      R2 = DM(FP_LOG + 52);
+      DM(252, I4) = R2;
 fp_skip:
 fp_wr: R5 = R5 + 1;
 
