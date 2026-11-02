@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """patch_menu.py - Global Settings additions for the HX Stomp 3.80.0 firmware (a CustomOS section with Tuner Activation and Lock Tuner Settings), not the XL."""
 import argparse
+import os
 import struct
 
 import l6ia
@@ -36,6 +37,18 @@ ARRAYS = {   # name: (stock address, new entry, literal pool words that point at
     'names': (0x28e3b5d0, None, (0x28dce9a4, 0x28dcea84)),
 }
 CAT_NAME = b'CustomOS'
+
+# Experiment (HX_PROBE=1): the two settings become a probe of the frames the DSP sends: Probe Page 0..3 is a block of 64 words and Probe Word
+# 0..60 shows a mask of its words that were ever non-zero (0) or changed (1), resets (2) or shows a word (3..) as hex. No tuner features then.
+PROBE = bool(os.environ.get('HX_PROBE'))
+PROBE_PAGE_LABEL, PROBE_PAGE_LIMITS = b'Probe\nPage', 0x28e1ed1c    # limits: integer 0..3
+PROBE_WORD_LABEL, PROBE_WORD_LIMITS = b'Probe\nWord', 0x28e1ed56    # limits: integer 0..60
+# Experiment (HX_GR=1): the two settings choose which buffers of the Deluxe Comp's core the Home divider meter compares (src/m4/gr_meter.s).
+GR = bool(os.environ.get('HX_GR'))
+GR_IN_LABEL, GR_OUT_LABEL = b'Meter\nGR Input', b'Meter\nGR Output'
+GR_IN_VALUES, GR_OUT_VALUES = (b'Buffer A', b'Buffer B', b'Buffer C', b'Buffer A'), (b'Buffer B', b'Buffer A', b'Buffer C', b'Buffer B')
+GR_METER = bytes.fromhex(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gr_meter.hex')).read().strip()) if GR else None
+RX_CB_LIT, RX_CB_ROM = 0x28da6134, 0x10001095                       # the receive callback of the DSP stream (frames of 256 words)
 CAT_PAGES = (TUNER_ID, LOCK_ID, EMPTY_SLOT)                      # page 0 of CustomOS
 # Sites that switch on the category with `cmp rN,#5; bhi exit; tbb`: (hook, cat reg, page reg, table reg, tbb, exit, stub).
 # The stub is category 2's generic case entered after its table load: it sets the slot in r4 itself, which some cases leave to the category.
@@ -98,8 +111,8 @@ class Asm:
                     assert -1024 <= off < 1024, 'branch out of range'
                     out += struct.pack('<H', 0xe000 | (off & 0x7ff))
                 else:
-                    assert 0 <= off < 128, 'conditional branch out of range'
-                    out += struct.pack('<H', 0xd000 | ({'eq': 0, 'ne': 1, 'hi': 8}[kind] << 8) | off)
+                    assert -128 <= off < 128, 'conditional branch out of range'
+                    out += struct.pack('<H', 0xd000 | ({'eq': 0, 'ne': 1, 'hi': 8, 'ls': 9}[kind] << 8) | (off & 0xff))
             at += n
         return out
 
@@ -141,10 +154,13 @@ def dispatch_cave(at, site, table):
     return a.bytes()
 
 
-def text_cave(at, tables):
+def text_cave(at, tables, latched=None):
     """Runs the two instructions the hook replaced, then answers our IDs with their value strings and leaves other IDs to stock."""
     a = Asm(at)
     a.raw(bytes.fromhex('30b5 85b0'))       # push {r4,r5,lr}; sub sp,#0x14
+    if latched:
+        a.h(cmp_imm(0, LOCK_ID))
+        a.b16('eq', 'probe')
     for pid in tables:
         a.h(cmp_imm(0, pid))
         a.b16('eq', f'id{pid}')
@@ -159,6 +175,113 @@ def text_cave(at, tables):
     a.h(0xeb04, 0x0484, 0xeb01, 0x0184)     # r4 *= 5; r1 += r4 * 4: table + 20 * value
     a.bl(STRCPY)
     a.h(0x2000, 0xb005, 0xbd30)             # movs r0,#0; add sp,#0x14; pop {r4,r5,pc}
+    if latched:
+        a.label('probe')                    # Probe Word: 0 mask of the words that were ever non-zero, 1 mask of those that changed, 2 reset, 3.. a word
+        a.h(0x684c, 0x4615)                 # ldr r4,[r1,#4]: the mode; mov r5,r2: dst
+        a.h(0x2056, 0x2c02)                 # the text starts with the mode: movs r0,#'V'; cmp r4,#2
+        a.b16('hi', 'prefix')
+        a.h(0x2052, 0x2c02)                 # movs r0,#'R'; cmp r4,#2
+        a.b16('eq', 'prefix')
+        a.h(0x2043, 0x2c01)                 # movs r0,#'C'; cmp r4,#1
+        a.b16('eq', 'prefix')
+        a.h(0x204e)                         # movs r0,#'N'
+        a.label('prefix')
+        a.h(0x7028)                         # strb r0,[r5]
+        a.h(0x2000 | TUNER_ID, 0x4669)      # movs r0,#id; mov r1,sp
+        a.bl(GET_VALUE)
+        a.h(0x9901, 0x4608, 0x3030, 0x7068)  # ldr r1,[sp,#4]: the page; mov r0,r1; adds r0,#'0'; strb r0,[r5,#1]
+        a.h(0x203a, 0x70a8)                 # movs r0,#':'; strb r0,[r5,#2]
+        a.h(0x0209, 0xb4c0)                 # lsls r1,r1,#8: byte offset of the page; push {r6,r7}
+        a.movw_movt(2, latched)
+        a.h(0x2c02)                         # cmp r4,#2
+        a.b16('hi', 'value')
+        a.b16('ne', 'mask')
+        a.h(0x2000)                         # movs r0,#0: reset clears the three arrays of 256 words
+        a.raw(pa._encode_thumb_movw(3, 768))
+        a.label('clear')
+        a.h(0x3b01, 0xf842, 0x0023)         # subs r3,#1; str.w r0,[r2,r3,lsl #2]
+        a.b16('ne', 'clear')
+        a.h(0x2400)                         # movs r4,#0
+        a.label('mask')
+        a.h(0x02a0, 0x1812, 0x1852)         # lsls r0,r4,#10; adds r2,r2,r0; adds r2,r2,r1: array (latched or changed) of the page
+        for half, move in (('lo', 0x4606), ('hi', 0x4607)):
+            a.h(0x2000, 0x2300)             # movs r0,#0; movs r3,#0
+            a.label(f'bit{half}')
+            a.h(0xf852, 0xc023, 0xf1bc, 0x0f00)    # ldr.w r12,[r2,r3,lsl #2]; cmp.w r12,#0
+            a.b16('eq', f'skip{half}')
+            a.h(0xf04f, 0x0c01, 0xfa0c, 0xfc03, 0xea40, 0x000c)    # mov.w r12,#1; lsl.w r12,r12,r3; orr.w r0,r0,r12
+            a.label(f'skip{half}')
+            a.h(0x3301, 0x2b20)             # adds r3,#1; cmp r3,#32
+            a.b16('ne', f'bit{half}')
+            a.h(move)                       # mov r6,r0 / mov r7,r0
+            if half == 'lo':
+                a.h(0x3280)                 # adds r2,#128: words 32..63
+        a.h(0x463c, 0x2101)                 # mov r4,r7: high half first; movs r1,#1: two passes
+        a.b16('b', 'format')
+        a.label('value')
+        a.h(0x3c03, 0x0888, 0x1900)         # subs r4,#3; lsrs r0,r1,#2; adds r0,r0,r4: the word's number in the frame
+        a.h(0x0903)                         # lsrs r3,r0,#4: its high digit, then the low one
+        for slot in (1, 2):
+            a.h(0x3330, 0x2b39)             # adds r3,#'0'; cmp r3,#'9'
+            a.b16('ls', f'num{slot}')
+            a.h(0x3307)                     # adds r3,#7
+            a.label(f'num{slot}')
+            a.h(0x706b + ((slot - 1) << 6))  # strb r3,[r5,#slot]
+            if slot == 1:
+                a.h(0x230f, 0x4003)         # movs r3,#15; ands r3,r0
+        a.h(0x233a, 0x70eb)                 # movs r3,#':'; strb r3,[r5,#3]
+        a.h(0x1852)                         # adds r2,r2,r1
+        a.h(0xf852, 0x4024, 0xea4f, 0x4434) # ldr.w r4,[r2,r4,lsl #2]; ror.w r4,r4,#16: the stream swaps halfwords
+        a.h(0x2100, 0x1d2b)                 # movs r1,#0: one pass; adds r3,r5,#4: after the number
+        a.b16('b', 'pass')
+        a.label('format')
+        a.h(0x1ceb)                         # adds r3,r5,#3: after the mode and page
+        a.label('pass')
+        a.h(0x2208)                         # movs r2,#8
+        a.label('digit')
+        a.h(0x0f20, 0x3030, 0x2839)         # lsrs r0,r4,#28; adds r0,#'0'; cmp r0,#'9'
+        a.b16('hi', 'letter')
+        a.label('store')
+        a.h(0x7018, 0x3301, 0x0124, 0x3a01) # strb r0,[r3]; adds r3,#1; lsls r4,r4,#4; subs r2,#1
+        a.b16('ne', 'digit')
+        a.h(0x2900)                         # cmp r1,#0
+        a.b16('eq', 'end')
+        a.h(0x2100, 0x4634)                 # movs r1,#0; mov r4,r6: low half
+        a.b16('b', 'pass')
+        a.label('letter')
+        a.h(0x3007)                         # adds r0,#7
+        a.b16('b', 'store')
+        a.label('end')
+        a.h(0x2000, 0x7018, 0xbcc0, 0xb005, 0xbd30)    # movs r0,#0; strb r0,[r3]; pop {r6,r7}; add sp,#0x14; pop {r4,r5,pc}
+    return a.bytes()
+
+
+def rx_cave(at, latched):
+    """The DSP stream's receive callback, after counting the frames (r1) and keeping the first two with messages since the reset."""
+    a = Asm(at)
+    a.h(0xb470)                             # push {r4,r5,r6}
+    a.movw_movt(4, latched)
+    a.h(0xf8d4, 0x63c0, 0x3601, 0xf8c4, 0x63c0)    # ldr.w r6,[r4,#0x3c0]; adds r6,#1; str.w r6,[r4,#0x3c0]: all frames, as word 0xf0
+    for k in range(16):                     # words 200..215 of the frame, kept as words 200..215: where the DSP writes
+        a.h(0xf8d1, 0x3000 | (800 + 4 * k), 0xf8c4, 0x3000 | (800 + 4 * k))
+    a.h(0x684a, 0x0c12)                     # ldr r2,[r1,#4]; lsrs r2,r2,#16: the message count of the frame
+    a.b16('eq', 'done')
+    a.h(0xf8d4, 0x63c4, 0x3601, 0xf8c4, 0x63c4)    # the same for the frames with messages, as word 0xf1
+    a.h(0xf8d4, 0x33c8, 0x2b01)             # ldr.w r3,[r4,#0x3c8]: frames kept so far, word 0xf2; cmp r3,#1
+    a.b16('hi', 'done')
+    a.h(0x1c5a, 0xf8c4, 0x23c8)             # adds r2,r3,#1; str.w r2,[r4,#0x3c8]
+    a.h(0x021a, 0x019e, 0x1992, 0x18a6)     # r6 = r4 + r3 * 320: the slot of 80 words
+    a.h(0x2500)                             # movs r5,#0
+    a.label('word')
+    a.h(0xf851, 0x2025, 0xf846, 0x2025)     # ldr.w r2,[r1,r5,lsl #2]; str.w r2,[r6,r5,lsl #2]
+    a.h(0x3501, 0x2d50)                     # adds r5,#1; cmp r5,#80
+    a.b16('ne', 'word')
+    a.label('done')
+    a.h(0xbc70)                             # pop {r4,r5,r6}
+    if a.pos() % 4:
+        a.h(0xbf00)
+    a.h(0xf8df, 0xf000)                     # ldr.w pc,[pc,#0]: on to the stock callback
+    a.raw(struct.pack('<I', RX_CB_ROM))
     return a.bytes()
 
 
@@ -242,7 +365,8 @@ def menu_entry0(e0):
     for tab in (NAMES_LONG, NAMES_SHORT):
         if e0[off(tab + NAME_LEN * 22, 8):][:8] != b'Main LCD':
             raise SystemExit(f'patch-menu: label array at {tab:#x} is not the stock one')
-        for pid, label in ((TUNER_ID, TUNER_LABEL), (LOCK_ID, LOCK_LABEL)):
+        for pid, label in ((TUNER_ID, GR_IN_LABEL if GR else PROBE_PAGE_LABEL if PROBE else TUNER_LABEL),
+                           (LOCK_ID, GR_OUT_LABEL if GR else PROBE_WORD_LABEL if PROBE else LOCK_LABEL)):
             o = off(tab + NAME_LEN * pid, NAME_LEN)
             if any(e0[o:o + NAME_LEN]):
                 raise SystemExit(f'patch-menu: label {pid} at {tab:#x} is not empty (the patch is already applied?)')
@@ -258,6 +382,11 @@ def menu_entry0(e0):
     if LIMITS_TAB_HIGH + 2 * lock_entry != ENUM01_TARGET:
         raise SystemExit('patch-menu: the lock setting has no enum limits entry')
 
+    if PROBE or GR:
+        put(LIMITS_TAB_LOW + 2 * (TUNER_ID - 1), struct.pack('<H', (PROBE_PAGE_LIMITS - LIMITS_TAB_LOW) // 2))
+        put(LIMITS_TAB_HIGH + 2 * (LOCK_ID - 0x3f), struct.pack('<H', ((PROBE_PAGE_LIMITS if GR else PROBE_WORD_LIMITS) - LIMITS_TAB_HIGH) // 2))
+        if u32(RX_CB_LIT) != RX_CB_ROM:
+            raise SystemExit('patch-menu: the DSP stream callback is not the stock one')
     expect(TEXT_FN, TEXT_FN_STOCK, 'the value-text function')
     expect(TAP_SITE, TAP_SITE_STOCK, 'the tap-tempo call')
     expect(NAV_CMP, NAV_CMP_STOCK, 'the category navigation')
@@ -283,19 +412,33 @@ def menu_entry0(e0):
         for lit in lits:
             put(lit, struct.pack('<I', array_va))
     table_va = cave.add(b''.join(struct.pack('<H', x) for x in CAT_PAGES))
-    values = {TUNER_ID: cave.add(b''.join(padded(v) for v in TUNER_VALUES)),
-              LOCK_ID: cave.add(b''.join(padded(v) for v in LOCK_VALUES))}
+    if GR:
+        values = {TUNER_ID: cave.add(b''.join(padded(v) for v in GR_IN_VALUES)),
+                  LOCK_ID: cave.add(b''.join(padded(v) for v in GR_OUT_VALUES))}
+        latched = None
+    elif PROBE:
+        values = {TUNER_ID: cave.add(b''.join(padded(v) for v in (b'0', b'1', b'2', b'3')))}
+        latched = cave.add(bytes(3072))
+    else:
+        values = {TUNER_ID: cave.add(b''.join(padded(v) for v in TUNER_VALUES)),
+                  LOCK_ID: cave.add(b''.join(padded(v) for v in LOCK_VALUES))}
+        latched = None
 
     put(NAV_CMP, b'\x06\x2b')
     put(NAV_WRAP, b'\x06\x21')
     for site in SITES.values():
         va = cave.add(dispatch_cave(cave.next(), site, table_va))
         put(site[0], pa.thumb_bw(site[0], va))
-    put(TEXT_FN, pa.thumb_bw(TEXT_FN, cave.add(text_cave(cave.next(), values))))
-    put(TAP_SITE, pa.thumb_bw(TAP_SITE, cave.add(tap_cave(cave.next()))))
-    put(TURN_FN, pa.thumb_bw(TURN_FN, cave.add(turn_cave(cave.next()))))
-    for site in RESET_SITES:
-        put(site, pa.thumb_bw(site, cave.add(reset_cave(cave.next(), site))))
+    put(TEXT_FN, pa.thumb_bw(TEXT_FN, cave.add(text_cave(cave.next(), values, latched))))
+    if GR:
+        put(RX_CB_LIT, struct.pack('<I', cave.add(GR_METER) | 1))
+    elif PROBE:
+        put(RX_CB_LIT, struct.pack('<I', cave.add(rx_cave(cave.next(), latched)) | 1))
+    else:
+        put(TAP_SITE, pa.thumb_bw(TAP_SITE, cave.add(tap_cave(cave.next()))))
+        put(TURN_FN, pa.thumb_bw(TURN_FN, cave.add(turn_cave(cave.next()))))
+        for site in RESET_SITES:
+            put(site, pa.thumb_bw(site, cave.add(reset_cave(cave.next(), site))))
 
     out = bytearray(e0[:nxt]) + cave.buf
     out += b'\x00' * ((-len(out)) & 3)

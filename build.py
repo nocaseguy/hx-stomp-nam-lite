@@ -79,7 +79,10 @@ def main():
     image = os.path.join(build, "nam_lite.l6ia")
     py = sys.executable
 
-    run(py, KERNEL, "-o", asm, *([] if "--no-check" in argv else ["--check"]))
+    if os.environ.get("HX_FRAMEPROBE"):
+        asm = os.path.join(HERE, "src", "sharc", "frame_probe.asm")
+    else:
+        run(py, KERNEL, "-o", asm, *([] if "--no-check" in argv else ["--check"]))
     run(py, "tools/patch_amp.py", "add-model", stock, base, *MODEL)
     run(py, "tools/patch_amp.py", "add-fx-model", base, titled, *FX_MODEL)
     os.replace(titled, base)
@@ -88,7 +91,10 @@ def main():
     if unit == "HX_Stomp":
         run(py, "tools/patch_menu.py", base, titled)
         os.replace(titled, base)
-    run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
+        run(py, "tools/patch_divider.py", base, titled)
+        os.replace(titled, base)
+    wrap = ["--wrap-prim", "0x271a:0x8d9c9"] if os.environ.get("HX_FRAMEPROBE") else []
+    run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm, *wrap)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:
         sys.exit("build.py: the image failed its checksum check")

@@ -375,6 +375,29 @@ def expand_sharc_blob0_buffer(e2_raw_bytes):
     return struct.pack('<%dI' % len(w), *w), changed
 
 
+def wrap_primitive(e2_raw, spec, entry_addr):
+    """LDR block that points a stock primitive's registry entry at `entry_addr`, which calls the stock process address
+    (spec: "<primitive id>:<its stock process address>") itself."""
+    pid, orig = (int(x, 0) for x in spec.split(':'))
+    w = struct.unpack('<%dI' % (len(e2_raw) // 4), e2_raw)
+    i = 384
+    while i + 3 <= len(w):
+        tag, cnt, addr = w[i:i + 3]
+        if tag == 0:
+            break
+        if tag == 4 and addr == 0x200000:
+            for k in range(0, cnt, 8):
+                ent = list(w[i + 3 + k: i + 3 + k + 8])
+                if ent[0] == pid:
+                    if ent[5] != orig:
+                        raise SystemExit(f'primitive {pid:#x}: process address {ent[5]:#x}, not {orig:#x}')
+                    ent[5] = entry_addr
+                    print(f"[+] Entry 2: primitive {pid:#06x} @ {0x200000 + k:#x} now enters {entry_addr:#x}, which calls {orig:#x}")
+                    return pack_init_l32(0x200000 + k, ent)
+        i += 3 + {5: ((cnt + 1) & ~1) * 3 // 2, 4: cnt, 3: (cnt + 1) // 2, 6: cnt * 2, 10: cnt, 9: cnt}.get(tag, 0)
+    raise SystemExit(f'primitive {pid:#x} is not in the registry')
+
+
 def cmd_patch(args):
     """Entry 2: the kernel assembled from args.asm (its .section pm and dm as LDR
     INIT blocks, booted before the stock FINAL_INIT) and an unused primitive slot
@@ -402,12 +425,15 @@ def cmd_patch(args):
             ldr_words += pack_init_l32(s.addr, s.words)
             print(f"[+] Entry 2: assembled {len(s.words)} 32-bit DM words @ DM {s.addr:#x}")
 
-    chosen = next(((pid, paddr) for pid, paddr in UNUSED_SHARC_PRIMS if paddr not in hooked_addrs), None)
-    if chosen is None:
-        raise SystemExit('All 24 unused SHARC primitive slots in Entry 2 are already hooked')
-    prim_id, prim_addr = chosen
-    ldr_words += pack_init_l32(prim_addr, [prim_id, 0x611e90, 0x0, 0x611ef4, 0x611ddd, entry_addr, 0x91, 0x0d])
-    print(f"[+] Entry 2: hooked unused primitive {prim_id:#06x} @ {prim_addr:#x} -> kernel {entry_addr:#x} (dm=145, pm=13)")
+    if args.wrap_prim:
+        ldr_words += wrap_primitive(e2_raw, args.wrap_prim, entry_addr)
+    else:
+        chosen = next(((pid, paddr) for pid, paddr in UNUSED_SHARC_PRIMS if paddr not in hooked_addrs), None)
+        if chosen is None:
+            raise SystemExit('All 24 unused SHARC primitive slots in Entry 2 are already hooked')
+        prim_id, prim_addr = chosen
+        ldr_words += pack_init_l32(prim_addr, [prim_id, 0x611e90, 0x0, 0x611ef4, 0x611ddd, entry_addr, 0x91, 0x0d])
+        print(f"[+] Entry 2: hooked unused primitive {prim_id:#06x} @ {prim_addr:#x} -> kernel {entry_addr:#x} (dm=145, pm=13)")
 
     replaced = {2: l6ia.swap32(inject_sharc_ldr_blocks(e2_raw, ldr_words))}
     new_l6ia, old_end, new_end = l6ia.rebuild_archive(l6ia_bytes, replaced)
@@ -1613,6 +1639,8 @@ def main():
     p_pat.add_argument('input', help='Input .hxf or L6IA')
     p_pat.add_argument('output', help='Output .hxf or L6IA')
     p_pat.add_argument('--asm', required=True, help='SHARC assembly file (tools/sharc/nam_multi.py -o ...)')
+    p_pat.add_argument('--wrap-prim', help='ID:ADDR of a stock primitive whose registry entry is pointed at the kernel '
+                       '(which calls ADDR) instead of an unused primitive being hooked')
     p_pat.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
 
     args = ap.parse_args()
