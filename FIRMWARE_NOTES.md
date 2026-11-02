@@ -50,6 +50,8 @@ Goal: a completely custom firmware for the HX Stomp, built in small steps, each 
 - The divider is four 80 px segment widgets at `0x2812a594 + 0x1c*k` (k = 0..3). Layout function `0x28dc87cc` resets them to the stock look on mode change.
 - Stock: the selected segment is white and 2 px, the others grey `0x666666` (a literal at `0x28dc8b58`) and 1 px. `tools/patch_divider.py` makes the whole divider 2 px green by patching three sites (`0x28dc8808`, `0x28dc8b22`, `0x28dc8b58`). Verified on the unit.
 - Widget setters (PLT stubs, Thumb): `setColor 0x28e24b98` (r0 = widget, r1 = `0xRRGGBB`, black = 0); `setSize 0x28e24b28` (r0 = widget, r1 = w, r2 = h). Both take a mutex and invalidate, so they are not free to call at high rate; cache and call only on change.
+- From the ROM bodies (segment 1) [verified offline]: a widget is `[0]` colour, `[4]` position, `[0xc]` size, `[0x15]` visible, `[0x18]` canvas. `setColor`/`setSize` store the value and only mark the canvas dirty (`[canvas+0x24] = 1`); `0x28e24b00` is `setVisible(w, v)`. Nothing repaints until **`0x28db8508(full, partial)`** (96 callers; the layout ends with `(0, 1)`), which sets dirty flags `0x281f3728`/`0x281f371c` under mutex `0x281f3720` and signals `0x281f3714`, waking the UI thread.
+- The ROM mutex (`0x10000500`) fails instead of blocking when `CONTROL` is 0 (interrupt or pre-RTOS), so the setters and the redraw request degrade rather than hang in such contexts.
 - **[hypothesis]** Calling these from the DSP-link thread during boot, before the Home view exists, is a candidate cause of a freeze after the loading bar. See [Open problem](#open-problem-the-gain-reduction-meter).
 
 ## The M4 to DSP link [verified on unit]
@@ -118,9 +120,13 @@ Design as built:
 Status:
 
 - Transport works (above). The first GR image **froze after the loading bar finished** (so it fails before the Home screen is usable).
-- A guard was added so the hook does nothing until frame word 200 equals the DSP marker (`0xf00d600d` raw). Rebuilt MD5 `d6f05ad7f2a7ec895eef765eaac6abb5`. **Not yet tested on the unit.**
+- A guard was added so the hook does nothing until frame word 200 equals the DSP marker (`0xf00d600d` raw). Image MD5 `d6f05ad7f2a7ec895eef765eaac6abb5` **booted fine [verified on unit]**, but with a Deluxe Comp (threshold -47.2 dB, ratio 20:1) the divider stayed full green 2 px while playing. That is ambiguous: no drawing at all, setters without effect, and 100% computed reduction all look the same.
+- **[hypothesis]** The core `0x271a` (2 in, 1 out, followed by the multiplier `0x89`) outputs a gain signal, not audio, so "1 - post/pre" of two buffers is the wrong formula.
+- Diagnostic hook (MD5 `5520099fc2a57c43f5549c96432f4e3f`, **not yet tested on the unit**): **Meter Source** (ID 29) = Buffer A/B/C/Test, **Meter Mode** (ID 104) = Level Pre/Level Post (peak before/after the stock code, 96 dB log scale), Reduction (24 dB below 1.0 = full), Linear (0..1). Test draws green/black/green/black, with red instead of green on frames without the DSP marker. The hook latches once it first sees the marker and does nothing before that. Result **[verified on unit]**: Source = Test left the divider solid green, which does not separate "marker never seen" (the hook stays idle) from "setters have no visible effect".
+- Counter image (MD5 `0423c489f0ddb7acd05e029c3688f962`, **not yet tested on the unit**): the hook blob is an entry table (+0 receive callback, +4 text function). With Source = Test, the Source value text shows `C.... M.... D....` (hook calls, frames with the marker, segment draws, low 16 bits in hex), or `C.... W........` (raw word 200 of the last frame) while no marker has been seen. Result **[verified on unit]**: `M8D1B D2B6D` then `M9E32 D43FC`, so the hook runs, the marker arrives and thousands of setter calls happen, yet the divider stays solid green: the setters alone do not repaint.
+- Redraw image (MD5 `ac9007039875d781632ec30628fea3f4`): after a segment change the hook calls `0x28db8508(0, 1)`, at most every 16 frames. **[verified on unit]** The divider now animates: with a steady tone through a 100% depth, 1 s tremolo into the Deluxe Comp, the bar follows the signal as a gain-reduction meter would, at the boot-time Meter Source/Mode values. Not yet confirmed that it tracks the compressor's actual reduction rather than the signal level.
 - If it still freezes: (a) boot with a preset that has no compressor to separate DSP-side from M4-side causes; (b) build a variant whose M4 hook is a no-op; (c) suspect stack depth in the DSP-link thread (9 registers pushed + 12 bytes + `GET_VALUE` + setter) and setters called from a non-UI thread.
-- If it boots but the divider does not track: try the 9 GR Input/Output combinations; if the core is the wrong tap, wrap another member (`0x89`, the multiplier).
+- If no buffer tracks: wrap another member (`0x89`, the multiplier).
 
 ## Not yet done (when the user asks to commit the feature)
 

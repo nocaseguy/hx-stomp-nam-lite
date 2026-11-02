@@ -43,10 +43,10 @@ CAT_NAME = b'CustomOS'
 PROBE = bool(os.environ.get('HX_PROBE'))
 PROBE_PAGE_LABEL, PROBE_PAGE_LIMITS = b'Probe\nPage', 0x28e1ed1c    # limits: integer 0..3
 PROBE_WORD_LABEL, PROBE_WORD_LIMITS = b'Probe\nWord', 0x28e1ed56    # limits: integer 0..60
-# Experiment (HX_GR=1): the two settings choose which buffers of the Deluxe Comp's core the Home divider meter compares (src/m4/gr_meter.s).
+# Experiment (HX_GR=1): the two settings choose what the Home divider meter shows of the Deluxe Comp's core (src/m4/gr_meter.s).
 GR = bool(os.environ.get('HX_GR'))
-GR_IN_LABEL, GR_OUT_LABEL = b'Meter\nGR Input', b'Meter\nGR Output'
-GR_IN_VALUES, GR_OUT_VALUES = (b'Buffer A', b'Buffer B', b'Buffer C', b'Buffer A'), (b'Buffer B', b'Buffer A', b'Buffer C', b'Buffer B')
+GR_IN_LABEL, GR_OUT_LABEL = b'Meter\nSource', b'Meter\nMode'
+GR_IN_VALUES, GR_OUT_VALUES = (b'Buffer A', b'Buffer B', b'Buffer C', b'Test'), (b'Level Pre', b'Level Post', b'Reduction', b'Linear')
 GR_METER = bytes.fromhex(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gr_meter.hex')).read().strip()) if GR else None
 RX_CB_LIT, RX_CB_ROM = 0x28da6134, 0x10001095                       # the receive callback of the DSP stream (frames of 256 words)
 CAT_PAGES = (TUNER_ID, LOCK_ID, EMPTY_SLOT)                      # page 0 of CustomOS
@@ -154,10 +154,13 @@ def dispatch_cave(at, site, table):
     return a.bytes()
 
 
-def text_cave(at, tables, latched=None):
+def text_cave(at, tables, latched=None, gr_text=None):
     """Runs the two instructions the hook replaced, then answers our IDs with their value strings and leaves other IDs to stock."""
     a = Asm(at)
     a.raw(bytes.fromhex('30b5 85b0'))       # push {r4,r5,lr}; sub sp,#0x14
+    if gr_text:
+        a.h(cmp_imm(0, TUNER_ID))
+        a.b16('eq', 'grsrc')
     if latched:
         a.h(cmp_imm(0, LOCK_ID))
         a.b16('eq', 'probe')
@@ -175,6 +178,13 @@ def text_cave(at, tables, latched=None):
     a.h(0xeb04, 0x0484, 0xeb01, 0x0184)     # r4 *= 5; r1 += r4 * 4: table + 20 * value
     a.bl(STRCPY)
     a.h(0x2000, 0xb005, 0xbd30)             # movs r0,#0; add sp,#0x14; pop {r4,r5,pc}
+    if gr_text:
+        a.label('grsrc')                    # Meter Source = Test: the meter hook's counters instead of the name
+        a.h(0x684c, cmp_imm(4, 3))          # ldr r4,[r1,#4]: the value; cmp r4,#3
+        a.b16('ne', f'id{TUNER_ID}')
+        a.h(0x4610)                         # mov r0,r2: dst
+        a.bl(gr_text)
+        a.h(0x2000, 0xb005, 0xbd30)         # movs r0,#0; add sp,#0x14; pop {r4,r5,pc}
     if latched:
         a.label('probe')                    # Probe Word: 0 mask of the words that were ever non-zero, 1 mask of those that changed, 2 reset, 3.. a word
         a.h(0x684c, 0x4615)                 # ldr r4,[r1,#4]: the mode; mov r5,r2: dst
@@ -429,9 +439,10 @@ def menu_entry0(e0):
     for site in SITES.values():
         va = cave.add(dispatch_cave(cave.next(), site, table_va))
         put(site[0], pa.thumb_bw(site[0], va))
-    put(TEXT_FN, pa.thumb_bw(TEXT_FN, cave.add(text_cave(cave.next(), values, latched))))
+    gr_va = cave.add(GR_METER) if GR else None    # +0 the receive callback, +4 the text function
+    put(TEXT_FN, pa.thumb_bw(TEXT_FN, cave.add(text_cave(cave.next(), values, latched, gr_va and gr_va + 4))))
     if GR:
-        put(RX_CB_LIT, struct.pack('<I', cave.add(GR_METER) | 1))
+        put(RX_CB_LIT, struct.pack('<I', gr_va | 1))
     elif PROBE:
         put(RX_CB_LIT, struct.pack('<I', cave.add(rx_cave(cave.next(), latched)) | 1))
     else:
