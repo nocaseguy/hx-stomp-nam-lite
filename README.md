@@ -70,7 +70,7 @@ What is here is our own work:
 
 - An **HX Stomp**, or an **HX Stomp XL** (see [HX Stomp XL](#hx-stomp-xl): the current build has not run on an XL yet; an earlier one-block build ran from RAM). Not the Helix Floor, LT or Rack: their firmware is a different design.
 - Line 6's firmware 3.80.0 for your unit. The build checks the MD5 and refuses any other file:
-  - HX Stomp: `HX_Stomp_v3.80.0_0x103966115.hxf`, MD5 `a2cd8f4ae56f49415380270ebc484bf1`
+  - HX Stomp: `HX_Stomp_v3.80.0_0x103966115.hxf`, MD5 `a2cd8f4ae56f49415380270ebc484bf1`. Download it from [line6.com](https://line6.com/software/readeula.html?rid=12906); you need to sign in with a free Line 6 (Helix) account to get the download.
   - HX Stomp XL: `HX_Stomp_XL_v3.80.0_0x103966115.hxf`, MD5 `329e3a26d60d3de1988b6785fa833ee1`
 - Python 3.10 or newer with `numpy`: `pip install numpy`.
 - **Line 6 Updater** to install, and **HX Edit** to import captures.
