@@ -21,13 +21,17 @@
 .equ SCAN_D,  0x330000
 .equ ORIG,    0x8d9c9                  // the stock process code of primitive 0x271a
 .equ SLICE,   256                       // words looked at per call
+.equ WINDOW,  128                       // blocks per window peak: longer than a cycle of a low E
 
 .section dm 0xe4850
 FP_SAVE:  .space 24
 FP_CUR:   .space 1                      // the next address to look at (0: not started)
 FP_CALLS: .space 1
 FP_N:     .space 1                      // candidates
-FP_LOG:   .space 16                     // what goes to words 200..215
+FP_WA:    .space 1                      // the window peaks so far: A before, B after
+FP_WB:    .space 1
+FP_WN:    .space 1
+FP_LOG:   .space 18                     // what goes to words 200..217
 FP_LIST:  .space 96                     // candidate addresses + 1
 
 .section pm 0x0c4ef8
@@ -91,6 +95,29 @@ CUSTOM_AMP_ENTRY:
     DM(FP_LOG + 14) = R0;
     R0 = DM(1, I4);
     DM(FP_LOG + 15) = R0;
+
+    R0 = DM(FP_LOG + 7);                // window peaks: per-block peaks of input and output are taken at
+    R1 = DM(FP_WA);                     // different points of the waveform when the core delays its output
+    F1 = MAX(F0, F1);
+    DM(FP_WA) = R1;
+    R0 = DM(FP_LOG + 11);
+    R1 = DM(FP_WB);
+    F1 = MAX(F0, F1);
+    DM(FP_WB) = R1;
+    R0 = DM(FP_WN);
+    R0 = R0 + 1;
+    R1 = WINDOW;
+    COMP(R0, R1);
+    IF LT JUMP fp_wkeep;
+    R1 = DM(FP_WA);
+    DM(FP_LOG + 16) = R1;
+    R1 = DM(FP_WB);
+    DM(FP_LOG + 17) = R1;
+    R0 = 0;
+    DM(FP_WA) = R0;
+    DM(FP_WB) = R0;
+fp_wkeep:
+    DM(FP_WN) = R0;
 
     R7 = DM(FP_CALLS);
     R7 = R7 + 1;
@@ -199,6 +226,10 @@ fp_chk:
       DM(214, I4) = R2;
       R2 = DM(FP_LOG + 15);
       DM(215, I4) = R2;
+      R2 = DM(FP_LOG + 16);
+      DM(216, I4) = R2;
+      R2 = DM(FP_LOG + 17);
+      DM(217, I4) = R2;
 fp_skip:
 fp_wr: R5 = R5 + 1;
 
