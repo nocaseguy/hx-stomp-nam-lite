@@ -1443,7 +1443,7 @@ def cmd_ir_title(args):
             raise SystemExit('ir-title --knob: effect entries only (--fx-preset-id)')
         seg6 = _parse_e0_segments(get_entry_swapped(l6ia_bytes, 0))[6][3]
         if seg6 not in IR_TITLE_KNOB:
-            raise SystemExit('ir-title --knob: HX Stomp only')
+            raise SystemExit('ir-title --knob: no addresses known for this unit')
         ir_title_cave = lambda cave_va, pids, X, fx_pids=(): ir_title_knob_cave(cave_va, X, IR_TITLE_KNOB[seg6],
                                                                                list(fx_pids), args.knob)
     try:
@@ -1555,9 +1555,15 @@ def cmd_move_folder(args):
 # byte 0 (sp+32), then 0x28d92a98 and FUN_28e0477c(ctx, r6 = slot, &q, sp+16); the value at sp+17 is a
 # float's bits, truncated to an int by integer code (Entry 0 hardly uses the FPU), written back, and on
 # at 0x28dbedfc as stock (subs r0,#1: the slot test, the name). A value outside 1..128 takes the stock
-# "<EMPTY>" title, never a lookup past the IR table. The redraw follows knob `knob`. HX Stomp only.
-IR_TITLE_KNOB = {0x28d8fa80: dict(CTX_FN=0x28d92a98, PARAM_FN=0x28e0477c, AFTER_READ=0x28dbedfc,
-                                  EMPTY=0x28dbeedc, B_REDRAW=0x28dbf7e6)}
+# "<EMPTY>" title, never a lookup past the IR table. The redraw follows knob `knob`.
+# Per unit: the branch's calls and exits, and its registers: SUB the layout byte's (the subcategory
+# register, set to 0), SLOT the block slot's (FUN_28e0477c's r1). The XL's from its Entry 0 (static).
+IR_TITLE_KNOB = {
+    0x28d8fa80: dict(SUB=5, SLOT=6, CTX_FN=0x28d92a98, PARAM_FN=0x28e0477c, AFTER_READ=0x28dbedfc,
+                     EMPTY=0x28dbeedc, B_REDRAW=0x28dbf7e6),        # HX Stomp
+    0x28d92230: dict(SUB=6, SLOT=8, CTX_FN=0x28d95248, PARAM_FN=0x28e0aa8c, AFTER_READ=0x28dc1f24,
+                     EMPTY=0x28dc1fcc, B_REDRAW=0x28dc28d6),        # HX Stomp XL
+}
 
 
 def _thumb_bl(src, dst):
@@ -1585,9 +1591,12 @@ def ir_title_knob_cave(cave_va, X, K, fx_pids, knob):
         subw(4, p); items.append(('cbz', 'a2'))
     items.append(('b', 'a3'))
     lab('a2')
-    raw('00256ff00102'); items.append(('raw', struct.pack('<H', 0x2300 | knob)))   # movs r5,#0; mvn r2,#1; movs r3,#knob
-    raw('cde906238df82050'); items.append(('bl', K['CTX_FN']))                      # strd r2,r3,[sp,#24]; strb.w r5,[sp,#32]
-    raw('04ab06aa3146'); items.append(('bl', K['PARAM_FN']))                        # add r3,sp,#16; add r2,sp,#24; mov r1,r6
+    items.append(('raw', struct.pack('<H', 0x2000 | (K['SUB'] << 8))))              # movs rSUB,#0
+    raw('6ff00102'); items.append(('raw', struct.pack('<H', 0x2300 | knob)))         # mvn r2,#1; movs r3,#knob
+    raw('cde90623'); items.append(('raw', struct.pack('<2H', 0xf88d, (K['SUB'] << 12) | 0x020)))   # strd; strb.w rSUB,[sp,#32]
+    items.append(('bl', K['CTX_FN']))
+    raw('04ab06aa'); items.append(('raw', struct.pack('<H', 0x4601 | (K['SLOT'] << 3))))   # add r3,sp,#16; add r2,sp,#24; mov r1,rSLOT
+    items.append(('bl', K['PARAM_FN']))
     raw('ddf81100c20d'); items.append(('bcc', EQ, 'a7'))                            # ldr.w r0,[sp,#17]; lsrs r2,r0,#23
     raw('7f3a'); items.append(('bcc', MI, 'a6')); raw('172a'); items.append(('bcc', GT, 'a7'))   # subs r2,#127; cmp r2,#23
     raw('c0f3160141f40001c2f1170221fa02f0'); items.append(('b', 'a8'))             # ubfx; orr #0x800000; rsb #23; lsr.w
@@ -1854,8 +1863,7 @@ def main():
     p_irt.add_argument('--fx-preset-id', type=int, action='append',
                        help="a model added as an effect (add-fx-model): no cab-half test; repeatable")
     p_irt.add_argument('--knob', type=int,
-                       help="the Model knob's index, a float knob (the 4-knob NAM: 0); outside 1..128 the title reads <EMPTY>. "
-                            "HX Stomp only")
+                       help="the Model knob's index, a float knob (the 4-knob NAM: 0); outside 1..128 the title reads <EMPTY>")
     p_irt.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
 
     p_rm = sub.add_parser('remove-model', help="Remove a stock model's Table 1 row and browser items (frees its preset_id)")

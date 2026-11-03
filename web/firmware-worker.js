@@ -26,24 +26,25 @@ var STOCK_MD5 = {
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "63d1392cf35d4833907b171e6d1d3e68",
-  "HX_Stomp_XL": "3c859c455721ac02e451610a56798392",
+  "HX_Stomp": "dcb425f111c0667f9c03e5779173ae35",
+  "HX_Stomp_XL": "109caca26065425c5e21f5da8d63e774",
 };
 
 // build.py's KERNEL and STEPS (tests/test_web_build.py keeps them equal): per unit, the kernel
 // command and the patch_amp.py steps, each "patch_amp.py CMD IN OUT ARGS..." on the previous output.
-var KERNEL = {"HX_Stomp": ["tools/sharc/nam_multi.py", "--no-tone"], "HX_Stomp_XL": ["tools/sharc/nam_multi.py"]};
+var KERNEL = {"HX_Stomp": ["tools/sharc/nam_multi.py", "--no-tone"], "HX_Stomp_XL": ["tools/sharc/nam_multi.py", "--no-tone"]};
 var STEPS = {
   "HX_Stomp": [
     ["remove-model", "--preset-id", "461"],
-    ["add-fx-model", "--knobs", "nam4", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion", "--folder", "NAM", "--preset-id", "461", "--dsp-cost", "2275", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
+    ["add-fx-model", "--knobs", "nam4", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion", "--folder", "NAM", "--preset-id", "461", "--dsp-cost", "2220", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
     ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
     ["ir-title", "--fx-preset-id", "461", "--knob", "0"],
   ],
   "HX_Stomp_XL": [
-    ["add-model", "--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite", "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2275", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
-    ["add-fx-model", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion", "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2275", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
-    ["ir-title", "--preset-id", "147", "--fx-preset-id", "148"],
+    ["remove-model", "--preset-id", "461"],
+    ["add-fx-model", "--knobs", "nam4", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion", "--folder", "NAM", "--preset-id", "461", "--dsp-cost", "2220", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
+    ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
+    ["ir-title", "--fx-preset-id", "461", "--knob", "0"],
   ],
 };
 

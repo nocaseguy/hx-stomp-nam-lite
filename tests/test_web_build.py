@@ -15,9 +15,18 @@ def js_object(name):
 
 
 def py_dict(path, name):
+    """A module-level value of literals, or of names of such values assigned before it."""
     tree = ast.parse((ROOT / path).read_text())
-    node = next(n for n in tree.body if isinstance(n, ast.Assign) and n.targets[0].id == name)
-    return ast.literal_eval(node.value)
+    env = {}
+    for n in tree.body:
+        if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name):
+            try:
+                env[n.targets[0].id] = eval(compile(ast.Expression(n.value), path, "eval"), {"__builtins__": {}}, dict(env))
+            except Exception:
+                continue
+            if n.targets[0].id == name:
+                return env[name]
+    raise KeyError(name)
 
 
 def test_stock_md5_as_build_py():

@@ -10,8 +10,8 @@ repository: the build reads it, adds NAM A2 Lite and writes a new .hxf
 
 NAM A2 Lite runs as up to three blocks at once, each playing its own capture
 from a User IR slot. The block's title shows the selected IR's name.
-HX Stomp: Amp > NAM > NAM A2 Lite, four knobs (Model, Polarity, Input, Output);
-HX Stomp XL: the earlier layout (8 knobs; not run on an XL). See STEPS.
+Amp > NAM > NAM A2 Lite, four knobs (Model, Polarity, Input, Output). The XL
+build has not run on an XL. See STEPS.
 
 Steps:
   1. tools/sharc/nam_multi.py: the SHARC kernel, checked in the simulator
@@ -32,37 +32,26 @@ STOCK_MD5 = {
     "a2cd8f4ae56f49415380270ebc484bf1": "HX_Stomp",       # HX_Stomp_v3.80.0_0x103966115.hxf
     "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",    # HX_Stomp_XL_v3.80.0_0x103966115.hxf (untried on a unit)
 }
-# The kernel and the patch_amp.py steps per unit (tests/test_web_build.py keeps web/firmware-worker.js's
-# copies equal). Each step reads the previous one's output: patch_amp.py CMD IN OUT ARGS...
+# The kernel and the patch_amp.py steps (tests/test_web_build.py keeps web/firmware-worker.js's copies
+# equal), per unit: the same on both. Each step reads the previous one's output: patch_amp.py CMD IN OUT ARGS...
 #
-# HX Stomp: the 4-knob NAM A2 Lite (Model, Polarity, Input, Output) in Amp > NAM, on MM4 Frequency
-# Shifter's preset ID 461 (that stock model is removed). HX Edit knows that ID, so it keeps NAM
-# blocks when it rewrites a preset (it drops blocks of models it doesn't know); the knobs follow
-# MM4's types, so HX Edit keeps their values too. The block is an effect: the Stomp's two-amp rule
-# doesn't count it. No tone knobs (the kernel's --no-tone). Presets saved with an earlier NAM build
-# (IDs 147/148) don't open as NAM in this one.
-# HX Stomp XL: as before (not run on an XL): Amp > NAM, ID 147, 8 knobs, and Distortion > NAM, ID 148.
+# NAM A2 Lite with four knobs (Model, Polarity, Input, Output) in Amp > NAM, on MM4 Frequency Shifter's
+# preset ID 461 (that stock model is removed). HX Edit knows that ID, so it keeps NAM blocks when it
+# rewrites a preset (it drops blocks of models it doesn't know); the knobs follow MM4's types, so HX
+# Edit keeps their values too. The block is an effect: the two-amp rule doesn't count it. No tone
+# knobs (the kernel's --no-tone, ~0.5% of the DSP less a block, hence DSP cost 2220, was 2275).
+# Presets saved with an earlier NAM build (IDs 147/148) don't open as NAM in this one.
 KERNEL = {"HX_Stomp": ["tools/sharc/nam_multi.py", "--no-tone"],
-          "HX_Stomp_XL": ["tools/sharc/nam_multi.py"]}
-STEPS = {
-    "HX_Stomp": [
-        ["remove-model", "--preset-id", "461"],
-        ["add-fx-model", "--knobs", "nam4", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite",
-         "--category", "distortion", "--folder", "NAM", "--preset-id", "461", "--dsp-cost", "2275",
-         "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
-        ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
-        ["ir-title", "--fx-preset-id", "461", "--knob", "0"],
-    ],
-    "HX_Stomp_XL": [
-        ["add-model", "--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
-         "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2275", "--sdram-words", "0x5000",
-         "--dm-words", "0x303", "--pm-words", "0x147"],
-        ["add-fx-model", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion",
-         "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2275", "--sdram-words", "0x5000",
-         "--dm-words", "0x303", "--pm-words", "0x147"],
-        ["ir-title", "--preset-id", "147", "--fx-preset-id", "148"],
-    ],
-}
+          "HX_Stomp_XL": ["tools/sharc/nam_multi.py", "--no-tone"]}
+NAM4 = [
+    ["remove-model", "--preset-id", "461"],
+    ["add-fx-model", "--knobs", "nam4", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite",
+     "--category", "distortion", "--folder", "NAM", "--preset-id", "461", "--dsp-cost", "2220",
+     "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
+    ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
+    ["ir-title", "--fx-preset-id", "461", "--knob", "0"],
+]
+STEPS = {"HX_Stomp": NAM4, "HX_Stomp_XL": NAM4}
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 

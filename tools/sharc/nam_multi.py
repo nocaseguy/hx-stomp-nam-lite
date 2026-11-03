@@ -599,12 +599,26 @@ NODMA = (("pump:\n", "pump:\n    RTS;                                // (nodma)\
          ("    R9 = POLLMAX;\nn_ew:", "    JUMP n_ewd;                         // (nodma)\n    R9 = POLLMAX;\nn_ew:"))
 
 
-# no-tone (the HX Stomp's 4-knob NAM: no Bass/Mid/Treble/Presence knobs, so nothing writes
-# DM(8..11, I0)): the knob flags are cleared as usual, the knobs not read, and the tone stack
-# keeps the coefficients a slot starts with (b0 1.0, the rest 0: an exact pass-through).
+# no-tone (the 4-knob NAM: no Bass/Mid/Treble/Presence knobs, so nothing writes DM(8..11, I0)):
+# the knob flags are cleared as usual, the knobs not read, and the four bands are left out of the
+# per-sample loop (32 instructions a sample: on the unit 0.5% of the DSP a block, 1.7% for three).
+# The check's reference leaves them out too (Pipe; flat bands would only turn -0.0 into +0.0).
 NO_TONE = False
 NOTONE = (("    DM(3, I0) = R0;\n    DM(S_EQDIRTY, I6) = R0;\n    I3 = I0;\n",
            "    DM(3, I0) = R0;\n    DM(S_EQDIRTY, I6) = R0;\n    JUMP n_eqdone;                      // (no-tone)\n    I3 = I0;\n"),)
+NOTONE_BANDS = ("      DM(I0, M0) = F0;                  // into HIST; then the four bands",
+                "      DM(I4, M0) = F10, F4 = PM(I8, M9);    // (b0 of band 0 again: the buffers are circular)\n")
+
+
+def _no_bands(src):
+    """The per-sample loop without the four bands: from the line after the HIST store (and its
+    comment) to the last band's line; F0 goes on to the output unchanged."""
+    a = src.index(NOTONE_BANDS[0])
+    a = src.index("\n", src.index("\n", a) + 1) + 1          # past the store and the comment line
+    b = src.index(NOTONE_BANDS[1], a) + len(NOTONE_BANDS[1])
+    bands = [l for l in src[a:b].splitlines() if l.strip() and not l.strip().startswith("//")]
+    assert src.count(NOTONE_BANDS[1]) == 1 and len(bands) == 32 and src[a:b].count("PM(I8, M9)") == 20
+    return src[:a] + "      // (no-tone: no bands, F0 to the output)\n" + src[b:]
 
 
 def _variant(src, meter=False, nodma=False, prof=None):
@@ -619,7 +633,7 @@ def _variant(src, meter=False, nodma=False, prof=None):
     for a, b in (NODMA if nodma else ()) + (NOTONE if NO_TONE else ()):
         assert src.count(a) == 1, a
         src = src.replace(a, b)
-    return src
+    return _no_bands(src) if NO_TONE else src
 
 
 def build(slots=3, backoff=BACKOFF_N, staging="b2", meter=False, nodma=False, prof=None, wbuf=None):
@@ -805,7 +819,7 @@ class Pipe:
                 self.mr = (self.mr - 1) % HIST_N
             self.hist[self.hw] = ssim.f2b(x)
             self.hw = (self.hw + 1) % HIST_N
-            for (b0, b1, b2, na1, na2), z in zip(self.co, self.st):
+            for (b0, b1, b2, na1, na2), z in zip(() if NO_TONE else self.co, self.st):   # (no-tone: no bands)
                 y = f(f(b0 * x) + z[0])
                 z[0] = f(f(f(b1 * x) + f(na1 * y)) + z[1])
                 z[1] = f(f(b2 * x) + f(na2 * y))
