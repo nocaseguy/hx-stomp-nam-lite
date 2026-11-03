@@ -1,6 +1,7 @@
 @ gr_meter.s - a ten-light gain-reduction meter on the Home divider or along an edge of the screen, for the Deluxe Comp.
-@ Settings: GR Thickness (126, 0..20 px; 0, or no compressor heard from lately, turns it off), GR Position (102: Middle, Top, Left,
-@ Bottom, Right) and GR Direction (128: Normal is left to right or top to bottom, Reverse the other way). Middle, Top and Bottom are
+@ Set by the compressor block's GR knobs, sent by the DSP in frame word 218 (tagged 0x6B): GR Thickness (0..20 px; 0, no knobs yet,
+@ or no compressor heard from lately turns it off), GR Position (Middle, Top, Left, Bottom, Right) and GR Direction (Normal is
+@ left to right or top to bottom, Reverse the other way). Middle, Top and Bottom are
 @ 30 px lights at a 32 px pitch, Middle on the divider line in place of its four segments; Left and Right are 21 px lights at a 24 px
 @ pitch, clear of the divider, which then stays stock.
 @ The lights are A before over B after in dB, from 64-block window peaks, at 1 2 3 4 6 8 10 14 19 25 dB. The measured gain already
@@ -30,6 +31,9 @@ hook:
     movs r1, #1
     str r1, [r4, #12]
     str r0, [r4, #4]                @ heard from the compressor just now
+    ldr.w r1, [r7, #872]            @ word 218: the block's GR knobs, tagged 0x6B
+    ror.w r1, r1, #16
+    str r1, [r4, #32]
     b heard
 nomark:
     ldr r1, [r4, #12]
@@ -42,34 +46,33 @@ heard:
     ldr r0, [r4, #28]
     adds r0, #1
     str r0, [r4, #28]
-    ldr r6, =0x28e1f845             @ the settings reader
-    movs r0, #126                   @ GR Thickness
-    mov r1, sp
-    blx r6
-    ldr r5, [sp, #4]
+    ldr r3, [r4, #32]
+    lsrs r0, r3, #24
+    cmp r0, #0x6b
+    bne stock                       @ no knobs from the block yet
+    uxtb r5, r3                     @ Thickness
+    ubfx r0, r3, #16, #8
+    cmp r0, #4
+    it hi
+    movhi r0, #4
+    str r0, [sp, #12]               @ Position
+    ubfx r0, r3, #8, #8
+    str r0, [sp, #16]               @ Direction
     cmp r5, #20
     it hi
     movhi r5, #20
     ldr r0, [r4, #4]
-    cmp.w r0, #1024                 @ frames without the compressor: about a second
+    cmp.w r0, #1024
     it hs
     movhs r5, #0
     cmp r5, #0
     beq stock
-    movs r0, #102                   @ GR Position
-    mov r1, sp
-    blx r6
-    ldr r0, [sp, #4]
-    cmp r0, #4
-    it hi
-    movhi r0, #4
-    str r0, [sp, #12]
-    movs r0, #128                   @ GR Direction
-    mov r1, sp
-    blx r6
-    ldr r0, [sp, #4]
-    str r0, [sp, #16]
-
+    ldr r0, [r4, #20]
+    cbnz r0, wasshown
+    ldr r0, [r4, #28]               @ just shown: the stock layout runs again 64 frames on, in the paint
+    adds r0, #64
+    str r0, [r4, #36]
+wasshown:
     movs r0, #1
     str r0, [r4, #20]               @ ours are shown
     str r5, [sp, #8]
@@ -391,6 +394,18 @@ paint:                              @ r0 the framebuffer, r1 the Home view: like
     push {r3-r7, lr}
     mov r4, r0
     mov r5, r1
+    adr.w r0, data                  @ the meter's first draw leaves the footswitch labels blank until a relayout [verified on unit]
+    ldr r1, [r0, #36]
+    cbz r1, laidout
+    ldr r2, [r0, #28]
+    cmp r2, r1
+    blo laidout
+    movs r1, #0
+    str r1, [r0, #36]
+    mov r0, r5
+    ldr r3, =0x28dc87cd             @ the Home view's divider and footswitch label layout, as the stock code calls it: (home, 0)
+    blx r3
+laidout:
     add.w r0, r5, #0x538
     ldrb r7, [r0, #0x15]            @ ours are shown while the stock divider is and the meter is on
     adr.w r0, data
@@ -496,7 +511,7 @@ lights:                             @ a compressor pedal's GR lights, 1 2 3 4 6 
 colours:                            @ lights 1..10
     .word 0x00ff00, 0x66ff00, 0xb3ff00, 0xffff00, 0xffd000, 0xffa500, 0xff7f00, 0xff5500, 0xff2a00, 0xff0000
 data:                               @ 0 shown reduction (Q16), 4 frames since the compressor, 8 marker, 12 latch, 16 repaint,
-    .space 32                       @ 20 ours shown, 24 the last window seen, 28 frames
+    .space 40                       @ 20 ours shown, 24 the last window seen, 28 frames, 32 the block's knobs (word 218), 36 relayout at frame
 want:                               @ colour, x, y, w, h
     .space 20
 widgets:                            @ ten slots for each edge, Top, Left, Bottom, Right, then Middle's slots 4..9

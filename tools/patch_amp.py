@@ -375,9 +375,10 @@ def expand_sharc_blob0_buffer(e2_raw_bytes):
     return struct.pack('<%dI' % len(w), *w), changed
 
 
-def wrap_primitive(e2_raw, spec, entry_addr):
+def wrap_primitive(e2_raw, spec, entry_addr, ctrl=None):
     """LDR block that points a stock primitive's registry entry at `entry_addr`, which calls the stock process address
-    (spec: "<primitive id>:<its stock process address>") itself."""
+    (spec: "<primitive id>:<its stock process address>") itself; with `ctrl` (its stock control function, our
+    entry), also the control function, which passes on what it does not handle itself."""
     pid, orig = (int(x, 0) for x in spec.split(':'))
     w = struct.unpack('<%dI' % (len(e2_raw) // 4), e2_raw)
     i = 384
@@ -393,6 +394,11 @@ def wrap_primitive(e2_raw, spec, entry_addr):
                         raise SystemExit(f'primitive {pid:#x}: process address {ent[5]:#x}, not {orig:#x}')
                     ent[5] = entry_addr
                     print(f"[+] Entry 2: primitive {pid:#06x} @ {0x200000 + k:#x} now enters {entry_addr:#x}, which calls {orig:#x}")
+                    if ctrl:
+                        if ent[4] != ctrl[0]:
+                            raise SystemExit(f'primitive {pid:#x}: control function {ent[4]:#x}, not {ctrl[0]:#x}')
+                        ent[4] = ctrl[1]
+                        print(f"[+] Entry 2: its control function is now {ctrl[1]:#x}, which passes the rest to {ctrl[0]:#x}")
                     return pack_init_l32(0x200000 + k, ent)
         i += 3 + {5: ((cnt + 1) & ~1) * 3 // 2, 4: cnt, 3: (cnt + 1) // 2, 6: cnt * 2, 10: cnt, 9: cnt}.get(tag, 0)
     raise SystemExit(f'primitive {pid:#x} is not in the registry')
@@ -426,7 +432,8 @@ def cmd_patch(args):
             print(f"[+] Entry 2: assembled {len(s.words)} 32-bit DM words @ DM {s.addr:#x}")
 
     if args.wrap_prim:
-        ldr_words += wrap_primitive(e2_raw, args.wrap_prim, entry_addr)
+        ctrl = (syms['ORIG_CTRL'], syms['CUSTOM_CTRL_ENTRY']) if 'CUSTOM_CTRL_ENTRY' in syms else None
+        ldr_words += wrap_primitive(e2_raw, args.wrap_prim, entry_addr, ctrl)
     else:
         chosen = next(((pid, paddr) for pid, paddr in UNUSED_SHARC_PRIMS if paddr not in hooked_addrs), None)
         if chosen is None:

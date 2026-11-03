@@ -21,6 +21,9 @@
 .equ SCAN_D,  0x330000
 .equ ORIG,    0x8d9c9                  // the stock process code of primitive 0x271a
 .equ SLICE,   256                       // words looked at per call
+.equ ORIG_CTRL, 0x6100bd               // the stock control function of primitive 0x271a (compiled C, VISA code in DDR2)
+.equ GR_PID,  10                        // patch_comp.py's GR Position, Direction and Thickness writers: pids 10..12
+.equ GR_TAG,  0x6B000000
 .equ WINDOW,  64                        // blocks per window peak: longer than a cycle of a low E; 1024 samples, as the Release power assumes
 
 .section dm 0xe4850
@@ -34,6 +37,9 @@ FP_WN:    .space 1
 FP_WC:    .space 1                      // windows so far
 FP_LOG:   .space 53                     // what goes to words 200..252
 FP_LIST:  .space 96                     // candidate addresses + 1
+GR_K:     .space 3                      // the GR knobs as the control function last got them
+GR_SEEN:  .space 1
+GR_PACK:  .space 1
 
 .section pm 0x0c4ef8
 CUSTOM_AMP_ENTRY:
@@ -157,6 +163,36 @@ fp_s0: DM(I5, 1) = R0;
       R0 = DM(I4, 1);
 fp_s1: DM(I5, 1) = R0;
 
+    R0 = DM(GR_SEEN);                   // GR_TAG, Position, Direction, Thickness in bytes 3..0; 0 until valid knobs arrive
+    R0 = PASS R0;
+    IF EQ JUMP fp_bad;
+    R0 = 0;
+    R1 = DM(GR_K + 0);
+    R2 = 4;
+    CALL gr_inrange;
+    R1 = DM(GR_K + 1);
+    R2 = 1;
+    CALL gr_inrange;
+    R1 = DM(GR_K + 2);
+    R2 = 20;
+    CALL gr_inrange;
+    R0 = PASS R0;
+    IF NE JUMP fp_bad;
+    R0 = DM(GR_K + 0);
+    R0 = LSHIFT R0 BY 16;
+    R1 = DM(GR_K + 1);
+    R1 = LSHIFT R1 BY 8;
+    R0 = R0 OR R1;
+    R1 = DM(GR_K + 2);
+    R0 = R0 OR R1;
+    R1 = GR_TAG;
+    R0 = R0 OR R1;
+    JUMP fp_nok;
+fp_bad:
+    R0 = 0;
+fp_nok:
+    DM(GR_PACK) = R0;
+
     R7 = DM(FP_CALLS);
     R7 = R7 + 1;
     DM(FP_CALLS) = R7;
@@ -268,7 +304,7 @@ fp_chk:
       DM(216, I4) = R2;
       R2 = DM(FP_LOG + 17);
       DM(217, I4) = R2;
-      R2 = DM(FP_LOG + 18);
+      R2 = DM(GR_PACK);                 // in 218, the state copy's: a tag in word 253 never reached the M4
       DM(218, I4) = R2;
       R2 = DM(FP_LOG + 19);
       DM(219, I4) = R2;
@@ -360,6 +396,15 @@ fp_out:
     NOP;
     RTS (LR);
 
+gr_inrange:                             // R0 = 1 unless 0 <= R1 <= R2
+    R1 = PASS R1;
+    IF LT JUMP gr_bad;
+    COMP(R1, R2);
+    IF LE RTS;
+gr_bad:
+    R0 = 1;
+    RTS;
+
 fp_max:                                 // R1 = the largest |sample| of the 16 words at I4
     R1 = 0;
     LCNTR = 16, DO fp_mx UNTIL LCE;
@@ -367,3 +412,32 @@ fp_max:                                 // R1 = the largest |sample| of the 16 w
       F0 = ABS F0;
 fp_mx: F1 = MAX(F0, F1);
     RTS;
+
+// The core's control function, called as (pid R4, pointer to the value R8, the core's state R12) [verified on unit]:
+// pids 10..12 are the GR knobs, kept here for the frame; any other goes to the stock function untouched.
+CUSTOM_CTRL_ENTRY:
+    R2 = R4;
+    R1 = GR_PID;
+    COMP(R2, R1);
+    IF LT JUMP ORIG_CTRL;
+    R1 = GR_PID + 2;
+    COMP(R2, R1);
+    IF GT JUMP ORIG_CTRL;
+    I4 = R8;
+    R0 = DM(0, I4);
+    R1 = 0x1000;
+    COMP(R0, R1);
+    IF LT JUMP fc_int;                  // an integer as the input node has it, else a float
+    R0 = FIX F0;
+fc_int:
+    R1 = GR_PID;
+    R2 = R2 - R1;
+    I4 = GR_K;
+    M4 = R2;
+    DM(M4, I4) = R0;
+    R0 = 1;
+    DM(GR_SEEN) = R0;
+    I12 = DM(M7, I6);
+    JUMP (M14, I12) (DB);
+    NOP;
+    RFRAME;
