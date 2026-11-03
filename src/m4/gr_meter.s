@@ -1,6 +1,6 @@
 @ gr_meter.s - a ten-light gain-reduction meter on the Home divider or along an edge of the screen, for the Deluxe Comp.
-@ Settings: GR Thickness (126, 0..20 px; 0, or no compressor heard from lately, turns it off), GR Position (29: Middle, Top, Left,
-@ Bottom, Right) and GR Direction (104: Normal is left to right or top to bottom, Reverse the other way). Middle, Top and Bottom are
+@ Settings: GR Thickness (126, 0..20 px; 0, or no compressor heard from lately, turns it off), GR Position (102: Middle, Top, Left,
+@ Bottom, Right) and GR Direction (128: Normal is left to right or top to bottom, Reverse the other way). Middle, Top and Bottom are
 @ 30 px lights at a 32 px pitch, Middle on the divider line in place of its four segments; Left and Right are 21 px lights at a 24 px
 @ pitch, clear of the divider, which then stays stock.
 @ The lights are A before over B after in dB, from 64-block window peaks, at 1 2 3 4 6 8 10 14 19 25 dB. The measured gain already
@@ -56,7 +56,7 @@ heard:
     movhs r5, #0
     cmp r5, #0
     beq stock
-    movs r0, #29                    @ GR Position
+    movs r0, #102                   @ GR Position
     mov r1, sp
     blx r6
     ldr r0, [sp, #4]
@@ -64,7 +64,7 @@ heard:
     it hi
     movhi r0, #4
     str r0, [sp, #12]
-    movs r0, #104                   @ GR Direction
+    movs r0, #128                   @ GR Direction
     mov r1, sp
     blx r6
     ldr r0, [sp, #4]
