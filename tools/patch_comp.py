@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""patch_comp.py - the gain-reduction meter's knobs (GR Position, GR Direction, GR Thickness) on compressor blocks, HX Stomp or XL 3.80.0.
+"""patch_comp.py - the gain-reduction meter's knobs (Mtr Pos, Mtr Dir, Mtr Thk) on compressor blocks, HX Stomp or XL 3.80.0.
 
 Each model in COMP_MODELS gets three more parameters after its own, in the three places that must agree:
   Entry 3: the parameter records, their state records and the strings they name (the string section grows in place).
   Entry 4: the model's blob gets one parameter-map input node per knob, a default for each on the root, and a writer
-           handing it to the compressor core as pid 10, 11, 12, which the DSP wrapper's control function keeps.
+           handing it to the compressor core as pid 100, 101, 102, which the DSP wrapper's control function keeps.
   Entry 0: the model's row in the UI Model Info Table counts the new parameters.
 Run it after every step that adds models (add-model, add-fx-model): those rebuild Entry 3's and Entry 4's tails
 from the models they added and would drop what this writes there.
@@ -15,14 +15,17 @@ import zlib
 
 import patch_amp as pa
 
-COMP_MODELS = ('HD2_CompressorDeluxeCompMono', 'HD2_CompressorDeluxeCompStereo')
+COMP_MODELS = (   # (model, its compressor core's primitive: src/sharc/frame_probe.asm wraps each of these)
+    ('HD2_CompressorDeluxeCompMono', 0x271a), ('HD2_CompressorDeluxeCompStereo', 0x271a),
+    ('HD2_CompressorLAStudioCompMono', 0x2719), ('HD2_CompressorLAStudioCompStereo', 0x2719),
+)
 GR_KNOBS = (   # (name, displayName, displayNameShort, value labels, default): integer lists, as Ratio
     ('GRPosition', 'Mtr Position', 'Mtr Pos', ('Middle', 'Top', 'Left', 'Bottom', 'Right'), 0),
     ('GRDirection', 'Mtr Direction', 'Mtr Dir', ('Normal', 'Reverse'), 0),
     ('GRThickness', 'Mtr Thickness', 'Mtr Thk', tuple(str(k) for k in range(21)), 0),    # 0 is off: the meter is opt-in
 )
 INT_INPUT_OP = 0x0b
-GR_PID = 10                     # src/sharc/frame_probe.asm's GR_PID: the core's own pids are 1..9
+GR_PID = 100                    # src/sharc/frame_probe.asm's GR_PID: past every core's own pids (the LA Studio Comp's go to 14)
 STOCK_E3_END = 0xcadb4
 
 
@@ -157,17 +160,17 @@ def pmap_sizes(pm):
     return [sum(n[5] for n in nodes), nA, nD + sum(n[4] for n in nodes) + inputs, nC + nD + inputs, nD, nE]
 
 
-def core_path(pm, nodes, dt, ct):
-    """The path word of the member slot 1 (Threshold) is written to: the compressor core."""
-    src = next(r[0] for r in dt if r[2] == 1)
-    for r in ct:
-        nd = nodes[r[1]]
-        if r[0] == src and nd[3] == 1:
-            return pm[nd[0]]
-    raise SystemExit('slot 1 feeds no writer directly')
+def core_path(b, pm, nodes, b0, prim):
+    """The path word of the first writer to a member running primitive `prim`: the compressor core."""
+    members = pa.entry4_blob.parse_composite(b0, pa.entry4_blob.top_type(b))['members']
+    for nd in nodes:
+        path = pm[nd[0]] if nd[3] == 1 else None
+        if path is not None and b[path] == 1 and members[b[path + 1] - 1]['type_id'] == prim:
+            return path
+    raise SystemExit(f'no writer to a member running primitive {prim:#x}')
 
 
-def blob_add_knobs(b, first_slot):
+def blob_add_knobs(b, first_slot, b0, prim):
     """A model blob with one int input node per GR_KNOBS entry (slots first_slot..) and a root default for each,
     each feeding a writer that hands its value to the compressor core as pid GR_PID + k (the DSP wrapper's).
     The parameter map, init records and relocation list are rebuilt after the node tree, in stock order; the old
@@ -188,7 +191,7 @@ def blob_add_knobs(b, first_slot):
     root = root.pop()
     c, nC = pm[4], pm[20]
     ct = [pm[c + 4 * k: c + 4 * k + 4] for k in range(nC)]
-    path = core_path(pm, nodes, dt, ct)
+    path = core_path(b, pm, nodes, b0, prim)
     n = len(GR_KNOBS)
     data = len(pm)                                  # the writers' data {path, pid, 1}, after the old tables
     pm += [w for k in range(n) for w in (path, GR_PID + k, 1)]
@@ -283,11 +286,12 @@ def patch_comp(l6ia_bytes, models=COMP_MODELS, log=print):
     mid = pa.parse_entry3_full(e3)
     assert models_view(before) == models_view(mid), 'the string section move changed a model'
     assert slot_lists(before_e3) == slot_lists(e3), 'the string section move changed a slot list'
-    for name in models:
+    for name, prim in models:
         m = pa.find_model(pa.parse_entry3_full(e3), name)
         e3, first, old = e3_add_knobs(e3, name, S)
         w4 = struct.unpack('<%dI' % (len(e4) // 4), e4)
-        e4 = e4_replace_blob(e4, m['blob_index'], blob_add_knobs(pa.entry4_blob.blob(w4, m['blob_index']), first))
+        b = blob_add_knobs(pa.entry4_blob.blob(w4, m['blob_index']), first, pa.entry4_blob.blob(w4, 0), prim)
+        e4 = e4_replace_blob(e4, m['blob_index'], b)
         e0 = e0_set_param_counts(e0, m['words'][2], old, old + len(GR_KNOBS))
         chk = pa.parse_entry3_full(e3)['models'][m['idx']]
         assert [p['slot'] for p in chk['params']] == list(range(1, old + 1 + len(GR_KNOBS)))

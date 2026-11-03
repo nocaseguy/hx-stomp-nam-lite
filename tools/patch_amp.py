@@ -432,8 +432,10 @@ def cmd_patch(args):
             print(f"[+] Entry 2: assembled {len(s.words)} 32-bit DM words @ DM {s.addr:#x}")
 
     if args.wrap_prim:
-        ctrl = (syms['ORIG_CTRL'], syms['CUSTOM_CTRL_ENTRY']) if 'CUSTOM_CTRL_ENTRY' in syms else None
-        ldr_words += wrap_primitive(e2_raw, args.wrap_prim, entry_addr, ctrl)
+        for spec in args.wrap_prim:     # each primitive enters ENTRY_<id>, and with a CTRL_<id> its control function too
+            pid = int(spec.split(':')[0], 0)
+            ctrl = (syms[f'ORIG_CTRL_{pid:X}'], syms[f'CTRL_{pid:X}']) if f'CTRL_{pid:X}' in syms else None
+            ldr_words += wrap_primitive(e2_raw, spec, syms.get(f'ENTRY_{pid:X}', entry_addr), ctrl)
     else:
         chosen = next(((pid, paddr) for pid, paddr in UNUSED_SHARC_PRIMS if paddr not in hooked_addrs), None)
         if chosen is None:
@@ -1646,8 +1648,8 @@ def main():
     p_pat.add_argument('input', help='Input .hxf or L6IA')
     p_pat.add_argument('output', help='Output .hxf or L6IA')
     p_pat.add_argument('--asm', required=True, help='SHARC assembly file (tools/sharc/nam_multi.py -o ...)')
-    p_pat.add_argument('--wrap-prim', help='ID:ADDR of a stock primitive whose registry entry is pointed at the kernel '
-                       '(which calls ADDR) instead of an unused primitive being hooked')
+    p_pat.add_argument('--wrap-prim', action='append', help='ID:ADDR of a stock primitive whose registry entry is pointed at '
+                       'the kernel (which calls ADDR) instead of an unused primitive being hooked; may be repeated')
     p_pat.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
 
     args = ap.parse_args()

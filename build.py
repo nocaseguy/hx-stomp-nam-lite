@@ -97,7 +97,7 @@ def main():
         else:
             run(py, "tools/patch_comp.py", base, titled)
             os.replace(titled, base)
-    wrap = ["--wrap-prim", "0x271a:0x8d9c9"] if os.environ.get("HX_FRAMEPROBE") else []
+    wrap = ["--wrap-prim", "0x271a:0x8d9c9", "--wrap-prim", "0x2719:0x8d342"] if os.environ.get("HX_FRAMEPROBE") else []
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm, *wrap)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:

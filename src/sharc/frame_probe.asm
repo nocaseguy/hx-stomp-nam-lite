@@ -19,10 +19,12 @@
 .equ SCAN_B,  0x100000
 .equ SCAN_C,  0x200000
 .equ SCAN_D,  0x330000
-.equ ORIG,    0x8d9c9                  // the stock process code of primitive 0x271a
+.equ ORIG,    0x8d9c9                  // the stock process code of primitive 0x271a (Deluxe Comp)
+.equ ORIG_2719, 0x8d342                 // and of 0x2719 (LA Studio Comp)
 .equ SLICE,   256                       // words looked at per call
-.equ ORIG_CTRL, 0x6100bd               // the stock control function of primitive 0x271a (compiled C, VISA code in DDR2)
-.equ GR_PID,  10                        // patch_comp.py's GR Position, Direction and Thickness writers: pids 10..12
+.equ ORIG_CTRL_271A, 0x6100bd          // the stock control functions (compiled C, VISA code in DDR2)
+.equ ORIG_CTRL_2719, 0x60cc71
+.equ GR_PID,  100                       // patch_comp.py's GR Position, Direction and Thickness writers: pids 100..102, past every core's own
 .equ GR_TAG,  0x6B000000
 .equ WINDOW,  64                        // blocks per window peak: longer than a cycle of a low E; 1024 samples, as the Release power assumes
 
@@ -37,12 +39,26 @@ FP_WN:    .space 1
 FP_WC:    .space 1                      // windows so far
 FP_LOG:   .space 53                     // what goes to words 200..252
 FP_LIST:  .space 96                     // candidate addresses + 1
+FP_KIND:  .space 1                      // the core being run: 0 Deluxe Comp (0x271a), 1 LA Studio Comp (0x2719)
+FP_R0:    .space 1
+LA_ATT:   .word 0x3F7CABBA                // the meter's fixed Attack and Release for the LA Studio Comp (10 ms, 500 ms), as per-sample coefficients
+LA_REL:   .word 0x3F7FEED8
 GR_K:     .space 3                      // the GR knobs as the control function last got them
 GR_SEEN:  .space 1
 GR_PACK:  .space 1
 
 .section pm 0x0c4ef8
 CUSTOM_AMP_ENTRY:
+ENTRY_271A:
+    DM(FP_R0) = R0;
+    R0 = 0;
+    JUMP fp_entry;
+ENTRY_2719:
+    DM(FP_R0) = R0;
+    R0 = 1;
+fp_entry:
+    DM(FP_KIND) = R0;
+    R0 = DM(FP_R0);
     DM(FP_LOG + 3) = I1;                // as called
     DM(FP_LOG + 4) = I2;
     DM(FP_LOG + 5) = I3;
@@ -62,12 +78,19 @@ CUSTOM_AMP_ENTRY:
     I4 = DM(FP_LOG + 5);
     CALL fp_max;
     DM(FP_LOG + 9) = R1;
+    R0 = DM(FP_KIND);
+    R0 = PASS R0;
     R0 = DM(FP_SAVE + 1);
     R1 = DM(FP_SAVE + 2);
     I4 = DM(FP_SAVE + 9);
     MODE1 = DM(FP_SAVE + 0);
     NOP;
+    IF NE JUMP fp_la;
     CALL ORIG;
+    JUMP fp_ran;
+fp_la:
+    CALL ORIG_2719;
+fp_ran:
     DM(FP_SAVE + 0) = MODE1;
     BIT CLR MODE1 PEYEN | BDCST9;
     NOP;
@@ -124,7 +147,12 @@ CUSTOM_AMP_ENTRY:
     R1 = R1 + 1;
     DM(FP_WC) = R1;
     DM(FP_LOG + 50) = R1;
+    R2 = DM(FP_KIND);
+    R2 = PASS R2;
     R1 = DM(FP_LOG + 21);               // the comp's Release, a per-sample coefficient: to the power of a window's 1024 samples
+    IF EQ JUMP fp_rel;
+    R1 = DM(LA_REL);
+fp_rel:
     F1 = F1 * F1;
     F1 = F1 * F1;
     F1 = F1 * F1;
@@ -136,7 +164,12 @@ CUSTOM_AMP_ENTRY:
     F1 = F1 * F1;
     F1 = F1 * F1;
     DM(FP_LOG + 51) = R1;
+    R2 = DM(FP_KIND);
+    R2 = PASS R2;
     R1 = DM(FP_LOG + 20);               // the comp's Attack: to the power of half a window, the meter's rise twice its time constant
+    IF EQ JUMP fp_att;
+    R1 = DM(LA_ATT);
+fp_att:
     F1 = F1 * F1;
     F1 = F1 * F1;
     F1 = F1 * F1;
@@ -413,16 +446,26 @@ fp_max:                                 // R1 = the largest |sample| of the 16 w
 fp_mx: F1 = MAX(F0, F1);
     RTS;
 
-// The core's control function, called as (pid R4, pointer to the value R8, the core's state R12) [verified on unit]:
-// pids 10..12 are the GR knobs, kept here for the frame; any other goes to the stock function untouched.
-CUSTOM_CTRL_ENTRY:
+// The cores' control functions, called as (pid R4, pointer to the value R8, the core's state R12) [verified on unit]:
+// pids GR_PID.. are the GR knobs, kept here for the frame; any other goes to the stock function untouched.
+CTRL_271A:
     R2 = R4;
     R1 = GR_PID;
     COMP(R2, R1);
-    IF LT JUMP ORIG_CTRL;
+    IF LT JUMP ORIG_CTRL_271A;
     R1 = GR_PID + 2;
     COMP(R2, R1);
-    IF GT JUMP ORIG_CTRL;
+    IF GT JUMP ORIG_CTRL_271A;
+    JUMP fc_take;
+CTRL_2719:
+    R2 = R4;
+    R1 = GR_PID;
+    COMP(R2, R1);
+    IF LT JUMP ORIG_CTRL_2719;
+    R1 = GR_PID + 2;
+    COMP(R2, R1);
+    IF GT JUMP ORIG_CTRL_2719;
+fc_take:
     I4 = R8;
     R0 = DM(0, I4);
     R1 = 0x1000;
