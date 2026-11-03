@@ -599,6 +599,14 @@ NODMA = (("pump:\n", "pump:\n    RTS;                                // (nodma)\
          ("    R9 = POLLMAX;\nn_ew:", "    JUMP n_ewd;                         // (nodma)\n    R9 = POLLMAX;\nn_ew:"))
 
 
+# no-tone (the HX Stomp's 4-knob NAM: no Bass/Mid/Treble/Presence knobs, so nothing writes
+# DM(8..11, I0)): the knob flags are cleared as usual, the knobs not read, and the tone stack
+# keeps the coefficients a slot starts with (b0 1.0, the rest 0: an exact pass-through).
+NO_TONE = False
+NOTONE = (("    DM(3, I0) = R0;\n    DM(S_EQDIRTY, I6) = R0;\n    I3 = I0;\n",
+           "    DM(3, I0) = R0;\n    DM(S_EQDIRTY, I6) = R0;\n    JUMP n_eqdone;                      // (no-tone)\n    I3 = I0;\n"),)
+
+
 def _variant(src, meter=False, nodma=False, prof=None):
     if prof:
         src = _prof(src, *prof)
@@ -608,7 +616,7 @@ def _variant(src, meter=False, nodma=False, prof=None):
         src = src.replace("// METER_EXIT\n", METER_POLLS_EXIT)
     elif meter:
         src = src.replace("// METER_ENTRY\n", METER_ENTRY).replace("// METER_EXIT\n", METER_EXIT)
-    for a, b in (NODMA if nodma else ()):
+    for a, b in (NODMA if nodma else ()) + (NOTONE if NO_TONE else ()):
         assert src.count(a) == 1, a
         src = src.replace(a, b)
     return src
@@ -1063,7 +1071,8 @@ class KernelCheck:
         self.expect(inst, sig[0], f"{label} (load)", None, kind="load")
         inst.player = Player(inst, w, sig[1:], nam_lite.input_trim(self.dbu.get(id(w))))
         inst.sig = sig[1:]
-        inst.pipe.knobs(inst.eq)
+        if not NO_TONE:                  # (no-tone: the kernel never reads the knobs, the stack stays flat)
+            inst.pipe.knobs(inst.eq)
 
     def play(self, inst, label, n=1):
         for _ in range(n):
@@ -1303,6 +1312,8 @@ def main():
             sys.exit(f"{src[0]}: {c} channels, NAM A2 Lite has {C}")
     else:
         w = nam_lite.placeholder()
+    global NO_TONE
+    NO_TONE = "--no-tone" in args
     asm, lay = build(slots, staging=opt("--staging") or "b2")
     if "-o" in sys.argv:
         open(sys.argv[sys.argv.index("-o") + 1], "w").write(asm)

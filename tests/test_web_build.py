@@ -31,7 +31,7 @@ def js_value(name):
 
 
 def test_build_steps_as_build_py():
-    for name in ("KERNEL", "MODEL", "FX_MODEL", "IR_TITLE"):
+    for name in ("KERNEL", "STEPS"):
         assert js_value(name) == py_dict("build.py", name), name
 
 

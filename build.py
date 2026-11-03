@@ -8,20 +8,20 @@ The input is Line 6's own firmware file for your unit, version 3.80.0
 repository: the build reads it, adds NAM A2 Lite and writes a new .hxf
 (default build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf, or ..._XL_... for the XL) for Line 6 Updater.
 
-NAM A2 Lite runs as up to three blocks at once (at most two per preset, as any
-amp), each playing its own capture from a User IR slot. The block's title
-shows the selected IR's name. (The XL build has not run on an XL.)
+NAM A2 Lite runs as up to three blocks at once, each playing its own capture
+from a User IR slot. The block's title shows the selected IR's name.
+HX Stomp: Amp > NAM > NAM A2 Lite, four knobs (Model, Polarity, Input, Output);
+HX Stomp XL: the earlier layout (8 knobs; not run on an XL). See STEPS.
 
 Steps:
   1. tools/sharc/nam_multi.py: the SHARC kernel, checked in the simulator
      against src/sharc/nam_a2.asm bit for bit, each block on its own capture
-     (--no-check skips it, ~10 s)
-  2. tools/patch_amp.py add-model: the "NAM A2 Lite" amp in Amp > NAM, each
-     block with its own SDRAM block
-  3. tools/patch_amp.py ir-title: the IR name in the block title
-  4. tools/patch_amp.py patch: the kernel into the SHARC boot stream
-  5. tools/l6ia_verify.py: every checksum of the result
-  6. tools/hxf.py pack: the .hxf
+     (--no-check skips it, ~2 min)
+  2. tools/patch_amp.py, STEPS[unit]: the model (each block with its own
+     SDRAM block), its menu entry and the IR name in the block title
+  3. tools/patch_amp.py patch: the kernel into the SHARC boot stream
+  4. tools/l6ia_verify.py: every checksum of the result
+  5. tools/hxf.py pack: the .hxf
 """
 import hashlib
 import os
@@ -32,19 +32,37 @@ STOCK_MD5 = {
     "a2cd8f4ae56f49415380270ebc484bf1": "HX_Stomp",       # HX_Stomp_v3.80.0_0x103966115.hxf
     "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",    # HX_Stomp_XL_v3.80.0_0x103966115.hxf (untried on a unit)
 }
-# The kernel and the amp (tests/test_web_build.py keeps web/firmware-worker.js's copies
-# equal). Preset ID 147 and the knobs are those of every NAM A2 Lite build, so presets
-# saved with an earlier one open with this one.
-KERNEL = "tools/sharc/nam_multi.py"
-MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
-         "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2275", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"]
-# A third NAM block: the same kernel as a mono effect under Distortion > NAM (a preset
-# holds two amps). Preset ID 148 is fixed for ever, as 147.
-FX_MODEL = ["--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion",
-            "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2275", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"]
-# ir-title per unit.
-IR_TITLE = {"HX_Stomp": ["--preset-id", "147", "--fx-preset-id", "148"],
-            "HX_Stomp_XL": ["--preset-id", "147", "--fx-preset-id", "148"]}
+# The kernel and the patch_amp.py steps per unit (tests/test_web_build.py keeps web/firmware-worker.js's
+# copies equal). Each step reads the previous one's output: patch_amp.py CMD IN OUT ARGS...
+#
+# HX Stomp: the 4-knob NAM A2 Lite (Model, Polarity, Input, Output) in Amp > NAM, on MM4 Frequency
+# Shifter's preset ID 461 (that stock model is removed). HX Edit knows that ID, so it keeps NAM
+# blocks when it rewrites a preset (it drops blocks of models it doesn't know); the knobs follow
+# MM4's types, so HX Edit keeps their values too. The block is an effect: the Stomp's two-amp rule
+# doesn't count it. No tone knobs (the kernel's --no-tone). Presets saved with an earlier NAM build
+# (IDs 147/148) don't open as NAM in this one.
+# HX Stomp XL: as before (not run on an XL): Amp > NAM, ID 147, 8 knobs, and Distortion > NAM, ID 148.
+KERNEL = {"HX_Stomp": ["tools/sharc/nam_multi.py", "--no-tone"],
+          "HX_Stomp_XL": ["tools/sharc/nam_multi.py"]}
+STEPS = {
+    "HX_Stomp": [
+        ["remove-model", "--preset-id", "461"],
+        ["add-fx-model", "--knobs", "nam4", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite",
+         "--category", "distortion", "--folder", "NAM", "--preset-id", "461", "--dsp-cost", "2275",
+         "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
+        ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
+        ["ir-title", "--fx-preset-id", "461", "--knob", "0"],
+    ],
+    "HX_Stomp_XL": [
+        ["add-model", "--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
+         "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2275", "--sdram-words", "0x5000",
+         "--dm-words", "0x303", "--pm-words", "0x147"],
+        ["add-fx-model", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion",
+         "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2275", "--sdram-words", "0x5000",
+         "--dm-words", "0x303", "--pm-words", "0x147"],
+        ["ir-title", "--preset-id", "147", "--fx-preset-id", "148"],
+    ],
+}
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -74,17 +92,18 @@ def main():
     build = os.path.join(HERE, "build")
     os.makedirs(build, exist_ok=True)
     asm = os.path.join(build, "nam_lite.asm")
-    base = os.path.join(build, "nam_lite_base.l6ia")
-    titled = os.path.join(build, "nam_lite_title.l6ia")
     image = os.path.join(build, "nam_lite.l6ia")
     py = sys.executable
 
-    run(py, KERNEL, "-o", asm, *([] if "--no-check" in argv else ["--check"]))
-    run(py, "tools/patch_amp.py", "add-model", stock, base, *MODEL)
-    run(py, "tools/patch_amp.py", "add-fx-model", base, titled, *FX_MODEL)
-    os.replace(titled, base)
-    run(py, "tools/patch_amp.py", "ir-title", base, titled, *IR_TITLE[unit])
-    os.replace(titled, base)
+    run(py, *KERNEL[unit], "-o", asm, *([] if "--no-check" in argv else ["--check"]))
+    src = stock
+    for k, step in enumerate(STEPS[unit]):
+        dst = os.path.join(build, f"nam_lite_{k}.l6ia")
+        run(py, "tools/patch_amp.py", step[0], src, dst, *step[1:])
+        if src != stock:
+            os.remove(src)
+        src = dst
+    base = src
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:

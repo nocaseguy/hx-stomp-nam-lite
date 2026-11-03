@@ -13,11 +13,11 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 pytestmark = pytest.mark.firmware
 
-# The HX Stomp's is hx-stomp-kit's `kit.py build ... nam-a2-lite --ir-title` byte for byte. Its
-# kernel is that of the image (then preset ID 148, "NAM Lite Multi") that ran on an HX Stomp
-# from RAM (two blocks, two captures, the IR names in the titles), plus the Polarity knob.
+# The HX Stomp's: the 4-knob NAM A2 Lite in Amp > NAM on MM4 Frequency Shifter's ID 461 (build.py's
+# STEPS), the image that ran on an HX Stomp from RAM (the smoke suite passed; the same layout under
+# Distortion passed the HX Edit tests). The XL's: the earlier layout, unchanged.
 BUILT_MD5 = {
-    "HX_STOMP_HXF": "3dd9379ca9bf66c3b48fd5e71531bd93",
+    "HX_STOMP_HXF": "63d1392cf35d4833907b171e6d1d3e68",
     "HX_STOMP_XL_HXF": "3c859c455721ac02e451610a56798392",     # not run on an XL
 }
 
