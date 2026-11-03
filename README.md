@@ -109,8 +109,9 @@ Only 4 of the 15 parts of the firmware change: the main application (its model t
 You can run the built firmware from the Stomp's memory for one session before you install it. Nothing is written to the Stomp, and turning it off and on brings back what is installed. The Stomp must have stock 3.80.0 installed.
 
 - **On the setup page:** step 3, **Run from RAM**, in Chrome or Edge. The browser asks you to pick a device three times as the Stomp restarts.
-- **From the command line:** hold Page Right while you power on, then
+- **From the command line:** close HX Edit, then
   ```sh
+  python3 tools/hxf_ram.py dfu    # or hold Page Right while you power on
   dfu-util -d 1fc9:000c -a 0 -D tools/ramboot/firmware-ramboot.dfu
   python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_CustomOS.hxf --stock HX_Stomp_v3.80.0_0x103966115.hxf
   ```

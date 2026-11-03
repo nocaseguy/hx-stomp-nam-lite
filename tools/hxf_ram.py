@@ -4,7 +4,7 @@ eMMC: try the firmware before installing it. A power-cycle brings back what is
 installed. How it works: RAM_RUN.md. The setup page (web/index.html) does the
 same in the browser, over WebUSB.
 
-    # Page Right at power-up (update mode), then:
+    python3 tools/hxf_ram.py dfu         # update mode (or Page Right at power-up), then:
     dfu-util -d 1fc9:000c -a 0 -D tools/ramboot/firmware-ramboot.dfu
     python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_CustomOS.hxf \\
         --stock HX_Stomp_v3.80.0_0x103966115.hxf
@@ -40,6 +40,8 @@ sys.path.insert(0, TOOLS)
 
 SECTOR = 512
 VID, PID = 0x1209, 0x0001
+LINE6_VID, LINE6_PIDS = 0x0E41, (0x4246, 0x4253)          # a running HX Stomp, HX Stomp XL
+DFU_VID, DFU_PID = 0x1FC9, 0x000C                         # the boot ROM's DFU loader (update mode)
 PRODUCTS = {0x0006: "HX Stomp", 0x000B: "HX Stomp XL"}   # .hxf HEAD word at 0x0A
 
 # src/ramboot/ramboot.h (web/ramrun.js keeps a copy too: keep the three the same)
@@ -292,7 +294,7 @@ class Loader:
                 break
             time.sleep(0.2)
         if self.dev is None:
-            fail("no loader on USB (1209:0001): Page Right at power-up, then "
+            fail("no loader on USB (1209:0001): hxf_ram.py dfu (or Page Right at power-up), then "
                  "dfu-util -d 1fc9:000c -a 0 -D tools/ramboot/firmware-ramboot.dfu")
         try:
             self.dev.set_configuration()
@@ -335,6 +337,180 @@ class Loader:
         if status:
             fail(f"eMMC read failed at sectors {first:#x}+{count:#x} (status {status:#x})")
         return crc
+
+
+# ------------------------------------------------------------------ update mode
+
+# Line 6 Updater's request, as web/ramrun.js's rebootToDfu sends it (framing documented there)
+LOCAL, REMOTE, RX_BUF = 0x1001, 0x03EF, 0x1000
+F_SYN, F_FIN, F_DATA, F_WIN, F_HB, F_HBREQ = 0x01, 0x02, 0x04, 0x08, 0x10, 0x20
+
+
+def parse_in(buf):
+    out, off = [], 0
+    while off + 8 <= len(buf):
+        w0, w1 = struct.unpack_from("<2I", buf, off)
+        length = w0 & 0xFFFF
+        if off + 8 + length > len(buf):
+            fail("truncated message from the HX Stomp")
+        m, p = {"type": w0 >> 28, "src": w1 & 0xFFFF, "dst": w1 >> 16, "flags": None}, off + 8
+        if m["type"] == 2:
+            p += 4
+        if off + 8 + length - p >= 8:
+            s0, m["window"] = struct.unpack_from("<2I", buf, p)
+            m["flags"], m["seq"], m["data"] = s0 >> 24, (s0 >> 8) & 0xFF, bytes(buf[p + 8: off + 8 + length])
+        out.append(m)
+        off += (8 + length + 3) & ~3
+    return out
+
+
+class Stream:
+    """The message stream to the update service (port 0xEF); dev needs pyusb's read() and write()."""
+
+    def __init__(self, dev, ep_out, ep_in, mtu, timeout_error):
+        self.dev, self.ep_out, self.ep_in, self.mtu, self.timeout_error = dev, ep_out, ep_in, mtu, timeout_error
+        self.tx_seq, self.rx_seq, self.consumed, self.sent, self.peer_window = 1, None, 0, 0, 0
+        self.rx, self.last_tx = b"", time.time()
+
+    def next(self, ms):
+        try:
+            return bytes(self.dev.read(self.ep_in, self.mtu, timeout=ms))
+        except self.timeout_error:
+            return None
+
+    def send(self, flags, data=b""):
+        sh = struct.pack("<2I", (flags << 24) | (self.tx_seq << 8), RX_BUF + self.consumed)
+        if flags & F_SYN:
+            body, kind = struct.pack("<I", (self.mtu & 0xFFFF) << 16) + sh + data, 2
+        else:
+            body, kind = sh + data, 1
+        msg = struct.pack("<2I", (kind << 28) | (2 << 26) | len(body), LOCAL | ((REMOTE & 0x3FF) << 16)) + body
+        self.tx_seq = (self.tx_seq + 1) & 0xFF
+        self.sent += len(data)
+        self.last_tx = time.time()
+        self.dev.write(self.ep_out, msg + bytes(-len(msg) % 4), timeout=2000)
+
+    def handle(self, m):
+        if m["flags"] is None or (m["src"] & 0xFF) != (REMOTE & 0xFF) or m["dst"] != LOCAL:
+            return
+        if m["flags"] & F_SYN:
+            if self.rx_seq is not None:
+                fail("unexpected SYN from the HX Stomp")
+            self.rx_seq, self.peer_window = m["seq"], m["window"]
+            return
+        if self.rx_seq is None:
+            fail("the HX Stomp answered before connecting")
+        if (m["seq"] - self.rx_seq) & 0xFF != 1:
+            fail("sequence gap from the HX Stomp")
+        self.rx_seq = m["seq"]
+        if m["flags"] & (F_DATA | F_WIN):
+            self.peer_window = m["window"]
+            if m["flags"] & F_DATA:
+                self.rx += m["data"]
+        if m["flags"] & F_FIN:
+            fail("the HX Stomp closed the stream: it refused the request")
+
+    def poll(self, ms):
+        b = self.next(ms)
+        if b:
+            for m in parse_in(b):
+                self.handle(m)
+        if self.rx_seq is not None and time.time() - self.last_tx >= 1:
+            self.send(F_HB)
+
+    def until(self, cond, seconds, what):
+        end = time.time() + seconds
+        while not cond():
+            if time.time() > end:
+                fail(f"no answer from the HX Stomp ({what})")
+            self.poll(100)
+
+    def write(self, data, what):
+        self.until(lambda: self.sent + len(data) <= self.peer_window, 3, "window")
+        self.send(F_DATA, data)
+
+    def read(self, n, what):
+        self.until(lambda: len(self.rx) >= n, 3, what)
+        out, self.rx = self.rx[:n], self.rx[n:]
+        self.consumed += n
+        return out
+
+
+def enter_update_mode(st):
+    end = time.time() + 1                    # Line 6 Updater drops what is waiting for ~1 s first
+    while time.time() < end:
+        st.next(100)
+    st.send(F_SYN | F_HBREQ)
+    st.until(lambda: st.rx_seq is not None, 3, "connect")
+    st.write(struct.pack("<HHIB", 0, 3, 1, 3), "select service 3")
+    end = time.time() + 0.425
+    while time.time() < end:
+        st.poll(50)
+    st.write(struct.pack("<HHI", 1, 0, 2) + bytes(2), "version")
+    if struct.unpack_from("<I", st.read(8, "hello"), 4)[0] != 2:
+        fail("not the stock update service")
+    st.read(2, "hello")
+    st.send(F_WIN)
+    st.write(bytes([0xAA, 0, 0, 1]), "QueryUpdateProtocolInfo")
+    pi = st.read(4, "protocol info")
+    if pi[0] >= 2 or any(not 1 <= x <= 4 for x in pi[1:]):
+        fail(f"unexpected protocol info {' '.join(map(str, pi))}")
+    st.send(F_WIN)
+    st.write(bytes([0xAA, 0, 0, 3]), "QueryDeviceInfo")
+    st.read(36, "device info")
+    st.send(F_WIN)
+    st.write(bytes([0xAA, 0, 0, 2]), "EnterUpdateMode")
+    res = struct.unpack("<i", st.read(4, "result"))[0]
+    if res < 0:
+        fail(f"the HX Stomp refused update mode ({res})")
+
+
+def cmd_dfu(args):
+    import usb.core
+    import usb.util
+    if usb.core.find(idVendor=DFU_VID, idProduct=DFU_PID) is not None:
+        print("[+] the HX Stomp is already in update mode (1fc9:000c)")
+        return
+    dev = next((d for d in usb.core.find(find_all=True, idVendor=LINE6_VID) if d.idProduct in LINE6_PIDS), None)
+    if dev is None:
+        fail("no HX Stomp on USB (0e41:4246 or 0e41:4253): is it on and connected?")
+    try:
+        cfg = dev.get_active_configuration()
+    except usb.core.USBError:
+        dev.set_configuration()
+        cfg = dev.get_active_configuration()
+    intf = cfg[(0, 0)]
+    bulk = [e for e in intf if usb.util.endpoint_type(e.bmAttributes) == usb.util.ENDPOINT_TYPE_BULK]
+    if intf.bInterfaceClass != 0xFF or len(bulk) != 2:
+        fail("interface 0 is not the HX Stomp's message interface")
+    ep_in = next(e for e in bulk if usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN)
+    ep_out = next(e for e in bulk if usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT)
+    try:
+        if dev.is_kernel_driver_active(0):
+            dev.detach_kernel_driver(0)
+    except (NotImplementedError, usb.core.USBError):
+        pass
+    try:
+        usb.util.claim_interface(dev, 0)
+    except usb.core.USBError as e:
+        fail(f"cannot claim interface 0 ({e}): close HX Edit and Line 6 Updater")
+    print(f"[+] HX Stomp {dev.idProduct:04x}: asking it to restart in update mode")
+    try:
+        enter_update_mode(Stream(dev, ep_out.bEndpointAddress, ep_in.bEndpointAddress, ep_in.wMaxPacketSize,
+                                 usb.core.USBTimeoutError))
+    finally:
+        try:
+            usb.util.release_interface(dev, 0)
+        except usb.core.USBError:
+            pass                              # it is resetting
+        usb.util.dispose_resources(dev)
+    end = time.time() + 60
+    while usb.core.find(idVendor=DFU_VID, idProduct=DFU_PID) is None:
+        if time.time() > end:
+            fail("the HX Stomp accepted, but update mode (1fc9:000c) did not appear within 60 s")
+        time.sleep(0.2)
+    print("[+] in update mode (1fc9:000c); next: "
+          "dfu-util -d 1fc9:000c -a 0 -D tools/ramboot/firmware-ramboot.dfu")
 
 
 def cmd_info(args):
@@ -409,8 +585,9 @@ def main():
             p.add_argument("--no-emmc-check", action="store_true",
                            help="do not check that the eMMC holds the stock firmware first")
     sub.add_parser("info")
+    sub.add_parser("dfu", help="restart a running HX Stomp in update mode, as Page Right at power-up does")
     args = ap.parse_args()
-    {"plan": cmd_plan, "run": cmd_run, "info": cmd_info}[args.cmd](args)
+    {"plan": cmd_plan, "run": cmd_run, "info": cmd_info, "dfu": cmd_dfu}[args.cmd](args)
 
 
 if __name__ == "__main__":
