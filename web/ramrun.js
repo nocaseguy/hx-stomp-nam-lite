@@ -62,7 +62,7 @@
     return filters.some(function (f) { return dev.vendorId === f.vendorId && dev.productId === f.productId; });
   }
 
-  // ---- 1. Restart in update mode (tools/hx_dfu_reboot.py in the private notes; Line 6 Updater's
+  // ---- 1. Restart in update mode (tools/hxf_ram.py dfu does the same; Line 6 Updater's
   //         "Rebooting into NX bootloader"). Transport header: type<<28 | 2<<26 | length, src | dst<<16;
   //         stream header: flags<<24 | seq<<8, the receive-window edge.
   var LOCAL = 0x1001, REMOTE = 0x03EF, RX_BUF = 0x1000;
