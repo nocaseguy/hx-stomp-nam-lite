@@ -43,18 +43,21 @@ CAT_NAME = b'CustomOS'
 PROBE = bool(os.environ.get('HX_PROBE'))
 PROBE_PAGE_LABEL, PROBE_PAGE_LIMITS = b'Probe\nPage', 0x28e1ed1c    # limits: integer 0..3
 PROBE_WORD_LABEL, PROBE_WORD_LIMITS = b'Probe\nWord', 0x28e1ed56    # limits: integer 0..60
-# Experiment (HX_GR=1): the two settings choose what the Home divider meter shows of the Deluxe Comp's core (src/m4/gr_meter.s).
+# Experiment (HX_GR=1): the gain-reduction meter along an edge of the Home screen (src/m4/gr_meter.s): Position, Direction and
+# Thickness (0 is off). Position and Direction take the tuner settings' IDs, so no tuner features then.
 GR = bool(os.environ.get('HX_GR'))
-GR_IN_LABEL, GR_OUT_LABEL = b'Meter\nSource', b'Meter\nMode'
-GR_IN_VALUES = ((b'Map 0-9', b'Map 10-19', b'Map 20-29', b'Map 30-31') + tuple(f'Word {k}'.encode() for k in range(32))
-                + (b'-',) * 25)                               # limits 0..60
-GR_OUT_VALUES = (b'GR', b'Level', b'Reduction', b'Wide')
+GR_THICK_ID = 126                # an empty label, enum limits, and no stock code reads it
+GR_SETTINGS = (   # (ID, label, values, limits as (default, max) in the label slot's tail, or None for the stock 0..1)
+    (TUNER_ID, b'GR\nPosition', (b'Middle', b'Top', b'Left', b'Bottom', b'Right'), (0, 4)),
+    (LOCK_ID, b'GR\nDirection', (b'Normal', b'Reverse'), None),
+    (GR_THICK_ID, b'GR\nThickness', tuple(str(k).encode() for k in range(21)), (2, 20)),
+)
+LIMITS_TAIL, LIMITS_TAIL_STOCK = 0x28e1ed36, bytes.fromhex('0372')     # stores type r3, default r2, min r1, max r4; strb r3,[r0,#8]
 GR_METER = bytes.fromhex(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gr_meter.hex')).read().strip()) if GR else None
 RX_CB_LIT, RX_CB_ROM = 0x28da6134, 0x10001095                       # the receive callback of the DSP stream (frames of 256 words)
 HOME_CTOR_CALL, HOME_CTOR = 0x28d96c44, 0x28dc91d0                   # bl to the Home view's constructor at boot
 HOME_PAINT_LIT, HOME_PAINT = 0x28d96e28, 0x28dc8d39                  # the Home view's paint function, as registered
-DIVIDER_WIDTH, DIVIDER_WIDTH_STOCK = 0x28dc87fc, b'\x50\x23'          # movs r3,#80: the layout's divider segment width
-CAT_PAGES = (TUNER_ID, LOCK_ID, EMPTY_SLOT)                      # page 0 of CustomOS
+CAT_PAGES = (TUNER_ID, LOCK_ID, GR_THICK_ID if GR else EMPTY_SLOT)    # page 0 of CustomOS
 # Sites that switch on the category with `cmp rN,#5; bhi exit; tbb`: (hook, cat reg, page reg, table reg, tbb, exit, stub).
 # The stub is category 2's generic case entered after its table load: it sets the slot in r4 itself, which some cases leave to the category.
 SITES = {
@@ -164,13 +167,10 @@ def dispatch_cave(at, site, table):
     return a.bytes()
 
 
-def text_cave(at, tables, latched=None, gr_text=None):
+def text_cave(at, tables, latched=None):
     """Runs the two instructions the hook replaced, then answers our IDs with their value strings and leaves other IDs to stock."""
     a = Asm(at)
     a.raw(bytes.fromhex('30b5 85b0'))       # push {r4,r5,lr}; sub sp,#0x14
-    if gr_text:
-        a.h(cmp_imm(0, TUNER_ID))
-        a.b16('eq', 'grsrc')
     if latched:
         a.h(cmp_imm(0, LOCK_ID))
         a.b16('eq', 'probe')
@@ -188,15 +188,6 @@ def text_cave(at, tables, latched=None, gr_text=None):
     a.h(0xeb04, 0x0484, 0xeb01, 0x0184)     # r4 *= 5; r1 += r4 * 4: table + 20 * value
     a.bl(STRCPY)
     a.h(0x2000, 0xb005, 0xbd30)             # movs r0,#0; add sp,#0x14; pop {r4,r5,pc}
-    if gr_text:
-        a.label('grsrc')                    # Meter Source = Word k: the word's value instead of its name
-        a.h(0x684c, cmp_imm(4, 4))          # ldr r4,[r1,#4]: the value; cmp r4,#4
-        a.b16('lo', f'id{TUNER_ID}')
-        a.h(cmp_imm(4, 35))
-        a.b16('hi', f'id{TUNER_ID}')
-        a.h(0x4610, 0x4621)                 # mov r0,r2: dst; mov r1,r4
-        a.bl(gr_text)
-        a.h(0x2000, 0xb005, 0xbd30)         # movs r0,#0; add sp,#0x14; pop {r4,r5,pc}
     if latched:
         a.label('probe')                    # Probe Word: 0 mask of the words that were ever non-zero, 1 mask of those that changed, 2 reset, 3.. a word
         a.h(0x684c, 0x4615)                 # ldr r4,[r1,#4]: the mode; mov r5,r2: dst
@@ -387,8 +378,9 @@ def menu_entry0(e0):
     for tab in (NAMES_LONG, NAMES_SHORT):
         if e0[off(tab + NAME_LEN * 22, 8):][:8] != b'Main LCD':
             raise SystemExit(f'patch-menu: label array at {tab:#x} is not the stock one')
-        for pid, label in ((TUNER_ID, GR_IN_LABEL if GR else PROBE_PAGE_LABEL if PROBE else TUNER_LABEL),
-                           (LOCK_ID, GR_OUT_LABEL if GR else PROBE_WORD_LABEL if PROBE else LOCK_LABEL)):
+        labels = (tuple((pid, label) for pid, label, _, _ in GR_SETTINGS) if GR else
+                  ((TUNER_ID, PROBE_PAGE_LABEL if PROBE else TUNER_LABEL), (LOCK_ID, PROBE_WORD_LABEL if PROBE else LOCK_LABEL)))
+        for pid, label in labels:
             o = off(tab + NAME_LEN * pid, NAME_LEN)
             if any(e0[o:o + NAME_LEN]):
                 raise SystemExit(f'patch-menu: label {pid} at {tab:#x} is not empty (the patch is already applied?)')
@@ -404,16 +396,34 @@ def menu_entry0(e0):
     if LIMITS_TAB_HIGH + 2 * lock_entry != ENUM01_TARGET:
         raise SystemExit('patch-menu: the lock setting has no enum limits entry')
 
+    if PROBE:
+        put(LIMITS_TAB_LOW + 2 * (TUNER_ID - 1), struct.pack('<H', (PROBE_PAGE_LIMITS - LIMITS_TAB_LOW) // 2))
+        put(LIMITS_TAB_HIGH + 2 * (LOCK_ID - 0x3f), struct.pack('<H', (PROBE_WORD_LIMITS - LIMITS_TAB_HIGH) // 2))
+    if GR:
+        # The stock limits have no 0..20 with default 2 or 0..4 with default 0, and the tbh tables reach no cave: such limits code goes
+        # in the unused tail of the setting's own label slot, then on into the stock tail.
+        expect(LIMITS_TAIL, LIMITS_TAIL_STOCK, 'the limits code tail')
+        thick_entry = struct.unpack_from('<H', e0, off(LIMITS_TAB_HIGH + 2 * (GR_THICK_ID - 0x3f), 2))[0]
+        if LIMITS_TAB_HIGH + 2 * thick_entry != ENUM01_TARGET:
+            raise SystemExit('patch-menu: the GR Thickness setting has no enum limits entry')
+        for pid, label, _, limits in GR_SETTINGS:
+            if limits is None:
+                continue
+            at = NAMES_LONG + NAME_LEN * pid + len(label) + 1
+            at += at & 1
+            code = struct.pack('<4H', 0x2302, 0x2200 | limits[0], 0x2100, 0x2400 | limits[1]) + pa.thumb_bw(at + 8, LIMITS_TAIL)
+            if at + len(code) > NAMES_LONG + NAME_LEN * (pid + 1):
+                raise SystemExit(f'patch-menu: the limits code of setting {pid} does not fit its label slot')
+            put(at, code)
+            tab, first = (LIMITS_TAB_LOW, 1) if pid <= 0x37 else (LIMITS_TAB_HIGH, 0x3f)
+            put(tab + 2 * (pid - first), struct.pack('<H', (at - tab) // 2))
     if PROBE or GR:
-        put(LIMITS_TAB_LOW + 2 * (TUNER_ID - 1), struct.pack('<H', ((PROBE_WORD_LIMITS if GR else PROBE_PAGE_LIMITS) - LIMITS_TAB_LOW) // 2))
-        put(LIMITS_TAB_HIGH + 2 * (LOCK_ID - 0x3f), struct.pack('<H', ((PROBE_PAGE_LIMITS if GR else PROBE_WORD_LIMITS) - LIMITS_TAB_HIGH) // 2))
         if u32(RX_CB_LIT) != RX_CB_ROM:
             raise SystemExit('patch-menu: the DSP stream callback is not the stock one')
     if GR:
         expect(HOME_CTOR_CALL, bl(HOME_CTOR_CALL, HOME_CTOR), 'the Home view constructor call')
         if u32(HOME_PAINT_LIT) != HOME_PAINT:
             raise SystemExit('patch-menu: the Home view paint function is not the stock one')
-        expect(DIVIDER_WIDTH, DIVIDER_WIDTH_STOCK, 'the divider segment width')
     expect(TEXT_FN, TEXT_FN_STOCK, 'the value-text function')
     expect(TAP_SITE, TAP_SITE_STOCK, 'the tap-tempo call')
     expect(NAV_CMP, NAV_CMP_STOCK, 'the category navigation')
@@ -440,8 +450,7 @@ def menu_entry0(e0):
             put(lit, struct.pack('<I', array_va))
     table_va = cave.add(b''.join(struct.pack('<H', x) for x in CAT_PAGES))
     if GR:
-        values = {TUNER_ID: cave.add(b''.join(padded(v) for v in GR_IN_VALUES)),
-                  LOCK_ID: cave.add(b''.join(padded(v) for v in GR_OUT_VALUES))}
+        values = {pid: cave.add(b''.join(padded(v) for v in vals)) for pid, _, vals, _ in GR_SETTINGS}
         latched = None
     elif PROBE:
         values = {TUNER_ID: cave.add(b''.join(padded(v) for v in (b'0', b'1', b'2', b'3')))}
@@ -456,13 +465,12 @@ def menu_entry0(e0):
     for site in SITES.values():
         va = cave.add(dispatch_cave(cave.next(), site, table_va))
         put(site[0], pa.thumb_bw(site[0], va))
-    gr_va = cave.add(GR_METER) if GR else None    # +0 receive callback, +4 Home constructor, +8 Home paint, +12 text
-    put(TEXT_FN, pa.thumb_bw(TEXT_FN, cave.add(text_cave(cave.next(), values, latched, gr_va and gr_va + 12))))
+    put(TEXT_FN, pa.thumb_bw(TEXT_FN, cave.add(text_cave(cave.next(), values, latched))))
     if GR:
+        gr_va = cave.add(GR_METER)          # +0 receive callback, +4 Home constructor, +8 Home paint
         put(RX_CB_LIT, struct.pack('<I', gr_va | 1))
         put(HOME_CTOR_CALL, bl(HOME_CTOR_CALL, gr_va + 4))
         put(HOME_PAINT_LIT, struct.pack('<I', (gr_va + 8) | 1))
-        put(DIVIDER_WIDTH, b'\x1e\x23')    # movs r3,#30: ten lights at a 32 px pitch
     elif PROBE:
         put(RX_CB_LIT, struct.pack('<I', cave.add(rx_cave(cave.next(), latched)) | 1))
     else:

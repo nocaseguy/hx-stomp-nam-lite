@@ -1,12 +1,11 @@
-@ gr_meter.s - a ten-light gain-reduction meter on the Home divider.
-@ The divider's four stock segments and six more widgets of our own become ten 30 px lights at a 32 px pitch.
-@ Meter Mode (setting 104): GR (A before over B after in dB, from 64-block window peaks, lights at 1 2 3 4 6 8 10 14 19 25 dB;
-@ the measured gain already follows the comp's attack and release; the rise is slowed a little more by its Attack, and in silence
-@ the lights decay at its Release),
-@ or Level (96 dB log scale), Reduction (24 dB below 1.0), Wide (2^-20..2^20) of a word of the core's state (frame words 218..249).
-@ Meter Source (setting 29): Map 0-9 .. Map 30-31 (each light is a state word, lit once it has changed since the page was chosen),
-@ or Word 0..31 shown alone, its value also as the setting's text (k: XXXXXXXX). Words 0..3 are Threshold, Ratio, Attack, Release.
-@ Entry table: +0 the DSP stream's receive callback, +4 the Home view's constructor, +8 its paint function, +12 Meter Source's text.
+@ gr_meter.s - a ten-light gain-reduction meter on the Home divider or along an edge of the screen, for the Deluxe Comp.
+@ Settings: GR Thickness (126, 0..20 px; 0, or no compressor heard from lately, turns it off), GR Position (29: Middle, Top, Left,
+@ Bottom, Right) and GR Direction (104: Normal is left to right or top to bottom, Reverse the other way). Middle, Top and Bottom are
+@ 30 px lights at a 32 px pitch, Middle on the divider line in place of its four segments; Left and Right are 21 px lights at a 24 px
+@ pitch, clear of the divider, which then stays stock.
+@ The lights are A before over B after in dB, from 64-block window peaks, at 1 2 3 4 6 8 10 14 19 25 dB. The measured gain already
+@ follows the comp's attack and release; the rise is slowed a little more by its Attack, and in silence the lights decay at its Release.
+@ Entry table: +0 the DSP stream's receive callback, +4 the Home view's constructor, +8 its paint function.
 @ Position independent; tools/m4asm.py turns it into the bytes patch_menu.py appends to the code segment.
 @ Integer maths only: the thread has no FPU context of its own.
 .syntax unified
@@ -17,66 +16,71 @@ rx:
     b.w hook
     b.w construct
     b.w paint
-    b.w text
 
 hook:
     push {r0-r7, lr}
-    sub sp, #12
+    sub sp, #20
     mov r7, r1                      @ the frame
     adr.w r4, data
     ldr r0, [r7, #800]              @ the DSP's marker (600DF00D, halfwords swapped)
     ldr r1, =0xf00d600d
     subs r0, r0, r1
     str r0, [r4, #8]                @ 0: this frame carries the DSP's words
-    ldr r1, [r4, #12]
-    cbnz r0, nolatch
+    bne nomark
     movs r1, #1
     str r1, [r4, #12]
-nolatch:
+    str r0, [r4, #4]                @ heard from the compressor just now
+    b heard
+nomark:
+    ldr r1, [r4, #12]
     cmp r1, #0
     beq leave                       @ until the DSP has been heard from, the UI may not be up
-    ldr r0, [r4, #4]
+    ldr r1, [r4, #4]
+    adds r1, #1
+    str r1, [r4, #4]
+heard:
+    ldr r0, [r4, #28]
     adds r0, #1
-    str r0, [r4, #4]
-    lsls r0, r0, #25
-    bne noforce
-    movs r0, #0                     @ now and then draw everything again: the layout code resets the stock segments
-    movs r1, #10
-    add.w r2, r4, #20
-forget:
-    str r0, [r2], #4
-    subs r1, #1
-    bne forget
-noforce:
+    str r0, [r4, #28]
     ldr r6, =0x28e1f845             @ the settings reader
-    movs r0, #29                    @ Meter Source
+    movs r0, #126                   @ GR Thickness
     mov r1, sp
     blx r6
     ldr r5, [sp, #4]
-    movs r0, #104                   @ Meter Mode
+    cmp r5, #20
+    it hi
+    movhi r5, #20
+    ldr r0, [r4, #4]
+    cmp.w r0, #1024                 @ frames without the compressor: about a second
+    it hs
+    movhs r5, #0
+    cmp r5, #0
+    beq stock
+    movs r0, #29                    @ GR Position
     mov r1, sp
     blx r6
-    ldr r1, [sp, #4]
-    and r1, r1, #3
+    ldr r0, [sp, #4]
+    cmp r0, #4
+    it hi
+    movhi r0, #4
+    str r0, [sp, #12]
+    movs r0, #104                   @ GR Direction
+    mov r1, sp
+    blx r6
+    ldr r0, [sp, #4]
+    str r0, [sp, #16]
+
+    movs r0, #1
+    str r0, [r4, #20]               @ ours are shown
+    str r5, [sp, #8]
     ldr r0, [r4, #8]
     cmp r0, #0
-    bne leave                       @ no measurement in this frame
-    movs r6, #0
-keep:                               @ the state words as last seen, for the setting's text
-    add.w r0, r7, #872
-    ldr.w r0, [r0, r6, lsl #2]
-    add.w r2, r4, #320
-    str.w r0, [r2, r6, lsl #2]
-    adds r6, #1
-    cmp r6, #32
-    bne keep
-    cmp r1, #0
-    bne single
+    bne grshow                      @ no measurement in this frame
     ldr.w r0, [r7, #1000]           @ word 250: the DSP's window count; frames repeat a window's values
-    ldr.w r1, [r4, #448]
+    ldr r1, [r4, #24]
     cmp r0, r1
     beq grshow
-    str.w r0, [r4, #448]
+    str r0, [r4, #24]
     ldr r0, [r7, #864]              @ word 216: the window peak of A before, the compressor's input
     ldr r1, [r7, #868]              @ word 217: that of B after, its output
     bl grdb
@@ -85,7 +89,7 @@ keep:                               @ the state words as last seen, for the sett
     lsls r5, r2, #16
     ldr r1, [r4, #0]
     cmp r5, r1
-    bls decayed_to                  @ falling: as measured
+    bls risen                       @ falling: as measured
     ldr.w r0, [r7, #1008]           @ word 252: the comp's Attack coefficient over half a window
     bl q16
     subs r1, r5, r1                 @ rising: the target less what is left of the gap
@@ -93,7 +97,7 @@ keep:                               @ the state words as last seen, for the sett
     lsrs r2, r2, #16
     orr.w r2, r2, r3, lsl #16
     subs r5, r5, r2
-decayed_to:
+risen:
     str r5, [r4, #0]
     b grshow
 silent:                             @ nothing to measure: the comp's gain recovers at its Release
@@ -112,116 +116,158 @@ grshow:
 light:
     ldrh.w r0, [r3, r5, lsl #1]
     cmp r2, r0
-    blo count
+    blo lit
     adds r5, #1
     cmp r5, #10
     bne light
-    b count
-single:
-    cmp r5, #4
-    blo map
-    subs r5, #4
-    cmp r5, #32
-    bhs leave
-    add.w r0, r7, #872              @ words 218..249: the core's state
-    ldr.w r0, [r0, r5, lsl #2]
-    bl measure
-    mov r3, r4
-    bl smooth
-    adds r2, #16
-    lsrs r5, r2, #5                 @ 32 px a light
-count:
-    movs r0, #0                     @ not on a map page: choosing one again re-arms it
-    str.w r0, [r4, #316]
-    movs r0, #1                     @ the first r5 lights
-    lsls r0, r0, r5
-    subs r5, r0, #1
-    b draw
-
-map:                                @ r5 the page: light k shows word 10 * page + k, lit once it has changed (blinks are too quick to see)
-    ldr.w r0, [r4, #316]
-    adds r1, r5, #1
-    cmp r0, r1
-    beq armed
-    str.w r1, [r4, #316]            @ a page newly chosen: the words now are the baseline, all lights off
+lit:                                @ slot j counts left to right or top to bottom; it shows light j, or 9 - j in Reverse
+    adr.w r7, want
+    ldr r0, [sp, #12]
+    cmp r0, #0
+    it ne
+    blne stockdiv                   @ Middle uses the divider's own segments
     movs r6, #0
-rearm:
-    add.w r0, r7, #872
-    ldr.w r0, [r0, r6, lsl #2]
-    add.w r2, r4, #60
-    str.w r0, [r2, r6, lsl #2]
-    add.w r2, r4, #188
-    movs r0, #0
-    str.w r0, [r2, r6, lsl #2]
-    adds r6, #1
-    cmp r6, #32
-    bne rearm
-armed:
-    movs r6, #0
-act:
-    add.w r0, r7, #872
-    ldr.w r0, [r0, r6, lsl #2]
-    add.w r2, r4, #60
-    ldr.w r3, [r2, r6, lsl #2]
-    str.w r0, [r2, r6, lsl #2]
-    cmp r0, r3
-    beq same
-    add.w r2, r4, #188
-    movs r3, #1
-    str.w r3, [r2, r6, lsl #2]
-same:
-    adds r6, #1
-    cmp r6, #32
-    bne act
-    movs r0, #10
-    mul r5, r5, r0
+slot:
+    ldr r2, [sp, #16]
+    mov r0, r6
+    cbz r2, forward
+    rsb.w r0, r6, #9
+forward:
     movs r1, #0
-    movs r6, #0
-mbit:
-    add.w r0, r5, r6
-    cmp r0, #32
-    bhs mnext
-    add.w r2, r4, #188
-    ldr.w r0, [r2, r0, lsl #2]
-    cbz r0, mnext
-    movs r0, #1
-    lsls r0, r0, r6
-    orrs r1, r0
-mnext:
+    cmp r0, r5
+    bhs dark
+    adr.w r3, colours
+    ldr.w r1, [r3, r0, lsl #2]
+dark:
+    str r1, [r7, #0]
+    ldr r0, [sp, #12]
+    ldr r1, [sp, #8]
+    cbz r0, middle
+    subs r0, #1                     @ the edge: Top, Left, Bottom, Right
+    lsls r2, r0, #31
+    bne upright
+    lsls r2, r6, #5
+    str r2, [r7, #4]
+    movs r2, #30
+    str r2, [r7, #12]
+    str r1, [r7, #16]
+    cmp r0, #0
+    ite eq
+    moveq r2, #240                  @ y counts up from the screen's bottom edge [verified on unit]
+    movne r2, r1
+    str r2, [r7, #8]
+    b place
+upright:                            @ slots 4 and 5 leave rows 117..119 to the divider
+    movs r2, #24
+    mul r2, r6, r2
+    rsb.w r2, r2, #237
+    str r2, [r7, #8]
+    str r1, [r7, #12]
+    movs r2, #21
+    str r2, [r7, #16]
+    cmp r0, #1
+    ite eq
+    moveq r2, #0
+    rsbne.w r2, r1, #320
+    str r2, [r7, #4]
+place:                              @ each position has its own widgets: a move would erase the box spanning both places
+    movs r2, #10
+    mla r0, r0, r2, r6
+    bl own
+    b fit
+middle:                             @ centred on the stock divider line; slots 0..3 are its segments, 4..9 our widgets 40..45
+    lsls r2, r6, #5
+    str r2, [r7, #4]
+    movs r2, #30
+    str r2, [r7, #12]
+    str r1, [r7, #16]
+    adds r2, r1, #1
+    lsrs r2, r2, #1
+    adds r2, #0x76
+    str r2, [r7, #8]
+    mov r0, r6
+    cmp r0, #4
+    bhs midown
+    bl widget
+    b fit
+midown:
+    adds r0, #36
+    bl own
+fit:
+    bl apply
     adds r6, #1
     cmp r6, #10
-    bne mbit
-    mov r5, r1
+    bne slot
+    ldr r0, [sp, #12]
+    cmp r0, #0
+    bne edgepark
+    movs r1, #40
+    bl park
+    b repaint
+edgepark:
+    subs r0, #1
+    movs r1, #10
+    muls r1, r0
+    movs r0, #0
+    bl park
+    ldr r0, [sp, #12]
+    subs r0, #1
+    movs r1, #10
+    mla r0, r0, r1, r1
+    movs r1, #46
+    bl park
+    b repaint
 
-draw:                               @ r5 the lights lit, a bit each: each its own colour, the rest black
+stock:
+    movs r0, #0
+    str r0, [r4, #20]               @ ours are hidden
+    bl stockdiv
+    movs r0, #0
+    movs r1, #46
+    bl park
+    b repaint
+
+stockdiv:                           @ the stock divider: four 80 px segments, the selected one white and 2 px, the others grey and 1 px; leaves r7 want
+    push {r4-r6, lr}
+    sub sp, #8
+    movs r0, #0x15                  @ the setting the stock layout selects a segment by
+    mov r1, sp
+    ldr r3, =0x28e1f845
+    blx r3
+    ldr r5, [sp, #4]
+    adr.w r7, want
+    movs r0, #0x77
+    str r0, [r7, #8]
+    movs r0, #80
+    str r0, [r7, #12]
     movs r6, #0
-piece:
-    movs r1, #0
-    lsr.w r0, r5, r6
-    tst r0, #1
-    beq unlit
-    adr.w r3, colours
-    ldr.w r1, [r3, r6, lsl #2]
-unlit:
-    orr r0, r1, #0x1000000          @ never 0, which means not drawn yet
-    add.w r2, r4, #20
-    ldr.w r3, [r2, r6, lsl #2]
-    cmp r3, r0
-    beq pnext
-    str.w r0, [r2, r6, lsl #2]
-    movs r0, #1
-    str r0, [r4, #16]               @ the screen needs repainting
+segment:
+    cmp r6, r5
+    ite eq
+    moveq r0, #2
+    movne r0, #1
+    str r0, [r7, #16]
+    cmp r6, r5
+    ite eq
+    mvneq r0, #0xff000000
+    ldrne r0, =0x666666
+    str r0, [r7, #0]
+    movs r0, #80
+    mul r0, r6, r0
+    str r0, [r7, #4]
     mov r0, r6
     bl widget
-    ldr r3, =0x28e24b99             @ setColor
-    blx r3
-pnext:
+    bl apply
     adds r6, #1
-    cmp r6, #10
-    bne piece
+    cmp r6, #4
+    bne segment
+    add sp, #8
+    pop {r4-r6, pc}
+
+repaint:
     ldr r0, [r4, #16]               @ the setters only mark the canvas: ask the UI to repaint, at most every 16 frames
     cbz r0, leave
-    ldr r0, [r4, #4]
+    ldr r0, [r4, #28]
     lsls r0, r0, #28
     bne leave
     movs r0, #0
@@ -230,35 +276,102 @@ pnext:
     ldr r3, =0x28db8509             @ the redraw request the layout code ends with: (0, 1)
     blx r3
 leave:
-    add sp, #12
+    add sp, #20
     pop {r0-r7, lr}
     ldr r12, =0x10001095            @ on to the stock callback
     bx r12
 
-widget:                             @ r0 a light, 0..9 -> r0 its widget; keeps r1
-    cmp r0, #4
-    bhs ours
+apply:                              @ r0 a widget: colour, place and size as `want` says, calling a setter only for a change
+    push {r4-r6, lr}
+    mov r5, r0
+    adr.w r6, want
+    adr.w r4, data
+    ldr r1, [r6, #0]
+    ldr r2, [r5, #0]
+    cmp r1, r2
+    beq coloured
+    mov r0, r5
+    ldr r3, =0x28e24b99             @ setColor
+    blx r3
+    movs r0, #1
+    str r0, [r4, #16]
+coloured:
+    ldr r1, [r6, #4]
+    ldr r2, [r6, #8]
+    ldr r3, [r5, #4]
+    cmp r1, r3
+    bne move
+    ldr r3, [r5, #8]
+    cmp r2, r3
+    beq placed
+move:                               @ placed before it is sized: a first erase then covers only the divider row
+    mov r0, r5
+    ldr r3, =0x28e24af1             @ setPos
+    blx r3
+    movs r0, #1
+    str r0, [r4, #16]
+placed:
+    ldr r1, [r6, #12]
+    ldr r2, [r6, #16]
+    ldr r3, [r5, #0xc]
+    cmp r1, r3
+    bne size
+    ldr r3, [r5, #0x10]
+    cmp r2, r3
+    beq sized
+size:
+    mov r0, r5
+    ldr r3, =0x28e24b29             @ setSize
+    blx r3
+    movs r0, #1
+    str r0, [r4, #16]
+sized:
+    pop {r4-r6, pc}
+
+widget:                             @ r0 a divider segment, 0..3 -> r0 its widget
     movs r2, #0x1c
     mul r0, r0, r2
     ldr r2, =0x2812a594             @ the Home view's four divider segments
     add r0, r2
     bx lr
-ours:
-    subs r0, #4
+own:                                @ r0 an index -> our widget; keeps r1, r3
     movs r2, #0x1c
     mul r0, r0, r2
     adr.w r2, widgets
     add r0, r2
     bx lr
 
-construct:                          @ r0 the Home view: the stock constructor, then six more lights and all ten placed
-    push {r4-r7, lr}
+park:                               @ our widgets r0 .. r1 - 1 shrink to nothing where they are, so their erase covers only where they were
+    push {r4-r6, lr}
     mov r4, r0
+    mov r5, r1
+    adr.w r6, want
+parkone:
+    cmp r4, r5
+    beq parked
+    mov r0, r4
+    bl own
+    ldr r1, [r0, #4]
+    str r1, [r6, #4]
+    ldr r1, [r0, #8]
+    str r1, [r6, #8]
+    movs r1, #0
+    str r1, [r6, #0]
+    str r1, [r6, #12]
+    str r1, [r6, #16]
+    bl apply
+    adds r4, #1
+    b parkone
+parked:
+    pop {r4-r6, pc}
+
+construct:                          @ r0 the Home view: the stock constructor, then our 46 widgets, hidden until the meter shows
+    push {r4-r7, lr}
     ldr r3, =0x28dc91d1
     blx r3
     adr.w r5, widgets
     adr.w r6, nodes
-    movs r7, #4
+    movs r7, #46
 make:
     mov r0, r5
     mov r1, r6
@@ -268,36 +381,10 @@ make:
     movs r1, #6
     ldr r3, =0x28e24a19             @ the layer the stock segments use
     blx r3
-    mov r0, r5
-    mov.w r1, #0xff00
-    ldr r3, =0x28e24b99             @ setColor
-    blx r3
-    mov r0, r5                      @ placed before it is sized: its first erase then covers only itself
-    lsls r1, r7, #5                 @ x: 32 px a light
-    movs r2, #0x77                  @ y: the stock divider's
-    ldr r3, =0x28e24af1             @ setPos
-    blx r3
-    mov r0, r5
-    movs r1, #30
-    movs r2, #2
-    ldr r3, =0x28e24b29             @ setSize
-    blx r3
     adds r5, #0x1c
     adds r6, #0x28
-    adds r7, #1
-    cmp r7, #10
+    subs r7, #1
     bne make
-    movs r7, #0
-place:                              @ the stock four, to the same pitch
-    mov r0, r7
-    bl widget
-    lsls r1, r7, #5
-    movs r2, #0x77
-    ldr r3, =0x28e24af1             @ setPos
-    blx r3
-    adds r7, #1
-    cmp r7, #4
-    bne place
     pop {r4-r7, pc}
 
 paint:                              @ r0 the framebuffer, r1 the Home view: like the stock paint, every erase before any draw
@@ -305,7 +392,12 @@ paint:                              @ r0 the framebuffer, r1 the Home view: like
     mov r4, r0
     mov r5, r1
     add.w r0, r5, #0x538
-    ldrb r7, [r0, #0x15]            @ ours are shown while the stock divider is
+    ldrb r7, [r0, #0x15]            @ ours are shown while the stock divider is and the meter is on
+    adr.w r0, data
+    ldr r0, [r0, #20]
+    cmp r0, #0
+    it eq
+    moveq r7, #0
     adr.w r6, widgets
     ldrb r0, [r6, #0x15]
     cmp r0, r7
@@ -331,13 +423,13 @@ synced:
     movs r0, #0
     pop {r3-r7, pc}
 
-each:                               @ r3 a function (context, context, widget) for our six widgets, r4 the context
+each:                               @ r3 a function (context, context, widget) for our 46 widgets, r4 the context
     push {r5-r7, lr}
     mov r7, r3
     ldr r3, =0x28e24971             @ the widget lock, as the stock paint takes it
     blx r3
     adr.w r6, widgets
-    movs r5, #6
+    movs r5, #46
 each6:
     mov r0, r4
     mov r1, r4
@@ -349,50 +441,6 @@ each6:
     ldr r3, =0x28e24ae9
     blx r3
     pop {r5-r7, pc}
-
-text:                               @ r0 the value string, r1 Meter Source (4..35): "k: XXXXXXXX", state word k as last seen
-    push {r4, r5, lr}
-    adr.w r4, data
-    mov r5, r0
-    subs r1, #4
-    mov r3, r1
-    movs r2, #0
-tens:
-    cmp r1, #10
-    blo units
-    subs r1, #10
-    adds r2, #1
-    b tens
-units:
-    cbz r2, notens
-    adds r2, #48
-    strb r2, [r5], #1
-notens:
-    adds r1, #48
-    strb r1, [r5], #1
-    movs r0, #':'
-    strb r0, [r5], #1
-    movs r0, #' '
-    strb r0, [r5], #1
-    add.w r0, r4, #320
-    ldr.w r1, [r0, r3, lsl #2]
-    ror.w r1, r1, #16               @ the stream swaps halfwords
-    movs r3, #8
-hexdigit:
-    subs r3, #1
-    lsl.w r2, r3, #2
-    lsr.w r0, r1, r2
-    and r0, r0, #15
-    adds r0, #48
-    cmp r0, #57
-    it hi
-    addhi r0, #7
-    strb r0, [r5], #1
-    cmp r3, #0
-    bne hexdigit
-    movs r0, #0
-    strb r0, [r5]
-    pop {r4, r5, pc}
 
 q16:                                @ r0 a frame word, a float in 0..2 -> r0 in Q16; keeps r1, r5
     ror.w r0, r0, #16               @ the stream swaps halfwords
@@ -441,57 +489,17 @@ lg:                                 @ r0 a frame word -> r0 log2 of its magnitud
     add.w r0, r0, r3, lsr #16
     bx lr
 
-measure:                            @ r0 a frame word, r1 the mode -> r2 the width, 0..320
-    ror.w r0, r0, #16
-    bic r0, r0, #0x80000000
-    lsrs r2, r0, #19                @ log2 in 1/16 octaves, 1.0 = 2032
-    cmp r1, #1
-    bhi notlevel
-    subw r2, r2, #1776              @ 16 octaves below 1.0 .. 1.0
-    add.w r2, r2, r2, lsl #2
-    asrs r2, r2, #2
-    b clamp
-notlevel:
-    cmp r1, #2
-    bne linear
-    rsb.w r2, r2, #2032             @ 4 octaves below 1.0 = full width
-    add.w r2, r2, r2, lsl #2
-    b clamp
-linear:                             @ Wide: 2^-20 .. 2^20
-    subw r2, r2, #1712
-    asrs r2, r2, #1
-clamp:
-    cmp r2, #0
-    it lt
-    movlt r2, #0
-    cmp.w r2, #320
-    it gt
-    movgt.w r2, #320
-    bx lr
-
-smooth:                             @ r2 a value, r3 its state -> r2 the shown value: up at once, down slowly
-    lsls r2, r2, #16
-    ldr r1, [r3]
-    cmp r2, r1
-    bhs up
-    subs r0, r1, r2
-    lsrs r0, r0, #6
-    subs r2, r1, r0
-up:
-    str r2, [r3]
-    lsrs r2, r2, #16
-    bx lr
-
 .ltorg
 .balign 4
 lights:                             @ a compressor pedal's GR lights, 1 2 3 4 6 8 10 14 19 25 dB, in 1/256 octaves
     .hword 43, 85, 128, 170, 255, 340, 425, 595, 808, 1063
 colours:                            @ lights 1..10
     .word 0x00ff00, 0x66ff00, 0xb3ff00, 0xffff00, 0xffd000, 0xffa500, 0xff7f00, 0xff5500, 0xff2a00, 0xff0000
-data:                               @ 0 shown value, 4 frames, 8 marker, 12 latch, 16 repaint, 20 colours drawn (10),
-    .space 452                      @ 60 the state words last seen (32), 188 changed since armed (32), 316 map page armed + 1,
-                                    @ 320 the state words for the text (32), 448 the last window seen
-widgets:                            @ lights 5..10
-    .space 6 * 0x1c
+data:                               @ 0 shown reduction (Q16), 4 frames since the compressor, 8 marker, 12 latch, 16 repaint,
+    .space 32                       @ 20 ours shown, 24 the last window seen, 28 frames
+want:                               @ colour, x, y, w, h
+    .space 20
+widgets:                            @ ten slots for each edge, Top, Left, Bottom, Right, then Middle's slots 4..9
+    .space 46 * 0x1c
 nodes:                              @ their backing nodes
-    .space 6 * 0x28
+    .space 46 * 0x28
