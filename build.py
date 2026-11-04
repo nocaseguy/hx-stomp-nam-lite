@@ -86,7 +86,7 @@ def main():
     run(py, "tools/patch_amp.py", "ir-title", base, titled, *IR_TITLE[unit])
     os.replace(titled, base)
     if unit == "HX_Stomp":
-        run(py, "tools/patch_menu.py", base, titled)
+        run(py, "tools/patch_menu.py", base, titled, "--cwd", os.getcwd())
         os.replace(titled, base)
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
     report = run(py, "tools/l6ia_verify.py", image)
