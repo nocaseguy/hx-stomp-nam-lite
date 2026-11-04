@@ -1732,7 +1732,7 @@ def cmd_add_model(args):
     print(f"[+] Wrote {args.output} (L6IA {old_end:#x} -> {new_end:#x} bytes, delta {new_end - old_end:+d} B)")
 
 
-# The same kernel under an effect category (a NAM block in Distortion > NAM): the kit's
+# The same kernel under an effect category (a NAM block in Distortion > Mono): the kit's
 # effect-host add_model (kit_patch_amp.py, a copy of hx-stomp-kit's hxkit/patch_amp.py),
 # with nam-a2-lite's knobs (module.toml [[param]], in its param_spec form) and instance.
 NAM_FX_PARAMS = ((1, 'HD2_ImpulseResponse2048Mono', 'Index', 7, 'Model', None),
@@ -1945,7 +1945,7 @@ def main():
     p_mv.add_argument('--to', dest='dst', type=int, required=True, help='the new category (12 Amp)')
     p_mv.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
 
-    p_eff = sub.add_parser('effects-eq', help="HX Effects 3.80.0: NAM A2 Lite's ten-knob block as Distortion > NAM, "
+    p_eff = sub.add_parser('effects-eq', help="HX Effects 3.80.0: NAM A2 Lite's ten-knob block as Distortion > Mono, "
                            "every entry but the kernel (tools/effects.py; then patch)")
     p_eff.add_argument('input')
     p_eff.add_argument('output')

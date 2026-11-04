@@ -10,7 +10,7 @@ This repository adds **Neural Amp Modeler (NAM) A2 Lite** to the stock Line 6 fi
 |---|---|---|---|
 | **HX Stomp** | `HX_Stomp_v3.80.0_0x103966115.hxf`<br>`a2cd8f4ae56f49415380270ebc484bf1` | Amp → NAM | **Runs.** This build ran on an HX Stomp from RAM: the on-device test suite passed (48 cases: one to three NAM blocks, both paths, every stock effect category beside NAM, model and preset changes) and every band of the tone stack was measured on the unit. |
 | **HX Stomp XL** | `HX_Stomp_XL_v3.80.0_0x103966115.hxf`<br>`329e3a26d60d3de1988b6785fa833ee1` | Amp → NAM | **NAM runs on an XL** (photo below). This ten-knob build has not run on an XL yet; its DSP program, model list and DSP graphs are byte for byte the HX Stomp's. |
-| **HX Effects** | `HX_Effects_v3.80.0_0xd97239907.hxf`<br>`7c2ebdf1bffb6bcc5f89dda97f91e40c` | Distortion → NAM | **Not run on an HX Effects yet.** Checked statically and in the simulator. See [HX Effects](#hx-effects). |
+| **HX Effects** | `HX_Effects_v3.80.0_0xd97239907.hxf`<br>`7c2ebdf1bffb6bcc5f89dda97f91e40c` | Distortion → Mono | **Not run on an HX Effects yet.** Checked statically and in the simulator. See [HX Effects](#hx-effects). |
 
 Not the Helix Floor, LT or Rack: their firmware is a different design. Only firmware 3.80.0: the build refuses any other file.
 
@@ -30,7 +30,7 @@ Watch it on YouTube: https://www.youtube.com/watch?v=zQzj0qahJ6E
 
 - **A tone stack after the model, ten knobs.** Bass (a 150 Hz shelf), Mid (a band you sweep from 150 Hz to 3 kHz, with Q 0.7, 1.4 or 2.8), Treble (a 2.5 kHz band) and High Cut (a low-pass). Each band is ±12 dB, flat at 5.0.
 - **Knobs in live order.** Page 1 is Input, Treble, Output: the gain, tone and level you reach for on stage.
-- **HX Effects support** (Distortion → NAM; not run on an HX Effects yet).
+- **HX Effects support** (Distortion → Mono; not run on an HX Effects yet).
 - **HX Edit keeps NAM blocks.** NAM A2 Lite takes the place of a stock model HX Edit knows, now **Xenomorph Fuzz Mono**, with its knobs laid out like that model's, so HX Edit keeps the blocks and their settings when it rewrites a preset. HX Edit shows the block as "Xenomorph Fuzz". **MM4 Frequency Shifter**, which the four-knob build replaced, is back.
 - All NAM blocks count as effects: the two-amp limit doesn't apply to them.
 
@@ -38,7 +38,7 @@ Watch it on YouTube: https://www.youtube.com/watch?v=zQzj0qahJ6E
 
 ## What you get
 
-- **NAM A2 Lite** under **Amp → NAM** (HX Effects: **Distortion → NAM**), with ten knobs, in this order (the HX Stomp shows three a page):
+- **NAM A2 Lite** under **Amp → NAM** (HX Effects: **Distortion → Mono**), with ten knobs, in this order (the HX Stomp shows three a page):
 
   | Page | Knob | What it does |
   |---|---|---|
@@ -145,7 +145,7 @@ The XL's firmware 3.80.0 is the Stomp's with another build of the main applicati
 ### HX Effects
 
 **This build has not run on an HX Effects yet.** It is the same block and kernel, checked the same way in the simulator; what differs is how it is put into that unit's application (`tools/effects.py`):
-- The HX Effects application refuses a model it doesn't already know, so NAM A2 Lite takes **Xenomorph Fuzz Mono**'s place in its tables (preset ID 555, as on the Stomp) instead of being added. It is listed under **Distortion → NAM**: the HX Effects has no Amp category.
+- The HX Effects application refuses a model it doesn't already know, so NAM A2 Lite takes **Xenomorph Fuzz Mono**'s place in its tables (preset ID 555, as on the Stomp) instead of being added. It is listed under **Distortion → Mono**: the HX Effects has no Amp category.
 - The kernel reads the User IRs from where the HX Effects keeps them (`nam_multi.py --effects`).
 - **The capture's name** shows on the Model knob's own line ("Model: name") in the knob pop-up when you turn Model, as the HX Effects does for an IR block. The scribble strips and the one-parameter view show Model's number.
 - No run from RAM: the RAM loader is the HX Stomp's.
@@ -163,7 +163,7 @@ HX Effects support builds on **Scott's HX Effects port, [scottlynn73/hx-effects-
 
    **Input level.** If the capture records its interface's level (`input_level_dbu` in the `.nam` metadata), the converter stores it in the `.wav`, and the web page shows it as a "captured at … dBu" chip. The amp then trims its input by `11.5 − input_level_dbu` dB, so that at Input 5.0 the Stomp's input drives the model the way the capture's interface did. 11.5 dBu is the Stomp's input at 0 dBFS as users have measured it (one unit read 15.1). It is a constant in the firmware (`STOMP_DBU` in `tools/sharc/nam_lite.py`), so a better figure needs only a firmware rebuild, not new `.wav` files. `--no-level` leaves the level out. Captures without the level, and `.wav` files from older converters, play untrimmed.
 2. In HX Edit, import the `.wav` into a User IR slot, for example slot 5.
-3. On the unit, add **Amp → NAM → NAM A2 Lite** (HX Effects: **Distortion → NAM**) and set **Model** (page 3) to 5. For a second capture, import it into another slot and add a second NAM A2 Lite block set to that slot.
+3. On the unit, add **Amp → NAM → NAM A2 Lite** (HX Effects: **Distortion → Mono**) and set **Model** (page 3) to 5. For a second capture, import it into another slot and add a second NAM A2 Lite block set to that slot.
 
 Notes:
 - The Model knob shows slot numbers. The block's title shows the name of the IR in that slot (the name HX Edit gave it).

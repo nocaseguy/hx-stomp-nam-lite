@@ -1,4 +1,4 @@
-"""NAM A2 Lite for the HX Effects 3.80.0: the ten-knob block with its tone stack, as Distortion > NAM.
+"""NAM A2 Lite for the HX Effects 3.80.0: the ten-knob block with its tone stack, as Distortion > Mono.
 
 Used through tools/patch_amp.py: `effects-eq IN OUT` (everything but the kernel) and `patch`, which
 hooks the kernel with this unit's primitive record (kernel_hook). The kernel is

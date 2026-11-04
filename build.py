@@ -12,7 +12,7 @@ repository: the build reads it, adds NAM A2 Lite and writes a new .hxf
 NAM A2 Lite runs as up to three blocks at once, each playing its own capture
 from a User IR slot. The block's title shows the selected IR's name.
 Amp > NAM > NAM A2 Lite, ten knobs: Input, Treble, Output, Polarity, Bass,
-Mid, Model, Mid Freq, Q, High Cut (on the HX Effects: Distortion > NAM). The XL and HX Effects builds
+Mid, Model, Mid Freq, Q, High Cut (on the HX Effects: Distortion > Mono). The XL and HX Effects builds
 have not run on those units. See STEPS.
 
 Steps:
@@ -50,7 +50,7 @@ STOCK_MD5 = {
 # Tone stack (the kernel's --mid-sweep): Bass a 150 Hz shelf, Mid a peak at Mid Freq (150..3000 Hz)
 # with Q 0.7/1.4/2.8, Treble a 2.5 kHz peak, High Cut a low-pass (10.0 off); +-12 dB, flat at 5.0.
 # Presets saved with an earlier NAM build (IDs 147/148, or 461) don't open as NAM in this one.
-# The HX Effects (tools/effects.py): the same block as Distortion > NAM (it has no Amp category), on
+# The HX Effects (tools/effects.py): the same block as Distortion > Mono (it has no Amp category), on
 # Xenomorph Fuzz Mono's identity in place (its application refuses new models); the kernel finds the
 # User IR store where this unit has it (--effects).
 KERNEL = {"HX_Stomp": ["tools/sharc/nam_multi.py", "--mid-sweep"],
