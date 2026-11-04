@@ -317,11 +317,19 @@ class Entry:
 
     def expect(self, off, stock, what):
         if self.read(off, len(stock)) != stock:
+            self._written_by_another(off, len(stock), what)
             raise SystemExit(f'patch-menu: {what} is not the stock one (Entry {self.n} at {off:#x})')
 
     def expect_md5(self, off, n, md5, what):
         if hashlib.md5(self.read(off, n)).hexdigest() != md5:
+            self._written_by_another(off, n, what)
             raise SystemExit(f'patch-menu: {what} is not the stock one (Entry {self.n} at {off:#x}, {n} bytes)')
+
+    def _written_by_another(self, off, n, what):
+        clash = overlap([w for w in self.written if w[2] != self.p.owner], off, off + n)
+        if clash:
+            raise SystemExit(f'patch-menu: {self.p.owner} ({what}) and {clash[2]} ({clash[3] or "a write"}) both patch '
+                             f'Entry {self.n} at {max(off, clash[0]):#x}')
 
     def put(self, off, data, what=''):
         """Writes data at off; the bytes must be ones no feature has written yet."""
@@ -420,6 +428,10 @@ class Patch:
 
     def expect(self, va, stock, what):
         if self.read(va, len(stock)) != stock:
+            clash = overlap([w for w in self.written if w[2] != self.owner], va, va + len(stock))
+            if clash:
+                raise SystemExit(f'patch-menu: {self.owner} ({what}) and {clash[2]} ({clash[3] or "a write"}) both patch '
+                                 f'{max(va, clash[0]):#x}: share it with chain_ptr, chain_bl or chain_entry, or drop one')
             raise SystemExit(f'patch-menu: {what} is not at its stock address')
 
     def put(self, va, data, what=''):

@@ -12,6 +12,7 @@ import pytest
 import features
 import image_store as ims
 import l6ia
+import m4asm
 import patch_amp as pa
 import patch_menu as pm
 from features import Input
@@ -192,6 +193,23 @@ def test_entry_expect_and_expect_md5():
     e8.expect_md5(0x28, 12, hashlib.md5(b'\x11\x22' * 6).hexdigest(), 'Pic')
     with pytest.raises(SystemExit, match=r'Pic is not the stock one \(Entry 8 at 0x28, 12 bytes\)'):
         e8.expect_md5(0x28, 12, '0' * 32, 'Pic')
+
+
+def test_an_expect_over_another_features_write_names_both():
+    p = patch()
+    p.owner = 'splash'
+    p.entry(8).put(0x28, b'\0' * 12, 'the splash')
+    p.put(BASE + 0x100, b'\1' * 4, 'its hook')
+    p.owner = 'emoji'
+    with pytest.raises(SystemExit, match=r'emoji \(Pic\) and splash \(the splash\) both patch Entry 8 at 0x2c'):
+        p.entry(8).expect_md5(0x2c, 4, '0' * 32, 'Pic')
+    with pytest.raises(SystemExit, match=r'emoji \(Pic\) and splash \(the splash\) both patch Entry 8 at 0x28'):
+        p.entry(8).expect(0x20, b'\0' * 12, 'Pic')
+    with pytest.raises(SystemExit, match=r'emoji \(the call\) and splash \(its hook\) both patch 0x28d8fb82'):
+        p.expect(BASE + 0x102, b'\0\0', 'the call')
+    p.owner = 'splash'
+    with pytest.raises(SystemExit, match='the call is not at its stock address'):
+        p.expect(BASE + 0x102, b'\0\0', 'the call')
 
 
 def test_entry8_items_go_after_its_end_with_a_copy_of_the_table():
@@ -636,6 +654,44 @@ def read_stock(data, va, n):
     e0 = pa.get_entry_swapped(data, 0)
     o = pa._e0_vaddr_to_foff(pa._parse_e0_segments(e0), va, n)
     return e0[o:o + n]
+
+
+CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
+
+
+def renderer_owner(order=100):
+    def apply(p):
+        hook = p.own_entry(RENDER_FN, RENDER_STOCK, 'the text renderer')
+        a = pm.Asm(p.next())
+        a.bw(hook.stock)
+        hook.to(p.add(a.bytes()))
+        p.chain_ptr(HOME_PAINT_LIT, HOME_PAINT, after=p.add(b'\x70\x47'))
+    return fake('demo', ORDER=order, apply=apply)
+
+
+@pytest.mark.firmware
+@CLANG
+def test_bpm_builds_beside_an_owned_text_renderer(stock):
+    load = lambda n: pa.get_entry_swapped(stock, n)
+    alone, _ = pm.menu_entries(load, env={'HX_BPM': '1'})
+    both, on = pm.menu_entries(load, features.load() + [renderer_owner()], {'HX_BPM': '1'})
+    assert [features.name(m) for m in on] == ['tuner', 'bpm', 'demo'] and sorted(both) == [0]
+    segs = [pa._parse_e0_segments(e[0]) for e in (alone, both)]
+    read = lambda e, sg, va, n: e[0][pa._e0_vaddr_to_foff(sg, va, n):pa._e0_vaddr_to_foff(sg, va, n) + n]
+    assert read(both, segs[1], LED_SEND, 4) == read(alone, segs[0], LED_SEND, 4) != LED_STOCK
+    assert read(both, segs[1], RENDER_FN + 4, 2) == b'\x00\xbf'
+
+
+@pytest.mark.firmware
+@CLANG
+@pytest.mark.parametrize('order, first, second', [(10, 'demo', 'bpm'), (100, 'bpm', 'demo')])
+def test_owning_the_led_send_beside_bpm_fails_in_either_order(stock, order, first, second):
+    def apply(p):
+        p.own_entry(LED_SEND, LED_STOCK, 'the LED send', p.add(b'\x70\x47'))
+    demo = fake('demo', ORDER=order, apply=apply)
+    with pytest.raises(SystemExit, match=f'{second} \\(.+\\) and {first} \\(the LED send\\) both patch 0x28d98f74'):
+        mods = sorted(features.load() + [demo], key=lambda m: getattr(m, 'ORDER', 100))
+        pm.menu_entries(lambda n: pa.get_entry_swapped(stock, n), mods, {'HX_BPM': '1'})
 
 
 @pytest.mark.firmware
