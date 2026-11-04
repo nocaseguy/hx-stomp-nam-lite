@@ -123,12 +123,12 @@ Try every change from RAM on a unit before relying on it, and say in the commit 
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest -m "not slow and not firmware"   # about 1 s: the model data, the converters, the helpers
-.venv/bin/pytest -m slow                          # about 20 s: the kernel in the simulator
-HX_STOMP_HXF=path/to/HX_Stomp_v3.80.0_0x103966115.hxf .venv/bin/pytest -m firmware
+.venv/bin/pytest -m "not firmware"                # CustomOS's tests, without a stock file
+HX_STOMP_HXF=path/to/HX_Stomp_v3.80.0_0x103966115.hxf .venv/bin/pytest   # and the firmware tests: the full run before a merge
+.venv/bin/pytest -m nam                           # upstream's NAM A2 Lite tests (slow: the kernel in the simulator)
 ```
 
-GitHub Actions runs the first two on every push and pull request. The firmware tests need your own stock file (`HX_STOMP_HXF`, `HX_STOMP_XL_HXF`) and are skipped without one. They build the whole `.hxf` and compare its MD5 with the one pinned in `tests/test_firmware.py`, so a changed byte anywhere in the firmware fails until the pin is updated on purpose. `web/firmware-worker.js` carries the same pin.
+Upstream's NAM A2 Lite tests (`test_nam_lite`, `test_multi_kernel`, `test_web_parity`, `test_patch_amp`, `test_web_i18n`) carry the `nam` marker and are skipped unless the `-m` expression names `nam` (`tests/conftest.py`). The firmware MD5 test still covers NAM A2 Lite's bytes in every build. GitHub Actions runs `-m "not firmware"` and `-m "nam and not firmware"` on every push and pull request. The firmware tests need your own stock file (`HX_STOMP_HXF`, `HX_STOMP_XL_HXF`) and are skipped without one. They build the whole `.hxf` and compare its MD5 with the one pinned in `tests/test_firmware.py`, so a changed byte anywhere in the firmware fails until the pin is updated on purpose. `web/firmware-worker.js` carries the same pin.
 
 M4 code (the caves `tools/patch_menu.py` writes, and each feature's `.s` module) is tested by running it in [unicorn](https://www.unicorn-engine.org) as a Cortex-M4, with `tests/m4emu.py`: it assembles a module with the generated `customos.inc` and stands in for firmware functions with Python stubs that log their calls. A call fails if it runs code that is neither loaded nor a stub (a missing stub), doesn't return (a loop), or changes SP or r4-r11. Take the `m4emu` fixture rather than importing the module, so a file's other tests still run without unicorn. `tests/test_customos_m4.py` is the example. `m4emu.assemble()` needs Apple's Command Line Tools clang and skips the test without it, so CI (Ubuntu) skips those.
 
