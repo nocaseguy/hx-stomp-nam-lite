@@ -11,7 +11,7 @@ import pytest
 from conftest import nam_json
 
 ROOT = Path(__file__).resolve().parent.parent
-pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+pytestmark = [pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed"), pytest.mark.nam]
 
 NODE = """
 const core = require(process.argv[1]);
