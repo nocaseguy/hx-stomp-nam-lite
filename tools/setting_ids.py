@@ -14,7 +14,7 @@ IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stoc
     (63, None, 'empty label, no stock read or write found; units hold 100 (its stock limits value), seen on a unit'),
     (74, None, 'empty label, no stock read or write found; units hold 1 (its stock limits value); a value set on it survived a power-cycle and a stock boot, seen on a unit'),
     (78, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
-    (101, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
+    (101, 'dsp_meter.disp', 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
     (102, None, 'GR Position in the Own-IDs GR image (0..4)'),
     (104, 'tuner.lock', 'GR Direction in the Edge-meter GR image (0..1)'),
     (105, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
