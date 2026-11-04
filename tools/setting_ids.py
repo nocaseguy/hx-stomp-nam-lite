@@ -11,10 +11,28 @@ import sys
 
 IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stock state, and the settings it held in earlier builds)
     (29, 'tuner.activate', 'stock limits are not the 0..1 enum; GR Size (0..10) and GR Position (0..3) in early GR images'),
+    (63, None, 'empty label, no stock read or write found; units hold 100 (its stock limits value), seen on a unit'),
+    (74, None, 'empty label, no stock read or write found; units hold 1 (its stock limits value), seen on a unit'),
+    (78, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
+    (101, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
     (102, None, 'GR Position in the Own-IDs GR image (0..4)'),
     (104, 'tuner.lock', 'GR Direction in the Edge-meter GR image (0..1)'),
+    (105, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (106, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (107, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (108, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (109, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (110, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (111, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (112, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (113, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (114, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (115, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (116, None, 'avoid: type-3 stock limits shared by 105..116 (likely floats), and units hold a value outside 0..254'),
+    (120, None, "empty label, no stock read or write found; units hold 1 (its stock limits value), seen on a unit; bpm-display's BPM Beat uses it"),
     (126, None, 'GR Thickness in the Edge-meter and Own-IDs GR images (0..20)'),
     (128, None, 'GR Direction in the Own-IDs GR image (0..1)'),
+    (132, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
 )
 
 
