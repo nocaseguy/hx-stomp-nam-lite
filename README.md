@@ -74,9 +74,10 @@ Only 4 of the 15 parts of the firmware change: the main application, the DSP pro
 
 You can run the built firmware from the HX Stomp's memory for one session before you install it. Nothing is written to the HX Stomp, and turning it off and on brings back what is installed. The HX Stomp must have stock 3.80.0 installed. This is how every CustomOS change is tested.
 
-Hold Page Right while you power on, then:
+Close HX Edit, then:
 
 ```sh
+python3 tools/hxf_ram.py dfu    # or hold Page Right while you power on
 dfu-util -d 1fc9:000c -a 0 -D tools/ramboot/firmware-ramboot.dfu
 python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_CustomOS.hxf --stock HX_Stomp_v3.80.0_0x103966115.hxf
 ```

@@ -31,12 +31,12 @@ RESET_SITES, RESET_STOCK, RESET_RET = (0x28d917fa, 0x28d9183e, 0x28d91854), byte
 NAV_CMP, NAV_CMP_STOCK = 0x28dcf162, bytes.fromhex('052b')       # cmp r3,#5 (last category)
 NAV_WRAP, NAV_WRAP_STOCK = 0x28dcf1a8, bytes.fromhex('0521')     # movs r1,#5 (going left of the first)
 ARRAYS = {   # name: (stock address, new entry, literal pool words that point at it)
-    'pages': (0x28e3b588, 1, (0x28dce99c, 0x28dcf408)),
+    'pages': (0x28e3b588, None, (0x28dce99c, 0x28dcf408)),
     'vals': (0x28e3b5b8, 0x48, (0x28dce9a8, 0x28dcea8c)),
     'names': (0x28e3b5d0, None, (0x28dce9a4, 0x28dcea84)),
 }
 CAT_NAME = b'CustomOS'
-CAT_PAGES = (TUNER_ID, LOCK_ID, EMPTY_SLOT)                      # page 0 of CustomOS
+CAT_PAGES = (TUNER_ID, LOCK_ID, EMPTY_SLOT)                      # three slots a page
 # Sites that switch on the category with `cmp rN,#5; bhi exit; tbb`: (hook, cat reg, page reg, table reg, tbb, exit, stub).
 # The stub is category 2's generic case entered after its table load: it sets the slot in r4 itself, which some cases leave to the category.
 SITES = {
@@ -98,8 +98,8 @@ class Asm:
                     assert -1024 <= off < 1024, 'branch out of range'
                     out += struct.pack('<H', 0xe000 | (off & 0x7ff))
                 else:
-                    assert 0 <= off < 128, 'conditional branch out of range'
-                    out += struct.pack('<H', 0xd000 | ({'eq': 0, 'ne': 1, 'hi': 8}[kind] << 8) | off)
+                    assert -128 <= off < 128, 'conditional branch out of range'
+                    out += struct.pack('<H', 0xd000 | ({'eq': 0, 'ne': 1, 'lo': 3, 'hi': 8, 'ls': 9}[kind] << 8) | (off & 0xff))
             at += n
         return out
 
@@ -117,6 +117,11 @@ class Cave:
         at = self.next(align)
         self.buf += b'\0' * (at - self.va - len(self.buf)) + data
         return at
+
+
+def bl(at, target):
+    hw1, hw2 = struct.unpack('<2H', pa.thumb_bw(at, target))
+    return struct.pack('<2H', hw1, hw2 | 0x4000)
 
 
 def cmp_imm(r, i):
@@ -278,7 +283,7 @@ def menu_entry0(e0):
         for lit in lits:
             if u32(lit) != stock:
                 raise SystemExit(f'patch-menu: a category array pointer at {lit:#x} is not the stock one')
-        entries = [u32(stock + 4 * i) for i in range(6)] + [name_va if key == 'names' else new]
+        entries = [u32(stock + 4 * i) for i in range(6)] + [{'names': name_va, 'pages': len(CAT_PAGES) // 3}.get(key, new)]
         array_va = cave.add(b''.join(struct.pack('<I', x) for x in entries))
         for lit in lits:
             put(lit, struct.pack('<I', array_va))
