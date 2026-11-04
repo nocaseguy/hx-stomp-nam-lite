@@ -33,42 +33,7 @@ Labels in these menus take at most 8 characters before the newline of the stored
 
 ## NAM A2 Lite
 
-From upstream, unchanged in this fork. **NAM A2 Lite** is a new amp under **Amp → NAM**, with eight knobs:
-
-| Knob | What it does |
-|---|---|
-| **Model** | Which capture plays: 1–128 is the User IR slot that holds it. A slot holding anything else (a cab IR, or nothing) is silent. |
-| **Input** | Input gain into the capture, −20 to +20 dB; 0 dB (the capture's own level) at 5.0 |
-| **Bass / Mid / Treble / Presence** | A tone stack after the model, ±12 dB, flat at 5.0 (100 Hz shelf, 650 Hz peak, 2.5 kHz and 5.5 kHz shelves) |
-| **Ch Vol** | Output level; 0 dB at 5.0, +12 dB at 10 |
-| **Polarity** | Normal or Inverted. Inverted flips the output's polarity (phase), exactly. Checked in the simulator; not yet heard on a unit. |
-
-- **A converter** (`tools/nam2ir.py`, or the [setup page](#the-setup-page)) turns a `.nam` file into a `.wav`. HX Edit imports that `.wav` as a User IR. The "IR" is not a sound: it carries the capture's 1,871 weights, and the amp loads them from the slot.
-- Up to three NAM A2 Lite blocks at once, each with its own capture: two from Amp > NAM, the third from Distortion > NAM (the HX Stomp allows two amp blocks in a preset).
-- The block's title on the edit screen shows the name of the IR in the selected slot (the knob itself shows the number).
-
-[Demo on YouTube](https://www.youtube.com/watch?v=zQzj0qahJ6E) (upstream's NAM A2 Lite build).
-
-### Use
-
-1. Convert a capture:
-   ```sh
-   python3 tools/nam2ir.py "My Amp.nam" -o "My Amp NAM.wav"
-   ```
-   **Input level.** If the capture records its interface's level (`input_level_dbu` in the `.nam` metadata), the converter stores it in the `.wav`. The amp then trims its input by `11.5 − input_level_dbu` dB, so that at Input 5.0 the HX Stomp's input drives the model the way the capture's interface did. 11.5 dBu is the HX Stomp's input at 0 dBFS as users have measured it (one unit read 15.1). It is a constant in the firmware (`STOMP_DBU` in `tools/sharc/nam_lite.py`), so a better figure needs only a firmware rebuild, not new `.wav` files. `--no-level` leaves the level out. Captures without the level, and `.wav` files from older converters, play untrimmed.
-2. In HX Edit, import the `.wav` into a User IR slot, for example slot 5.
-3. On the HX Stomp, add **Amp → NAM → NAM A2 Lite** and set **Model** to 5. For a second capture, import it into another slot and add a second NAM A2 Lite block set to that slot.
-
-Notes:
-- Changing Model (by hand or in a snapshot) crossfades with no gap: the new capture fades in over about 5 ms while the last few milliseconds of the old one play backwards and fade out.
-- Presets store the slot number. If you move a capture to another slot, update the presets that use it.
-
-### Limits
-
-- **At most 3 NAM A2 Lite blocks in a preset.** The kernel (`tools/sharc/nam_multi.py`) has 3 model slots; a fourth block would pass its input through.
-- Each block uses about **24% of the DSP** (the empty preset alone is about 20%). Three blocks leave room for a light effect such as a stereo Simple Delay (about 97% in all, measured on the unit); with two there is room for more.
-- Only the 3-channel A2 Lite architecture fits; standard and A2 Full captures don't. A `.nam` with several sizes in one file (a SlimmableContainer) works: its A2 Lite model is used.
-- Names on the HX Stomp hold 16 characters at most.
+From upstream, unchanged in this fork. 
 
 ## What this repository contains, and what it doesn't
 
@@ -133,19 +98,9 @@ If the HX Stomp stops at the splash screen after an install:
 
 This has been done on a real unit after a modified firmware hung at the splash, and it restored stock 3.80.0. It works because the bootloader is left untouched.
 
-## The setup page
+## ~HX Stomp XL~
 
-`web/index.html` builds the firmware from your stock `.hxf` in the browser, runs it from RAM, and converts `.nam` captures, with nothing installed and nothing uploaded (it runs this repository's Python tools with [Pyodide](https://pyodide.org)). It runs the same steps as `build.py`, including the CustomOS settings, and says **Verified** only when the result matches the pinned MD5.
-
-This fork doesn't host the page yet. To use it, serve a copy of the repository: `python3 -m http.server`, then open `http://localhost:8000/web/`. The capture converter also works from the file itself.
-
-Upstream's hosted page, [nocaseguy.github.io/hx-stomp-nam-lite/web/](https://nocaseguy.github.io/hx-stomp-nam-lite/web/), builds upstream's NAM-only firmware, without the CustomOS changes.
-
-## HX Stomp XL
-
-The XL's firmware 3.80.0 is the HX Stomp's with another build of the main application. `tools/patch_amp.py` holds the XL's own addresses for NAM A2 Lite and its block title, so the XL build has NAM A2 Lite but none of the CustomOS settings: those patches carry HX Stomp addresses only.
-
-Upstream ran its one-block NAM build on an XL from RAM; the current multi-block build has not run on an XL, and neither has been installed on one. If you try it, have the stock XL file ready for recovery. The XL has the same Page Right button, so holding it while powering on should give update mode, but that has not been tried on an XL either.
+⛔️⛔️ Untested ⛔️⛔️ 
 
 ## How it works
 
