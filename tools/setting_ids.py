@@ -14,7 +14,7 @@ IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stoc
     (63, None, 'empty label, no stock read or write found; units hold 100 (its stock limits value), seen on a unit'),
     (74, None, 'empty label, no stock read or write found; units hold 1 (its stock limits value); a value set on it survived a power-cycle and a stock boot, seen on a unit'),
     (78, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
-    (101, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
+    (101, 'dsp_meter.disp', 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
     (102, 'bpm.dot', 'GR Position in the Own-IDs GR image (0..4); BPM Position (0..6) in early BPM images; '
                      'DSP Disp (0..3) in dsp-meter test images'),
     (104, 'tuner.lock', 'GR Direction in the Edge-meter GR image (0..1)'),
