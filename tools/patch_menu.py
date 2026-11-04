@@ -160,18 +160,17 @@ def text_cave(at, tables):
     """Runs the two instructions the hook replaced, then answers our IDs (ID -> (strings, max, default)) and leaves others to stock."""
     a = Asm(at)
     a.raw(bytes.fromhex('30b5 85b0'))       # push {r4,r5,lr}; sub sp,#0x14
-    for pid in tables:
+    for pid, (table, max_, default) in tables.items():    # each ID's test next to its case, as a 16-bit bne reaches only 254 bytes
         a.h(cmp_imm(0, pid))
-        a.b16('eq', f'id{pid}')
-    a.bw(TEXT_FN_CONT)
-    for pid, (table, max_, default) in tables.items():
-        a.label(f'id{pid}')
+        a.b16('ne', f'not{pid}')
         a.h(0x684c, cmp_imm(4, max_))       # ldr r4,[r1,#4]: the value; cmp r4,#max
         a.b16('ls', f'in{pid}')
         a.h(0x2400 | default)               # movs r4,#default
         a.label(f'in{pid}')
         a.movw_movt(1, table)
-        a.b16('b', 'common')
+        a.bw('common')
+        a.label(f'not{pid}')
+    a.bw(TEXT_FN_CONT)
     a.label('common')
     a.h(0x4610, 0x461a)                     # mov r0,r2 (dst); mov r2,r3 (len)
     a.h(0xeb04, 0x0484, 0xeb01, 0x0184)     # r4 *= 5; r1 += r4 * 4: table + 20 * value

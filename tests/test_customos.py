@@ -207,3 +207,8 @@ def test_stock_uses_finds_reads_writes_and_loops():
     uses = setting_ids.stock_uses(struct.unpack(f'<{len(blob) // 2}H', blob), base, pm.GET_VALUE)
     assert uses[63] == {'read': 1} and uses[85] == {'write': 1}
     assert [pid for pid in range(100, 112) if uses[pid]['loop']] == [105, 106, 107, 108]
+
+
+def test_text_cave_takes_many_settings():
+    tables = {pid: (BASE + 0x9000, 255, 0) for pid in pm.MAIN_STORE_IDS[:90]}
+    assert len(pm.text_cave(BASE, tables)) > 90 * 20
