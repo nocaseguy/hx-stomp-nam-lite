@@ -60,7 +60,7 @@ def patch(env=None, mods=(), entries=None):
     p.segs = [(0, 0, 0x8000, BASE, 0x8000)] * 7
     p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'CustomOS', [], {}
     e7, e8 = store()
-    p.load, p.entries, p.owned = (entries or {7: e7, 8: e8}).__getitem__, {}, {}
+    p.load = (entries or {7: e7, 8: e8}).__getitem__
     p.values = {features.name(m): features.values(m, env or {}) for m in mods}
     return p
 

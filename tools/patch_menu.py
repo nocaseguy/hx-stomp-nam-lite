@@ -363,10 +363,11 @@ class Patch:
     """Entry 0 being patched: writes checked for overlap, the code cave, the features' setting IDs, their inputs, the shared and
     owned hooks, and the other entries (p.entry(n))."""
 
+    load, values = None, {}         # load(n): an entry's stock (swapped) bytes; values: feature -> {var: value}, never mutated
+
     def __init__(self, e0, mods, ids, load=None, values=None):
         self.e0, self.mods, self.ids = bytearray(e0), mods, ids
-        self.load, self.values = load, values or {}     # load(n): an entry's stock (swapped) bytes; values: feature -> inputs
-        self.entries, self.owned = {}, {}
+        self.load, self.values = load, values or {}
         self.segs = pa._parse_e0_segments(self.e0)
         if self.segs[6][3] != STOCK_BASE:
             raise SystemExit(f'patch-menu: Entry 0 code is at {self.segs[6][3]:#x}; this patch is for the HX Stomp 3.80.0 '
@@ -376,6 +377,14 @@ class Patch:
         self.owner = 'CustomOS'
         self.written = []           # (start, end, owner, what)
         self.chains = {}            # site: [kind, original, before, after, owners]
+
+    @property
+    def entries(self):              # created on first use, so a Patch built without __init__ (as tests do) has them too
+        return self.__dict__.setdefault('_entries', {})
+
+    @property
+    def owned(self):
+        return self.__dict__.setdefault('_owned', {})
 
     def off(self, va, n):
         return pa._e0_vaddr_to_foff(self.segs, va, n)
@@ -421,7 +430,7 @@ class Patch:
 
     def add_glyph(self, font, slot, width, pixels, what=''):
         """A glyph in an empty slot of an Entry 7 font: its pixels (RGB565, column by column from the bottom, the font's cell
-        height) as a new Entry 8 item. Two features that take one slot fail as two writes to the same bytes do."""
+        height; 0 is transparent, so opaque black is 1) as a new Entry 8 item. Two features that take one slot fail."""
         e7, e8 = self.entry(7), self.entry(8)
         image_store.check(e7.data, e8.data)
         count, table = image_store.font(e7.data, font)
