@@ -1,7 +1,6 @@
-"""tools/features/bpm.py and src/m4/bpm.s: the BPM's settings, its hooks on the firmware, and its handlers run in unicorn (Cortex-M4)."""
+"""tools/features/bpm.py and src/m4/bpm.s: the BPM's settings, its hooks on the firmware, and its handlers run in tests/m4emu.py."""
 import os
 import struct
-import tempfile
 import types
 
 import pytest
@@ -152,87 +151,63 @@ def test_hooks_are_shared_with_other_features(monkeypatch):
 
 # --- the handlers, run in unicorn ---
 
-MOD = 0x28f00000                     # where the module runs: its code is position independent, its firmware calls absolute
-END = 0x28ff0000                     # the return address the tests start from
-STACK = 0x20010000
+MOD = 0x28e60000                     # where the module runs: its code is position independent, its firmware calls absolute
+OUT = 0x28e50000                     # a GET_VALUE out buffer, as a caller's stack would hold
 REDRAW, GET_VALUE, EXTERNAL, LED_SEND_REST = 0x28db8508, 0x28e1f844, 0x28d9685c, 0x28d98f78
 SET_FONT, SET_TEXT_COLOUR, SET_TEXT_VISIBLE = 0x28e249e8, 0x28e24a28, 0x28e24bc8
 SET_RECT_POS, SET_RECT_SIZE, SET_RECT_COLOUR, SET_RECT_VISIBLE = 0x28e24af0, 0x28e24b28, 0x28e24b98, 0x28e24b00
-STUBS = (REDRAW, GET_VALUE, EXTERNAL, SET_FONT, SET_TEXT_COLOUR, SET_TEXT_VISIBLE, SET_RECT_POS, SET_RECT_SIZE, SET_RECT_COLOUR,
-         SET_RECT_VISIBLE, 0x28e249d0, 0x28e24a68, 0x28e24ac8, 0x28e24bc0, 0x28e24988, 0x28e24a18,
+STUBS = (REDRAW, SET_FONT, SET_TEXT_COLOUR, SET_TEXT_VISIBLE, SET_RECT_POS, SET_RECT_SIZE, SET_RECT_COLOUR, SET_RECT_VISIBLE,
+         0x28e249d0, 0x28e24a68, 0x28e24ac8, 0x28e24bc0, 0x28e24988, 0x28e24a18,
          0x28e24c90, 0x28e24c30, 0x28e24b40, 0x28e24b58, 0x28e24970, 0x28e24ae8)
+POP_PC = struct.pack('<H', 0xbd00)
+_code = {}
 
 
-@pytest.fixture(scope='module')
-def code():
-    if not os.path.exists(m4asm.CLANG):
-        pytest.skip('no Command Line Tools clang')
-    with tempfile.TemporaryDirectory() as d:
-        with open(os.path.join(d, 'customos.inc'), 'w') as f:
-            f.write(pm.customos_inc(features.load(), setting_ids.by_name()))
-        src = os.path.join(ROOT, 'src/m4/bpm.s')
-        return m4asm.assemble_module(src, include=(d, os.path.dirname(src)))
+class Bpm:
+    """bpm.s in tests/m4emu.py's M4, the firmware it calls stubbed: GET_VALUE answers from self.settings."""
 
-
-class M4:
-    """The module in unicorn with the firmware it calls stubbed: calls are recorded, GET_VALUE answers from self.settings."""
-
-    def __init__(self, code):
-        uc = pytest.importorskip('unicorn')
-        from unicorn import arm_const as a
-        self.a, self.text, self.sym = a, *code
-        self.uc = uc.Uc(uc.UC_ARCH_ARM, uc.UC_MODE_THUMB | uc.UC_MODE_MCLASS)
-        self.uc.mem_map(0x28000000, 0x01000000)
-        self.uc.mem_map(STACK - 0x10000, 0x10000)
-        self.uc.mem_write(MOD, self.text)
+    def __init__(self, m4emu, text, sym):
+        self.sym, self.settings, self.external = sym, {}, 0
+        self.m = m4emu.M4(text, MOD)
         for at in STUBS:
-            self.uc.mem_write(at, b'\x70\x47')                  # bx lr
-        self.uc.mem_write(LED_SEND_REST, b'\x00\xbd')           # pop {pc}: the rest of the send, after the moved push {lr}
-        self.settings, self.external, self.calls = {}, 0, []
-        self.uc.hook_add(uc.UC_HOOK_CODE, self.stub, begin=0x28d80000, end=0x28e30000)
+            self.m.stub(at)
+        self.m.stub(GET_VALUE, self.get_value)
+        self.m.stub(EXTERNAL, lambda m: m.reg('r0', self.external))
+        self.m.stub(LED_SEND_REST, code=POP_PC)                 # the rest of the send, after the moved push {lr}
 
-    def stub(self, uc, at, size, _):
-        r = [uc.reg_read(getattr(self.a, f'UC_ARM_REG_R{i}')) for i in range(4)] + [uc.reg_read(self.a.UC_ARM_REG_R12)]
-        self.calls.append((at, r))
-        if at == GET_VALUE:
-            v = self.settings.get(r[0])
-            if v is None:
-                uc.reg_write(self.a.UC_ARM_REG_R0, 0xffffffff)
-            else:
-                uc.mem_write(r[1], struct.pack('<II', 3, v & 0xffffffff))
-                uc.reg_write(self.a.UC_ARM_REG_R0, 0)
-        elif at == EXTERNAL:
-            uc.reg_write(self.a.UC_ARM_REG_R0, self.external)
+    def get_value(self, m):
+        v = self.settings.get(m.reg('r0'))
+        if v is None:
+            m.reg('r0', -1)
+        else:
+            m.write(m.reg('r1'), struct.pack('<II', 3, v & 0xffffffff))
+            m.reg('r0', 0)
 
     def at(self, sym):
         return MOD + self.sym[sym]
 
     def call(self, sym, *args):
-        a = self.a
-        for i, v in enumerate(args):
-            self.uc.reg_write(getattr(a, f'UC_ARM_REG_R{i}'), v)
-        self.uc.reg_write(a.UC_ARM_REG_SP, STACK)
-        self.uc.reg_write(a.UC_ARM_REG_LR, END | 1)
-        self.calls = []
-        self.uc.emu_start(self.at(sym) | 1, END, count=200000)
-        return self.uc.reg_read(a.UC_ARM_REG_R0)
+        self.m.log.clear()
+        return self.m.call(self.at(sym), *args)
 
     def data(self, off, n=1):
-        return self.uc.mem_read(self.at('bpm_data') + off, n)
+        return self.m.read(self.at('bpm_data') + off, n)
 
     def set_data(self, off, b):
-        self.uc.mem_write(self.at('bpm_data') + off, bytes(b))
+        self.m.write(self.at('bpm_data') + off, b)
 
     def text_now(self):
-        return bytes(self.uc.mem_read(self.at('bpm_text'), 16)).split(b'\0')[0]
+        return self.m.read(self.at('bpm_text'), 16).split(b'\0')[0]
 
     def called(self, at):
-        return [r for a, r in self.calls if a == at]
+        return self.m.calls(at)
 
 
 @pytest.fixture
-def m4(code):
-    return M4(code)
+def m4(m4emu):
+    if 'bpm' not in _code:
+        _code['bpm'] = m4emu.assemble('src/m4/bpm.s', features.load(), setting_ids.by_name())
+    return Bpm(m4emu, *_code['bpm'])
 
 
 def bits(f):
@@ -278,11 +253,11 @@ def painted(m4, boot_done=True):
 
 
 def fs_functions(m4, functions):
-    m4.uc.mem_write(0x28128a74, b''.join(bytes([f, 0]) for f in functions))
+    m4.m.write(0x28128a74, b''.join(bytes([f, 0]) for f in functions))
 
 
 def rings(m4, lit):
-    m4.uc.mem_write(m4.at('bpm_rings'), bytes(lit))
+    m4.m.write(m4.at('bpm_rings'), bytes(lit))
 
 
 @pytest.mark.parametrize('tap', [0, 1, 2])
@@ -346,12 +321,11 @@ def test_written_repaints_for_the_tempo_settings(m4, pid, repaints):
 
 
 def test_tapled_keeps_the_real_value_and_returns_on(m4):
-    out = STACK - 0x100
     for real in (0, 1):
-        m4.uc.mem_write(out, struct.pack('<II', 1, real))
-        m4.call('bpm_tapled', bpm.TAP_LED_ID, out)
+        m4.m.write(OUT, struct.pack('<II', 1, real))
+        m4.call('bpm_tapled', bpm.TAP_LED_ID, OUT)
         assert m4.data(6)[0] == real
-        assert struct.unpack('<II', m4.uc.mem_read(out, 8)) == (1, 1)
+        assert struct.unpack('<II', m4.m.read(OUT, 8)) == (1, 1)
 
 
 @pytest.mark.parametrize('tap_led_on', [0, 1])
@@ -362,9 +336,9 @@ def test_ledsend_notes_rings_and_darkens_the_tap_ring_when_its_led_is_off(m4, ta
         m4.call('bpm_ledsend', led, colour)
         rest = m4.called(LED_SEND_REST)
         assert len(rest) == 1
-        r0, r1, _, r3, _ = rest[0]
+        r0, r1, _, r3 = rest[0]
         lit = int(colour & 0xffffff != 0)
-        assert m4.uc.mem_read(m4.at('bpm_rings') + led, 1)[0] == lit, 'the top byte is not part of the colour'
+        assert m4.m.read(m4.at('bpm_rings') + led, 1)[0] == lit, 'the top byte is not part of the colour'
         assert (r0, r3) == (led, bpm.LED_SEND_LIT_VALUE)
         darkened = led == 1 and lit and not tap_led_on
         assert r1 == (0 if darkened else colour)
@@ -372,7 +346,7 @@ def test_ledsend_notes_rings_and_darkens_the_tap_ring_when_its_led_is_off(m4, ta
 
 def test_ledsend_passes_leds_that_are_not_rings(m4):
     m4.call('bpm_ledsend', 3, 0xffffff)
-    assert m4.called(LED_SEND_REST)[0][:2] == [3, 0xffffff]
+    assert m4.called(LED_SEND_REST)[0][:2] == (3, 0xffffff)
 
 
 def before(m4, font=None, colour=None, dot=None, lit=0, tapped=0):
@@ -410,7 +384,7 @@ def test_before_shows_the_dots_bpm_dot_pos_says(m4, value, xs):
     shown = [r[0] for r in m4.called(SET_RECT_VISIBLE) if r[1] == 1]
     assert len(m4.called(SET_RECT_VISIBLE)) == 18 and len(shown) == len(xs) // 30 * 9
     cols = set()
-    for (_, x, y, _, _), (_, cw, ch, _, _) in zip(m4.called(SET_RECT_POS), m4.called(SET_RECT_SIZE)):
+    for (_, x, y, _), (_, cw, ch, _) in zip(m4.called(SET_RECT_POS), m4.called(SET_RECT_SIZE)):
         cols |= set(range(x, x + cw))
         assert 237 - 15 <= y <= 237 and y - ch >= 237 - 30, 'within the 30 px dot below the top edge'
     assert cols == set(xs)
