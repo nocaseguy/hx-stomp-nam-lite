@@ -21,7 +21,7 @@ The built image is `HX_Stomp_v3.80.0_CustomOS.hxf`. NAM A2 Lite is the same amp 
 
 ## Features
 
-Each feature is a module in `tools/features/`. The tuner settings are always built in. The others are off by default, and the build adds them when their switch is set (an environment variable, or a `build.py` option). Switches combine. Every feature here has run on an HX Stomp from RAM. All of them are HX Stomp only; the XL build doesn't have them.
+Each feature is a module in `tools/features/`. The tuner settings are always built in. The others are off by default, and the build adds them when their switch is set (an environment variable, or a `build.py` option). Switches combine. Every feature here has run on an HX Stomp from RAM. 
 
 | Feature | Switch | What it does |
 |---|---|---|
