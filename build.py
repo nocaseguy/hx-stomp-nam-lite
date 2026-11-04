@@ -93,7 +93,7 @@ def main():
     run(py, "tools/patch_amp.py", "ir-title", base, titled, *IR_TITLE[unit])
     os.replace(titled, base)
     if unit == "HX_Stomp":
-        run(py, "tools/patch_menu.py", base, titled)
+        run(py, "tools/patch_menu.py", base, titled, "--cwd", os.getcwd())
         os.replace(titled, base)
         if splash:
             run(py, "tools/patch_splash.py", "apply", base, titled, "--image", splash, "--fit", splash_fit)

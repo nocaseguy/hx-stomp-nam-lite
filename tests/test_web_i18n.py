@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.nam   # upstream NAM A2 Lite: skipped unless -m names nam (conftest.py)
+
 PAGE = (Path(__file__).resolve().parent.parent / "web/index.html").read_text()
 
 

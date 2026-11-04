@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 
@@ -33,3 +34,21 @@ def nam_file(tmp_path, weights):
         p.write_text(nam_json(weights if w is None else w, **kw))
         return p
     return make
+
+
+@pytest.fixture
+def m4emu():
+    """tests/m4emu.py, or a skip without unicorn; importing it here rather than at the top keeps a file's other tests running."""
+    pytest.importorskip("unicorn", reason="no unicorn (pip install unicorn)")
+    import m4emu
+    return m4emu
+
+
+def pytest_collection_modifyitems(config, items):
+    """Upstream NAM A2 Lite tests (marked nam) are skipped unless the -m expression names nam, e.g. pytest -m nam."""
+    if re.search(r"\bnam\b", config.getoption("markexpr") or ""):
+        return
+    skip = pytest.mark.skip(reason="upstream NAM test: run with -m nam")
+    for item in items:
+        if "nam" in item.keywords:
+            item.add_marker(skip)

@@ -419,6 +419,8 @@ def cmd_patch(args):
 E0_MAX = 0x8000 * 512 - 512         # Entry 0's partition, less the sub-header sector
 E3_MAX = 0x800 * 512 - 512          # Entry 3's partition, less the sub-header sector
 E4_MAX = (0x11005 - 0x940d) * 512   # Entry 4's partition (15.5 MiB)
+E7_MAX = (0x19c08 - 0x19408) * 512  # Entry 7's partition, less the sub-header sector (1 MiB)
+E8_MAX = (0x11f753 - 0x19c09) * 512 # Entry 8's partition, less the sub-header sector
 
 # Entry 0 (the Cortex-M4 application) addresses for each unit's v3.80.0, keyed by
 # where its code segment seg[6] loads. Every entry the build changes (2, 3, 4) is
