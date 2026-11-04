@@ -29,8 +29,8 @@ FULL = (b'Screen_Boot', 240, '051d4adbbbcdf074b62077e549ac1e20')
 SRGB = '/System/Library/ColorSync/Profiles/sRGB Profile.icc'
 
 
-def read_png(path):
-    """(width, height, rows of (r, g, b) tuples) from an 8-bit, non-interlaced PNG."""
+def read_png(path, alpha=False):
+    """(width, height, rows of (r, g, b) tuples, blended onto black; (r, g, b, a) with alpha) from an 8-bit, non-interlaced PNG."""
     raw = open(path, 'rb').read()
     if raw[:8] != b'\x89PNG\r\n\x1a\n':
         raise SystemExit(f'{path}: not a PNG')
@@ -73,12 +73,12 @@ def read_png(path):
         for x in range(w):
             px = line[x * nch:(x + 1) * nch]
             if ctype == 3:
-                rgb, alpha = palette[px[0]], trns[px[0]] if px[0] < len(trns) else 255
+                rgb, a = palette[px[0]], trns[px[0]] if px[0] < len(trns) else 255
             elif ctype in (0, 4):
-                rgb, alpha = (px[0],) * 3, px[1] if ctype == 4 else 255
+                rgb, a = (px[0],) * 3, px[1] if ctype == 4 else 255
             else:
-                rgb, alpha = tuple(px[:3]), px[3] if ctype == 6 else 255
-            row.append(tuple(v * alpha // 255 for v in rgb))
+                rgb, a = tuple(px[:3]), px[3] if ctype == 6 else 255
+            row.append(tuple(rgb) + (a,) if alpha else tuple(v * a // 255 for v in rgb))
         rows.append(row)
     return w, h, rows
 

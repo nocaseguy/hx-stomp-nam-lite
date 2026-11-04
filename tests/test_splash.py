@@ -14,6 +14,7 @@ import l6ia
 import patch_amp as pa
 import patch_menu as pm
 import patch_splash as ps
+import splash_emoji
 from features import splash
 
 
@@ -45,6 +46,28 @@ def test_topo_picture():
     assert (len(rows[0]), len(rows)) == (ps.W, ps.FULL[1])
 
 
+def rgba_png(path, w, h, px):
+    import struct
+    import zlib
+    raw = b"".join(b"\0" + bytes(v for x in range(w) for v in px(x, y)) for y in range(h))
+    chunk = lambda k, d: struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d))
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
+                     + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+def test_clusters():
+    assert splash_emoji.clusters("v0.1 🎸👍🏽❤️👨‍👩‍👧") == list("v0.1 ") + ["🎸", "👍🏽", "❤️", "👨‍👩‍👧"]
+
+
+def test_glyph_from_png(tmp_path):
+    # a 40x40 red square in an 80x80 transparent PNG becomes an 18x18 red glyph at the top of the 21 px cell, level with the capitals
+    rgba_png(tmp_path / "e.png", 80, 80, lambda x, y: (255, 0, 0, 255) if 20 <= x < 60 and 20 <= y < 60 else (0, 0, 0, 0))
+    w, px = splash_emoji.glyph_from_png(tmp_path / "e.png", 21)
+    assert w == splash_emoji.EMOJI_H and len(px) == w * 21 * 2
+    at = lambda x, y: px[2 * (x * 21 + 21 - 1 - y):][:2]
+    assert all(at(x, y) == (b"\x1f\x00" if y < splash_emoji.EMOJI_H else b"\0\0") for x in range(w) for y in range(21))
+
+
 @pytest.mark.skipif(not shutil.which("sips"), reason="converting pictures needs macOS sips")
 @pytest.mark.parametrize("fit", ["fill", "fit"])
 def test_any_picture(tmp_path, fit):
@@ -56,9 +79,9 @@ def test_any_picture(tmp_path, fit):
     assert (out[0][160] == (0, 0, 0)) == (fit == "fit")        # fit pads the wide picture's top and bottom with black
 
 
-def test_text_must_be_ascii():
-    with pytest.raises(SystemExit, match="printable ASCII"):
-        splash.boot_text(None, "HXS OS \U0001f3b8")
+def test_text_must_be_printable():
+    with pytest.raises(SystemExit, match="printable ASCII and emoji"):
+        splash.boot_text(None, "HXS\x07")
 
 
 @pytest.fixture(scope="module")
@@ -140,7 +163,7 @@ def test_text(stock):
 
 
 @pytest.mark.firmware
-@pytest.mark.parametrize("text, ok", [("x" * 23, True), ("x" * 24, False), ("HXS \U0001f3b8", False)])
+@pytest.mark.parametrize("text, ok", [("x" * 23, True), ("x" * 24, False), ("HXS \x07", False)])
 def test_text_limits(stock, text, ok):
     if ok:
         build(stock, {"HX_SPLASH_TEXT": text})
@@ -170,7 +193,8 @@ def test_renderer_hook(stock):
 
 @pytest.mark.firmware
 @pytest.mark.parametrize("text, mode", [(splash.TEXT_BUF, 1), (splash.TEXT_BUF + 4, 0)])
-def test_renderer_hook_runs(stock, m4emu, text, mode):
+@pytest.mark.parametrize("colour", [splash.TEXT_COLOUR, 0xffffff])      # stock grey, and the white of a line with emoji
+def test_renderer_hook_runs(stock, m4emu, text, mode, colour):
     """Calls the patched renderer with its 5 stack arguments; at the instruction after the moved prologue, the 9th (glyph mode)
     is 1 for the boot line's buffer only, and the other four are untouched."""
     e0 = build(stock, {"HX_SPLASH_TEXT": "HXS OS v0.1"})[0][0]
@@ -180,6 +204,69 @@ def test_renderer_hook_runs(stock, m4emu, text, mode):
     # at fn + 6: the prologue (sub sp,#8; push.w 9 registers) is 44 bytes of stack, then the caller's arguments
     m.stub(splash.RENDER_FN + 6, lambda m: seen.append([m.u32(m.reg("sp") + 44 + 4 * i) for i in range(5)]),
            code=bytes.fromhex("bde8f04f02b07047"))                  # pop.w {r4-r11,lr}; add sp,#8; bx lr
-    m.write(m4emu.STACK_TOP, struct.pack("<5I", 29, 1, 0xb1b1b1, 6, 0))
+    m.write(m4emu.STACK_TOP, struct.pack("<5I", 29, 1, colour, 6, 0))
     m.call(splash.RENDER_FN, 0x28d1ce98, text, 0x30, 160)
-    assert seen == [[29, 1, 0xb1b1b1, 6, mode]]
+    assert seen == [[29, 1, colour, 6, mode]]
+
+
+def emoji_env(tmp_path, text, emoji):
+    """The splash inputs for text, each emoji's picture a small opaque disc of its own colour (no rendering needed)."""
+    for k, e in enumerate(emoji):
+        colour = ((255, 0, 0), (0, 255, 0), (0, 0, 255))[k % 3]
+        rgba_png(tmp_path / f"e{k}.png", 30, 30,
+                 lambda x, y, c=colour: c + (255,) if (x - 15) ** 2 + (y - 15) ** 2 < 100 else (0, 0, 0, 0))
+    return {"HX_SPLASH_TEXT": text, "HX_SPLASH_GLYPHS": ",".join(f"{e}=e{k}.png" for k, e in enumerate(emoji))}
+
+
+@pytest.mark.firmware
+def test_emoji_text(tmp_path, stock):
+    entries, _ = build(stock, emoji_env(tmp_path, "HXS 🎸 v 🎸🔥", ["🎸", "🔥"]), cwd=tmp_path)
+    e0, e7, e8 = entries[0], entries[7], entries[8]
+    assert e0_at(e0, splash.TEXT_SITE, 11) == b"HXS \x01 v \x01\x02\0"          # the repeated emoji shares its slot
+    assert int.from_bytes(e0_at(e0, splash.TEXT_COLOUR_LITERAL, 4), "little") == 0xffffff
+    stock7, stock8 = pa.get_entry_swapped(stock, 7), pa.get_entry_swapped(stock, 8)
+    n = struct.unpack_from("<I", stock8, 8)[0]
+    count, table = image_store.font(e7, splash.FONT_NAME)
+    for slot, k in ((1, 0), (2, 1)):
+        h, w, idx = image_store.glyph(e7, table, slot)
+        assert (h, idx) == (21, n + k)
+        off, ln = image_store.item(e8, idx)
+        assert e8[off:off + ln] == splash_emoji.glyph_from_png(tmp_path / f"e{k}.png", 21)[1] and ln == 2 * w * h
+    assert image_store.glyph(e7, table, 3)[2] == image_store.EMPTY_GLYPH
+    assert struct.unpack_from("<I", e8, 8)[0] == n + 2 and e8[24:len(stock8)] == stock8[24:]   # no stock byte moves
+
+
+@pytest.mark.firmware
+def test_emoji_pictures_follow_the_header(tmp_path, stock):
+    rows = [[(x % 256, y, 128) for x in range(ps.W)] for y in range(ps.FULL[1])]
+    ps.write_png(tmp_path / "full.png", rows)
+    env = dict(emoji_env(tmp_path, "HXS 🎸", ["🎸"]), HX_SPLASH=str(tmp_path / "full.png"))
+    entries, _ = build(stock, env, cwd=tmp_path)
+    e7, e8 = entries[7], bytearray(entries[8])
+    n = struct.unpack_from("<I", pa.get_entry_swapped(stock, 8), 8)[0]
+    want = image_store.image(e7, e8, ps.FULL[0])
+    e8[0x18:0x18 + 8 * n] = bytes(8 * n)                       # the stock table, which nothing should read any more
+    img = image_store.image(e7, e8, ps.FULL[0])
+    assert img == want and e8[img.offset:img.offset + img.length] == ps.encode(rows)
+
+
+@pytest.mark.firmware
+@pytest.mark.parametrize("text, emoji, ok", [
+    ("HXS OS v0.1 " + "".join(chr(0x1f600 + i) for i in range(11)), 11, True),     # 23 characters
+    ("HXS OS v0.1 " + "".join(chr(0x1f600 + i) for i in range(12)), 12, False),    # 24
+    ("".join(chr(0x1f600 + i) for i in range(30)), 30, False),                     # more emoji than free slots
+])
+def test_emoji_limits(tmp_path, stock, text, emoji, ok):
+    env = emoji_env(tmp_path, text, [chr(0x1f600 + i) for i in range(emoji)])
+    if ok:
+        build(stock, env, cwd=tmp_path)
+    else:
+        with pytest.raises(SystemExit):
+            build(stock, env, cwd=tmp_path)
+
+
+@pytest.mark.firmware
+def test_emoji_needs_a_picture_or_swift(tmp_path, stock, monkeypatch):
+    monkeypatch.setattr(splash_emoji.shutil, "which", lambda name: None)
+    with pytest.raises(SystemExit, match="--splash-glyph"):
+        build(stock, {"HX_SPLASH_TEXT": "HXS 🎸"})

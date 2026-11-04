@@ -51,6 +51,7 @@ var SOURCES = [
   "tools/patch_menu.py",
   "tools/image_store.py",
   "tools/patch_splash.py",
+  "tools/splash_emoji.py",
   "tools/setting_ids.py",
   "tools/features/__init__.py",
   "tools/features/bpm.py",
