@@ -2,6 +2,7 @@
 """Build HX Stomp (or HX Stomp XL) firmware 3.80.0 with NAM A2 Lite, from your own copy of the stock firmware.
 
 usage: python3 build.py <HX_Stomp_v3.80.0_0x103966115.hxf | HX_Stomp_XL_v3.80.0_0x103966115.hxf> [-o out.hxf] [--no-check]
+                        [--splash 320x181.png]
 
 The input is Line 6's own firmware file for your unit, version 3.80.0
 (Line 6 Updater keeps a copy; see README.md). Nothing of it is in this
@@ -20,6 +21,7 @@ Steps:
      block with its own SDRAM block
   3. tools/patch_amp.py ir-title: the IR name in the block title
   4. tools/patch_amp.py patch: the kernel into the SHARC boot stream
+     (with --splash, HX Stomp only: tools/patch_splash.py, the boot splash picture, first)
   5. tools/l6ia_verify.py: every checksum of the result
   6. tools/hxf.py pack: the .hxf
 """
@@ -69,6 +71,9 @@ def main():
                  "The patch is made for those files only.")
     unit = STOCK_MD5[md5]
     print(f"stock firmware: {unit.replace('_', ' ')} 3.80.0")
+    splash = os.path.abspath(argv[argv.index("--splash") + 1]) if "--splash" in argv else None
+    if splash and unit != "HX_Stomp":
+        sys.exit("build.py: --splash is for the HX Stomp only")
     out = os.path.abspath(argv[argv.index("-o") + 1]) if "-o" in argv else \
         os.path.join(HERE, "build", f"{unit}_v3.80.0_CustomOS.hxf")
     build = os.path.join(HERE, "build")
@@ -88,6 +93,9 @@ def main():
     if unit == "HX_Stomp":
         run(py, "tools/patch_menu.py", base, titled)
         os.replace(titled, base)
+        if splash:
+            run(py, "tools/patch_splash.py", "apply", base, titled, "--png", splash)
+            os.replace(titled, base)
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:
