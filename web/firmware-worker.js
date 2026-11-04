@@ -26,7 +26,7 @@ var STOCK_MD5 = {
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "3670f1662290098c3071e64aa25c88eb",
+  "HX_Stomp": "b96a50f9e36d06067519a7ab2096f07b",
   "HX_Stomp_XL": "fb3a7b523e4b909de9d1e83162acd403",
 };
 
@@ -49,6 +49,12 @@ var SOURCES = [
   "tools/l6ia_verify.py",
   "tools/patch_amp.py",
   "tools/patch_menu.py",
+  "tools/setting_ids.py",
+  "tools/features/__init__.py",
+  "tools/features/bpm.py",
+  "tools/features/dsp_meter.py",
+  "tools/features/gr.py",
+  "tools/features/tuner.py",
   "tools/kit_patch_amp.py",
   "tools/sharc/entry4_blob.py",
   "tools/sharc/nam_lite.py",
@@ -93,7 +99,7 @@ async function boot() {
     if (!r.ok) throw new Error("Could not load " + path + " (" + r.status + ").");
     return [path, new Uint8Array(await r.arrayBuffer())];
   }));
-  ["/repo", "/repo/tools", "/repo/tools/sharc", "/repo/tools/ramboot", "/repo/build"].forEach(function (d) {
+  ["/repo", "/repo/tools", "/repo/tools/features", "/repo/tools/sharc", "/repo/tools/ramboot", "/repo/build"].forEach(function (d) {
     try { p.FS.mkdir(d); } catch (e) { /* exists */ }
   });
   files.forEach(function (f) { p.FS.writeFile("/repo/" + f[0], f[1]); });

@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 22
       - run: pip install -r requirements-dev.txt
-      - name: fast tests
-        run: pytest -m "not slow and not firmware"
-      - name: kernel in the simulator
-        run: pytest -m slow
+      - name: tests
+        run: pytest -m "not firmware"
+      - name: upstream NAM A2 Lite tests
+        run: pytest -m "nam and not firmware"

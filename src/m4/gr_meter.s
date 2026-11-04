@@ -6,19 +6,13 @@
 @ pitch, clear of the divider, which then stays stock.
 @ The lights are A over B in dB, from 64-block window peaks (for the Deluxe Comp, A is 1 / the core's own gain), at 1 2 3 4 6 8 10 14
 @ 19 25 dB. The measured gain already follows the comp's attack and release; in silence the lights decay at its Release.
-@ Entry table: +0 the DSP stream's receive callback, +4 the Home view's constructor, +8 its paint function.
-@ Position independent; tools/m4asm.py turns it into the bytes patch_menu.py appends to the code segment.
+@ Handlers on shared hooks (tools/features/gr.py): frame before the DSP stream's receive callback, construct after the Home view's
+@ constructor, erase before and draw after its paint function. Position independent, assembled by tools/m4asm.py at build time.
 @ Integer maths only: the thread has no FPU context of its own.
 .syntax unified
 .thumb
-.global rx
 .thumb_func
-rx:
-    b.w hook
-    b.w construct
-    b.w paint
-
-hook:
+frame:                              @ r1 the frame
     push {r0-r7, lr}
     sub sp, #20
     mov r7, r1                      @ the frame
@@ -269,9 +263,7 @@ repaint:
     blx r3
 leave:
     add sp, #20
-    pop {r0-r7, lr}
-    ldr r12, =0x10001095            @ on to the stock callback
-    bx r12
+    pop {r0-r7, pc}
 
 apply:                              @ r0 a widget: colour, place and size as `want` says, calling a setter only for a change
     push {r4-r6, lr}
@@ -357,10 +349,9 @@ parkone:
 parked:
     pop {r4-r6, pc}
 
-construct:                          @ r0 the Home view: the stock constructor, then our 46 widgets, hidden until the meter shows
+.thumb_func
+construct:                          @ our 46 widgets, hidden until the meter shows
     push {r4-r7, lr}
-    ldr r3, =0x28dc91d1
-    blx r3
     adr.w r5, widgets
     adr.w r6, nodes
     movs r7, #46
@@ -379,7 +370,8 @@ make:
     bne make
     pop {r4-r7, pc}
 
-paint:                              @ r0 the framebuffer, r1 the Home view: like the stock paint, every erase before any draw
+.thumb_func
+erase:                              @ r0 the framebuffer, r1 the Home view: like the stock paint, every erase before any draw
     push {r3-r7, lr}
     mov r4, r0
     mov r5, r1
@@ -418,14 +410,15 @@ hide:
 synced:
     ldr r3, =0x28e24b41             @ erase(context, context, widget): the old place
     bl each
-    mov r0, r4
-    mov r1, r5
-    ldr r3, =0x28dc8d39             @ the stock paint
-    blx r3
+    pop {r3-r7, pc}
+
+.thumb_func
+draw:                               @ r0 the framebuffer
+    push {r4, lr}
+    mov r4, r0
     ldr r3, =0x28e24b59             @ draw(context, context, widget): in its colour
     bl each
-    movs r0, #0
-    pop {r3-r7, pc}
+    pop {r4, pc}
 
 each:                               @ r3 a function (context, context, widget) for our 46 widgets, r4 the context
     push {r5-r7, lr}

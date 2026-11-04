@@ -91,10 +91,7 @@ def main():
     if unit == "HX_Stomp":
         run(py, "tools/patch_menu.py", base, titled)
         os.replace(titled, base)
-        if not os.environ.get("HX_GR"):    # the GR meter draws the divider itself, stock at GR Size 0
-            run(py, "tools/patch_divider.py", base, titled)
-            os.replace(titled, base)
-        else:
+        if os.environ.get("HX_GR"):
             run(py, "tools/patch_comp.py", base, titled)
             os.replace(titled, base)
     wrap = ["--wrap-prim", "0x271a:0x8d9c9", "--wrap-prim", "0x2719:0x8d342",

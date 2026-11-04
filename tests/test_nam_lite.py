@@ -12,6 +12,8 @@ import nam_lite
 import nam_pack
 import ssim
 
+pytestmark = pytest.mark.nam   # upstream NAM A2 Lite: skipped unless -m names nam (conftest.py)
+
 ROOT = Path(__file__).resolve().parent.parent
 
 

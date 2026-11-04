@@ -5,7 +5,7 @@ import pytest
 
 import nam_multi
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.nam]
 
 
 @pytest.mark.parametrize("slots", [3, 2])
