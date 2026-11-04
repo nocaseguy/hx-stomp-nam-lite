@@ -1,5 +1,5 @@
-"""The whole build from the stock 3.80.0 .hxf (not in the repo: point HX_STOMP_HXF
-and/or HX_STOMP_XL_HXF at your copy). The build is deterministic, so the output's
+"""The whole build from the stock 3.80.0 .hxf (not in the repo: point HX_STOMP_HXF,
+HX_STOMP_XL_HXF and/or HX_EFFECTS_HXF at your copy). The build is deterministic, so the output's
 MD5 is pinned: a change to any byte of the firmware fails here until BUILT_MD5
 is updated on purpose."""
 import hashlib
@@ -13,12 +13,13 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 pytestmark = pytest.mark.firmware
 
-# Both units: the 4-knob NAM A2 Lite in Amp > NAM on MM4 Frequency Shifter's ID 461 (build.py's
-# STEPS), the kernel without its tone stack (--no-tone), DSP cost 2220. The HX Stomp's is the image
-# that ran on an HX Stomp from RAM (the on-device smoke suite); the XL's has not run on an XL.
+# Both units: the ten-knob NAM A2 Lite with its tone stack in Amp > NAM on Xenomorph Fuzz Mono's ID 555
+# (build.py's STEPS), the kernel's --mid-sweep, DSP cost 2275. The HX Stomp's is the image that ran on an
+# HX Stomp from RAM (the on-device smoke suite, every EQ band measured); the XL's has not run on an XL.
 BUILT_MD5 = {
-    "HX_STOMP_HXF": "dcb425f111c0667f9c03e5779173ae35",
-    "HX_STOMP_XL_HXF": "109caca26065425c5e21f5da8d63e774",     # not run on an XL
+    "HX_STOMP_HXF": "e6431a5f2ba4d86f1f7f9300506a1101",
+    "HX_STOMP_XL_HXF": "a53e185be36fb4e8feedb5f2b89a1505",     # not run on an XL
+    "HX_EFFECTS_HXF": "3bf0bd8e70648fa18318db585306b177",      # Distortion > NAM (tools/effects.py); not run on an HX Effects
 }
 
 

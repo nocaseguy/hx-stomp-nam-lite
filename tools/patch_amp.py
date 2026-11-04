@@ -406,7 +406,12 @@ def cmd_patch(args):
     if chosen is None:
         raise SystemExit('All 24 unused SHARC primitive slots in Entry 2 are already hooked')
     prim_id, prim_addr = chosen
-    ldr_words += pack_init_l32(prim_addr, [prim_id, 0x611e90, 0x0, 0x611ef4, 0x611ddd, entry_addr, 0x91, 0x0d])
+    record = [prim_id, 0x611e90, 0x0, 0x611ef4, 0x611ddd]
+    import effects
+    if effects.is_effects(l6ia_bytes):               # the HX Effects: its own primitive table
+        prim_addr, record = effects.kernel_hook(e2_raw)
+        prim_id = record[0]
+    ldr_words += pack_init_l32(prim_addr, record + [entry_addr, 0x91, 0x0d])
     print(f"[+] Entry 2: hooked unused primitive {prim_id:#06x} @ {prim_addr:#x} -> kernel {entry_addr:#x} (dm=145, pm=13)")
 
     replaced = {2: l6ia.swap32(inject_sharc_ldr_blocks(e2_raw, ldr_words))}
@@ -1781,6 +1786,63 @@ def nam4_params(nam_params):
     return wrapped
 
 
+# The ten-knob NAM with a tone stack (HX Stomp build): on Xenomorph Fuzz Mono's preset_id (555,
+# removed first with remove-model), type for type on its knobs (Gain, Tone, Level float 0..1;
+# Clipping int 0..1; OscLevel, OscTone float 0..1; MinFreq, MaxFreq float 0..6000; WaveShape int
+# 0..2; Sensitivity float 0..1), in live order: Input, Treble, Output, Polarity, Bass, Mid, Model,
+# Mid Freq, Q, High Cut. Kernel: nam_multi.py --mid-sweep (Mid Freq DM 19 in Hz, Q DM 20 as 0..2;
+# High Cut on Presence's DM 11). Title: ir-title --knob 6.
+X = 'HD2_DistXenomorphFuzzMono'
+EQ_FX_PARAMS = ((1, 'HD2_AmpLine6Clarity', 'Drive', 5, 'Input', 0.5),              # Gain
+                (2, 'HD2_AmpLine6Clarity', 'Treble', 10, None, 0.5),               # Tone
+                (3, 'HD2_AmpLine6Clarity', 'ChVol', 6, 'Output', 0.5),             # Level
+                (4, X, 'Clipping', 15, 'Polarity', None),                          # Clipping
+                (5, 'HD2_AmpLine6Clarity', 'Bass', 8, None, 0.5),                  # OscLevel
+                (6, 'HD2_AmpLine6Clarity', 'Mid', 9, None, 0.5),                   # OscTone
+                (7, 'HD2_AmpLine6Clarity', 'Boost', 7, 'Model', None),             # MinFreq: Model 0..1000
+                (8, 'HD2_AmpBusyOneCh1', 'Ch1 Mid Freq', 19, 'Mid Freq', None),    # MaxFreq: 150..3000 Hz
+                (9, X, 'WaveShape', 20, 'Q', None),                                # WaveShape: Q 0.7/1.4/2.8
+                (10, 'HD2_AmpLine6Clarity', 'Presence', 11, 'High Cut', 1.0))      # Sensitivity: 10.0 off
+EQ_MID_FREQ = (150.0, 3000.0, 650.0)     # nam_multi.MID_HZ; 650 Hz the default
+EQ_Q_LABELS = ('0.7', '1.4', '2.8')      # nam_multi.MID_Q
+
+
+def eq_params(nam_params):
+    """kit_patch_amp.nam_params for EQ_FX_PARAMS."""
+    f2u = lambda f: struct.unpack('<I', struct.pack('<f', f))[0]
+
+    def wrapped(e3, info, spec=None):
+        out = nam_params(e3, info, spec)
+        for p in out:
+            if p['slot'] == 7:
+                p['raw'][5], p['raw'][6], p['raw'][7] = f2u(NAM4_MODEL_RANGE[0]), f2u(NAM4_MODEL_RANGE[1]), f2u(1.0)
+                p['default_word'] = p['raw'][7]
+                p['meta'] = [('displayName', 7, 'Model'), ('displayType', 7, 'dynamicList'), ('displayNameShort', 7, 'Model')]
+            elif p['slot'] == 4:
+                p['raw'][7], p['default_word'] = 0, 0
+                p['meta'] = [('displayType', 7, 'list'), ('0', 7, 'Normal'), ('1', 7, 'Inverted'),
+                             ('displayName', 7, 'Polarity'), ('displayNameShort', 7, 'Polarity')]
+            elif p['slot'] == 10:
+                p['meta'] = [('displayType', 7, 'knob'), ('displayName', 7, 'High Cut'), ('displayNameShort', 7, 'HighCut')]
+            elif p['slot'] == 8:
+                p['raw'][5], p['raw'][6], p['raw'][7] = (f2u(v) for v in EQ_MID_FREQ)
+                p['default_word'] = p['raw'][7]
+                p['meta'] = [('displayType', 7, 'hz'), ('displayName', 7, 'Mid Freq'), ('displayNameShort', 7, 'MidFreq')]
+            elif p['slot'] == 9:
+                p['raw'][7], p['default_word'] = 0, 0
+                p['meta'] = [('displayType', 7, 'list')] + [(str(k), 7, q) for k, q in enumerate(EQ_Q_LABELS)] + \
+                            [('displayName', 7, 'Q'), ('displayNameShort', 7, 'Q')]
+        return out
+    return wrapped
+
+
+def cmd_effects_eq(args):
+    import effects
+    l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
+    save_l6ia_to_any(effects.build_base(l6ia_bytes), args.output, donor_hxf=args.input if is_hxf else args.donor)
+    print(f"[+] Wrote {args.output}")
+
+
 def cmd_add_fx_model(args):
     import kit_patch_amp
     l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
@@ -1788,6 +1850,8 @@ def cmd_add_fx_model(args):
     params, saved = NAM_FX_PARAMS, kit_patch_amp.nam_params
     if args.knobs == 'nam4':
         params, kit_patch_amp.nam_params = NAM4_FX_PARAMS, nam4_params(saved)
+    elif args.knobs == 'eq':
+        params, kit_patch_amp.nam_params = EQ_FX_PARAMS, eq_params(saved)
     try:
         new_l6ia, info = kit_patch_amp.add_model(
             l6ia_bytes, args.clone or FX_CLONES[cat], args.name, args.display_name, folder=args.folder,
@@ -1826,9 +1890,10 @@ def main():
     p_fx.add_argument('--pm-words', type=lambda x: int(x, 0), default=0x0d,
                       help="each block's I8 (PM) block in words (the mono FX slot allows up to 0x14e)")
     p_fx.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
-    p_fx.add_argument('--knobs', choices=('nam', 'nam4'), default='nam',
+    p_fx.add_argument('--knobs', choices=('nam', 'nam4', 'eq'), default='nam',
                       help="nam: the 8 knobs (Model first); nam4: Model, Polarity, Input, Output on MM4 Frequency "
-                           "Shifter's types (NAM4_FX_PARAMS; with remove-model 461 and --preset-id 461)")
+                           "Shifter's types (NAM4_FX_PARAMS; with remove-model 461 and --preset-id 461); eq: ten knobs "
+                           "with a tone stack on Xenomorph Fuzz Mono's types (EQ_FX_PARAMS; remove-model 555, --preset-id 555)")
 
     p_add = sub.add_parser('add-model', help='Add the NAM host amp to Entry 0, 2, 3 and 4')
     p_add.add_argument('input', help='Input .hxf or L6IA (the stock HX Stomp or HX Stomp XL v3.80.0 firmware)')
@@ -1880,6 +1945,12 @@ def main():
     p_mv.add_argument('--to', dest='dst', type=int, required=True, help='the new category (12 Amp)')
     p_mv.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
 
+    p_eff = sub.add_parser('effects-eq', help="HX Effects 3.80.0: NAM A2 Lite's ten-knob block as Distortion > NAM, "
+                           "every entry but the kernel (tools/effects.py; then patch)")
+    p_eff.add_argument('input')
+    p_eff.add_argument('output')
+    p_eff.add_argument('--donor', help='the stock .hxf, when OUT is an .hxf and IN is not')
+
     p_pat = sub.add_parser('patch', help='Inject the SHARC kernel into Entry 2 and hook primitive 0x9c75 to it')
     p_pat.add_argument('input', help='Input .hxf or L6IA')
     p_pat.add_argument('output', help='Output .hxf or L6IA')
@@ -1888,7 +1959,8 @@ def main():
 
     args = ap.parse_args()
     {'add-model': cmd_add_model, 'add-fx-model': cmd_add_fx_model, 'inspect': cmd_inspect, 'ir-title': cmd_ir_title,
-     'patch': cmd_patch, 'remove-model': cmd_remove_model, 'move-folder': cmd_move_folder}[args.cmd](args)
+     'patch': cmd_patch, 'remove-model': cmd_remove_model, 'move-folder': cmd_move_folder,
+     'effects-eq': cmd_effects_eq}[args.cmd](args)
 
 
 if __name__ == '__main__':

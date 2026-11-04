@@ -24,27 +24,32 @@ var PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/";
 var STOCK_MD5 = {
   "a2cd8f4ae56f49415380270ebc484bf1": "HX_Stomp",
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
+  "7c2ebdf1bffb6bcc5f89dda97f91e40c": "HX_Effects",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "dcb425f111c0667f9c03e5779173ae35",
-  "HX_Stomp_XL": "109caca26065425c5e21f5da8d63e774",
+  "HX_Stomp": "e6431a5f2ba4d86f1f7f9300506a1101",
+  "HX_Stomp_XL": "a53e185be36fb4e8feedb5f2b89a1505",
+  "HX_Effects": "3bf0bd8e70648fa18318db585306b177",
 };
 
 // build.py's KERNEL and STEPS (tests/test_web_build.py keeps them equal): per unit, the kernel
 // command and the patch_amp.py steps, each "patch_amp.py CMD IN OUT ARGS..." on the previous output.
-var KERNEL = {"HX_Stomp": ["tools/sharc/nam_multi.py", "--no-tone"], "HX_Stomp_XL": ["tools/sharc/nam_multi.py", "--no-tone"]};
+var KERNEL = {"HX_Stomp": ["tools/sharc/nam_multi.py", "--mid-sweep"], "HX_Stomp_XL": ["tools/sharc/nam_multi.py", "--mid-sweep"], "HX_Effects": ["tools/sharc/nam_multi.py", "--mid-sweep", "--effects"]};
 var STEPS = {
   "HX_Stomp": [
-    ["remove-model", "--preset-id", "461"],
-    ["add-fx-model", "--knobs", "nam4", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion", "--folder", "NAM", "--preset-id", "461", "--dsp-cost", "2220", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
+    ["remove-model", "--preset-id", "555"],
+    ["add-fx-model", "--knobs", "eq", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion", "--folder", "NAM", "--preset-id", "555", "--dsp-cost", "2275", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
     ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
-    ["ir-title", "--fx-preset-id", "461", "--knob", "0"],
+    ["ir-title", "--fx-preset-id", "555", "--knob", "6"],
   ],
   "HX_Stomp_XL": [
-    ["remove-model", "--preset-id", "461"],
-    ["add-fx-model", "--knobs", "nam4", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion", "--folder", "NAM", "--preset-id", "461", "--dsp-cost", "2220", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
+    ["remove-model", "--preset-id", "555"],
+    ["add-fx-model", "--knobs", "eq", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion", "--folder", "NAM", "--preset-id", "555", "--dsp-cost", "2275", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
     ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
-    ["ir-title", "--fx-preset-id", "461", "--knob", "0"],
+    ["ir-title", "--fx-preset-id", "555", "--knob", "6"],
+  ],
+  "HX_Effects": [
+    ["effects-eq"],
   ],
 };
 
@@ -55,6 +60,7 @@ var SOURCES = [
   "tools/hxf_ram.py",
   "tools/l6ia_verify.py",
   "tools/patch_amp.py",
+  "tools/effects.py",
   "tools/kit_patch_amp.py",
   "tools/sharc/entry4_blob.py",
   "tools/sharc/nam_lite.py",
@@ -119,8 +125,8 @@ async function build(stock) {
   var md5 = p.runPython("import hashlib; hashlib.md5(open('/repo/build/stock.hxf','rb').read()).hexdigest()");
   var unit = STOCK_MD5[md5];
   if (!unit) {
-    throw new Error("This is not the stock HX Stomp or HX Stomp XL 3.80.0 firmware (its MD5 is " + md5 +
-                    "). The patch is made for those two files only.");
+    throw new Error("This is not the stock HX Stomp, HX Stomp XL or HX Effects 3.80.0 firmware (its MD5 is " + md5 +
+                    "). The patch is made for those three files only.");
   }
   post({ type: "log", text: "stock firmware: " + unit.replace(/_/g, " ") + " 3.80.0 (MD5 " + md5 + ")\n" });
 
@@ -167,6 +173,10 @@ async function build(stock) {
 // The RAM run of the built file: what tools/hxf_ram.py run would send. A failure here leaves the
 // build as it is; the page then offers no RAM run.
 function ramPlan(p, step, file) {
+  if (file.indexOf("HX_Effects") === 0) {      // the RAM loader is the HX Stomp's and XL's only
+    post({ type: "log", text: "RAM run: HX Stomp and HX Stomp XL only.\n" });
+    return {};
+  }
   var dir = "/repo/build/ram";
   try {
     step(6, "Checking every checksum and packing the file…",

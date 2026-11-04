@@ -46,7 +46,8 @@ def test_build_steps_as_build_py():
 
 def test_built_md5_as_firmware_test():
     pinned = py_dict("tests/test_firmware.py", "BUILT_MD5")
-    assert js_object("BUILT_MD5") == {"HX_Stomp": pinned["HX_STOMP_HXF"], "HX_Stomp_XL": pinned["HX_STOMP_XL_HXF"]}
+    assert js_object("BUILT_MD5") == {"HX_Stomp": pinned["HX_STOMP_HXF"], "HX_Stomp_XL": pinned["HX_STOMP_XL_HXF"],
+                                      "HX_Effects": pinned["HX_EFFECTS_HXF"]}
 
 
 def test_sources_cover_the_build():

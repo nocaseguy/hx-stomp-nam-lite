@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """NAM A2 Lite's kernel: up to three blocks at once, each with its own capture.
 
-usage: nam_multi.py [model.nam] [-o out.asm] [--slots 2|3] [--staging b2|b3] [--check]
+usage: nam_multi.py [model.nam] [-o out.asm] [--slots 2|3] [--staging b2|b3] [--no-tone | --mid-sweep] [--effects] [--check]
+
+--mid-sweep: the ten-knob build's tone stack (Bass 150 Hz shelf, Mid a peak at Mid Freq with Q,
+Treble a 2.5 kHz peak, High Cut). --effects: the HX Effects 3.80.0's User IR store.
 
 There is no built-in model: Model 1..128 is a User IR slot, anything else
 silence. model.nam (or nam_lite.placeholder) is the check's test model, in IR
@@ -58,6 +61,7 @@ REP = 0xE4860                     # the kit report area (kit-probe plays these 1
 DDR2 = 0x324500
 DDR2_END = 0x328000
 IR_FLAG, IR_TOP = 0x2AB56E, 0x2ABDED
+IR_EFFECTS = (0x2A912C, 0x2A99AB)     # the HX Effects 3.80.0's User IR store (--effects)
 N_STREAM = nam_lite.N_WEIGHTS + C * (1 + NL)        # 1,943: weights, then the silence state
 HIST_N = 512
 MAGIC = 0x6E6D6D31                # "nmm1": the report's word 0 and the read chains' sentinel
@@ -432,7 +436,7 @@ class Layout:
                          (self.wch[j] + TCB_II) & 0x7FFFF, len(grp), 0]
         put(al["JOBS"], jobs)
         # DDR2: the tone stack's table
-        put(self.eq_tab, nam_lite.eq_table())
+        put(self.eq_tab, eq_table_midq() if MIDQ else nam_lite.eq_table())
         put(self.stomp_gain, [nam_pack.f2b(10.0 ** (nam_lite.STOMP_DBU / 20))])
         return mem
 
@@ -621,6 +625,140 @@ def _no_bands(src):
     return src[:a] + "      // (no-tone: no bands, F0 to the output)\n" + src[b:]
 
 
+# mid-sweep (the ten-knob build: Mid Freq and Q knobs): the Mid band is a
+# peak at the Mid Freq knob (DM(19, I0), a float in Hz) with the Q knob's Q (DM(20, I0), an int
+# 0..2), computed when a knob moves (mid_eq, cold code): sin and cos of w0 by series (w0 < 0.53 for
+# 4 kHz), A and 1/A from a 101-step table where the Mid band's EQ_TAB part was (EQ_TAB + 505), 1/a0
+# by RECIPS and three Newton steps (the unit's seed has 7 bits). Treble is a peak at 2.5 kHz (Q 0.7)
+# instead of the release's shelf (TREBLE), Bass a shelf at 150 Hz (BASS), and Presence's knob a High Cut
+# (HICUT, a low-pass; 10.0 off).
+MIDQ = False
+MID_HZ = (150.0, 3000.0)                 # the Mid Freq knob's range (clamped): from the Bass shelf's corner
+MID_Q = (0.7, 1.4, 2.8)                  # the Q knob's three values
+MID_OFF = 505
+W_PER_HZ = 2 * math.pi / 48000.0
+SIN_C = (-1.0 / 5040, 1.0 / 120, -1.0 / 6)
+COS_C = (1.0 / 40320, -1.0 / 720, 1.0 / 24, -0.5)
+MID_TEST = {(0.8, 0.3, 0.6, 0.2): (1800.0, 1), (0.3, 0.7, 0.45, 0.9): (120.0, 2), (0.5, 0.5, 0.5, 0.5): (650.0, 0)}
+
+
+TREBLE = ("peak", 2500.0)                # (mid-sweep) Treble a peak (Q 0.7), not a shelf: Presence alone above ~5 kHz
+HICUT = (2000.0, 20000.0)               # (mid-sweep) Presence's knob is High Cut: a low-pass (Q 0.707) from
+                                         # 2 kHz (step 0) to 20 kHz (step 99), log; step 100 (10.0) is off
+
+
+def hicut_coefficients(step, fs=48000.0):
+    """High Cut at knob step 0..100: RBJ low-pass, Butterworth Q, normalised (b0, b1, b2, -a1, -a2)."""
+    if step >= 100:
+        return [1.0, 0.0, 0.0, 0.0, 0.0]
+    f0 = HICUT[0] * (HICUT[1] / HICUT[0]) ** (step / 99)
+    w0 = 2 * math.pi * f0 / fs
+    c, al = math.cos(w0), math.sin(w0) / (2 * math.sqrt(0.5))
+    a0 = 1 + al
+    return [(1 - c) / 2 / a0, (1 - c) / a0, (1 - c) / 2 / a0, 2 * c / a0, -(1 - al) / a0]
+
+
+BASS = ("low", 150.0)                    # (mid-sweep) Bass a shelf at 150 Hz (the release's 100 Hz is mostly below a guitar cab)
+
+
+def eq_table_midq():
+    """EQ_TAB of the mid-sweep kernel: Bass a shelf at 150 Hz, Treble a peak at 2.5 kHz, the fourth
+    band (the release's Presence) High Cut, the Mid band's part holding mid_table()."""
+    tab = nam_lite.eq_table()
+    tab[0: 505] = [nam_pack.f2b(x) for step in range(101)
+                   for x in nam_lite.eq_coefficients(*BASS, (step - 50) * 0.24)]
+    tab[MID_OFF: MID_OFF + 205] = mid_table()
+    tab[2 * 505: 3 * 505] = [nam_pack.f2b(x) for step in range(101)
+                             for x in nam_lite.eq_coefficients(*TREBLE, (step - 50) * 0.24)]
+    tab[3 * 505: 4 * 505] = [nam_pack.f2b(x) for step in range(101) for x in hicut_coefficients(step)]
+    return tab
+
+
+def _lit(x):
+    """x as a float32 literal sasm turns into exactly that float32."""
+    return repr(f32(x))
+
+
+def mid_table():
+    """MID_TAB: per Mid step 0..100 A and 1/A (-12 .. +12 dB), then 0.5/Q per Q value."""
+    out = []
+    for step in range(101):
+        db = (step - 50) * 0.24
+        out += [nam_pack.f2b(10 ** (db / 40)), nam_pack.f2b(10 ** (-db / 40))]
+    return out + [nam_pack.f2b(0.5 / q) for q in MID_Q]
+
+
+def mid_coefficients(k, hz, q):
+    """mid_eq in float32, op for op: (b0, b1, b2, -a1, -a2)."""
+    tab = [ssim.b2f(v) for v in mid_table()]
+    step = min(100, max(0, int(f32(f32(f32(k) * 100.0) + 0.5))))
+    A, iA = tab[2 * step], tab[2 * step + 1]
+    hq = tab[202 + min(2, max(0, q))]
+    f = min(max(f32(hz), f32(MID_HZ[0])), f32(MID_HZ[1]))
+    w = f32(f * f32(W_PER_HZ))
+    w2 = f32(w * w)
+    sn = f32(w2 * f32(SIN_C[0]))
+    for c in SIN_C[1:]:
+        sn = f32(w2 * f32(sn + f32(c)))
+    sn = f32(w * f32(sn + 1.0))
+    cs = f32(w2 * f32(COS_C[0]))
+    for c in COS_C[1:]:
+        cs = f32(w2 * f32(cs + f32(c)))
+    cs = f32(cs + 1.0)
+    al = f32(sn * hq)
+    aA, adA = f32(al * A), f32(al * iA)
+    a0 = f32(1.0 + adA)
+    r = ssim.b2f(ssim.recips_hw(ssim.f2b(a0))) if ssim.RECIPS_HW else f32(1.0 / a0)
+    for _ in range(3):
+        r = f32(r * f32(2.0 - f32(a0 * r)))
+    b1 = f32(f32(cs * -2.0) * r)
+    return [f32(f32(1.0 + aA) * r), b1, f32(f32(1.0 - aA) * r), -b1, f32(f32(adA - 1.0) * r)]
+
+
+def _mid_src(src):
+    """The mid-sweep kernel: read the three Mid knobs before the band loop frees I0, then mid_eq."""
+    a = "    LCNTR = 4, DO n_eqk UNTIL LCE;\n"
+    b = "n_eqk: NOP;\nn_eqdone:\n"
+    assert src.count(a) == 1 and src.count(b) == 1
+    src = src.replace(a, "    R10 = DM(9, I0);                    // (mid-sweep) Mid, Mid Freq (Hz), Q (0..2)\n"
+                         "    R11 = DM(19, I0);\n    R12 = DM(20, I0);\n" + a)
+    src = src.replace(b, "n_eqk: NOP;\n    CALL mid_eq;                        // (mid-sweep) the Mid band\nn_eqdone:\n")
+    L = lambda x: _lit(x)
+    sub = [
+        "", "// ---- (mid-sweep) the Mid band: a peak at Mid Freq with Q, from F10 (Mid), F11 (Hz), R12 (Q)",
+        "mid_eq:",
+        "    F0 = 100.0;", "    F0 = F10 * F0;", "    F1 = 0.5;", "    F0 = F0 + F1;", "    R0 = TRUNC F0;",
+        "    R1 = 0;", "    R0 = MAX(R0, R1);", "    R1 = 100;", "    R0 = MIN(R0, R1);",
+        "    R0 = R0 + R0;", f"    R1 = EQ_TAB + {MID_OFF};", "    R0 = R0 + R1;", "    I2 = R0;",
+        "    F2 = DM(0, I2);                     // A", "    F3 = DM(1, I2);                     // 1/A",
+        "    R1 = 0;", "    R12 = MAX(R12, R1);", "    R1 = 2;", "    R12 = MIN(R12, R1);",
+        f"    R1 = EQ_TAB + {MID_OFF + 202};", "    R1 = R1 + R12;", "    I2 = R1;",
+        "    F4 = DM(0, I2);                     // 0.5/Q",
+        f"    F1 = {L(MID_HZ[0])};", "    F11 = MAX(F11, F1);", f"    F1 = {L(MID_HZ[1])};", "    F11 = MIN(F11, F1);",
+        f"    F1 = {L(W_PER_HZ)};", "    F5 = F11 * F1;                      // w0", "    F6 = F5 * F5;",
+        f"    F1 = {L(SIN_C[0])};", "    F7 = F6 * F1;"]
+    for c in SIN_C[1:]:
+        sub += [f"    F1 = {L(c)};", "    F7 = F7 + F1;", "    F7 = F6 * F7;"]
+    sub += ["    F1 = 1.0;", "    F7 = F7 + F1;", "    F7 = F5 * F7;                      // sin w0",
+            f"    F1 = {L(COS_C[0])};", "    F8 = F6 * F1;"]
+    for c in COS_C[1:]:
+        sub += [f"    F1 = {L(c)};", "    F8 = F8 + F1;", "    F8 = F6 * F8;"]
+    sub += ["    F1 = 1.0;", "    F8 = F8 + F1;                      // cos w0",
+            "    F7 = F7 * F4;                      // alpha", "    F9 = F7 * F2;                      // alpha A",
+            "    F10 = F7 * F3;                     // alpha / A", "    F11 = F1 + F10;                    // a0",
+            "    F12 = RECIPS F11;", "    F0 = 2.0;"]
+    for _ in range(3):
+        sub += ["    F13 = F11 * F12;", "    F13 = F0 - F13;", "    F12 = F12 * F13;"]
+    sub += ["    F13 = F1 + F9;", "    F13 = F13 * F12;                   // b0",
+            "    F0 = -2.0;", "    F8 = F8 * F0;", "    F8 = F8 * F12;                     // b1 (-a1 = -b1)",
+            "    F9 = F1 - F9;", "    F9 = F9 * F12;                     // b2",
+            "    F10 = F10 - F1;", "    F10 = F10 * F12;                   // -a2",
+            "    R0 = I6;", "    R1 = S_EQC + 5;", "    R0 = R0 + R1;", "    I2 = R0;",
+            "    DM(0, I2) = F13;", "    DM(1, I2) = F8;", "    DM(2, I2) = F9;", "    F8 = -F8;",
+            "    DM(3, I2) = F8;", "    DM(4, I2) = F10;", "    RTS;", ""]
+    return src + "\n".join(sub)
+
+
 def _variant(src, meter=False, nodma=False, prof=None):
     if prof:
         src = _prof(src, *prof)
@@ -633,6 +771,8 @@ def _variant(src, meter=False, nodma=False, prof=None):
     for a, b in (NODMA if nodma else ()) + (NOTONE if NO_TONE else ()):
         assert src.count(a) == 1, a
         src = src.replace(a, b)
+    if MIDQ:
+        src = _mid_src(src)
     return _no_bands(src) if NO_TONE else src
 
 
@@ -792,11 +932,15 @@ class Pipe:
         self.st = [[0.0, 0.0] for _ in range(4)]
 
     def knobs(self, knobs):
-        tab = nam_lite.eq_table()
+        tab = eq_table_midq() if MIDQ else nam_lite.eq_table()
         self.co = []
         for band, k in enumerate(knobs):
             i = min(100, max(0, int(f32(f32(f32(k) * 100.0) + 0.5))))
+            if band > 3:
+                break
             self.co.append([ssim.b2f(v) for v in tab[(band * 101 + i) * 5: (band * 101 + i) * 5 + 5]])
+        if MIDQ:
+            self.co[1] = mid_coefficients(knobs[1], knobs[4], knobs[5])
 
     def cut(self):
         self.mg = 0 if self.fresh else 17
@@ -891,9 +1035,14 @@ class Inst:
             self.model = model
             sim.wr(self.i0 + 7, model if isinstance(model, int) else ssim.f2b(model))
         if eq is not None:
+            if MIDQ and len(eq) == 4:       # (mid-sweep: Mid Freq and Q with them)
+                eq = tuple(eq) + MID_TEST.get(tuple(eq), (650.0, 0))
             self.eq = eq
-            for j, k in enumerate(eq):
+            for j, k in enumerate(eq[:4]):
                 sim.wr(self.i0 + 8 + j, ssim.f2b(k))
+            if MIDQ:
+                sim.wr(self.i0 + 19, ssim.f2b(eq[4]))
+                sim.wr(self.i0 + 20, eq[5])
         sim.wr(self.i0 + 3, 1)
 
     def call(self, block, label):
@@ -1328,6 +1477,13 @@ def main():
         w = nam_lite.placeholder()
     global NO_TONE
     NO_TONE = "--no-tone" in args
+    global MIDQ
+    MIDQ = "--mid-sweep" in args
+    if MIDQ and NO_TONE:
+        sys.exit("--mid-sweep needs the tone stack (not --no-tone)")
+    if "--effects" in args:
+        global IR_FLAG, IR_TOP
+        IR_FLAG, IR_TOP = IR_EFFECTS
     asm, lay = build(slots, staging=opt("--staging") or "b2")
     if "-o" in sys.argv:
         open(sys.argv[sys.argv.index("-o") + 1], "w").write(asm)
