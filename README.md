@@ -138,6 +138,7 @@ M4 code (the caves `tools/patch_menu.py` writes, and each feature's `.s` module)
 build.py                      one-step build from the stock .hxf
 FIRMWARE_NOTES.md             what is known about the 3.80.0 firmware
 tools/patch_menu.py           CustomOS: Global Settings section and M4 caves (HX Stomp)
+tools/image_store.py          the image store (Entries 7 and 8): images, fonts, items
 tools/patch_amp.py            inspect / add-model / ir-title / patch
 tools/nam2ir.py               .nam -> User IR .wav
 tools/hxf.py, l6ia.py         .hxf container and L6IA archive
