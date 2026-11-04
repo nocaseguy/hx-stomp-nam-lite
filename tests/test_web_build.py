@@ -46,7 +46,8 @@ def test_sources_cover_the_build():
     # every module the build's scripts import, and every file they open next to themselves
     need = {"tools/hxf.py", "tools/l6ia.py", "tools/l6ia_verify.py", "tools/patch_amp.py", "tools/kit_patch_amp.py",
             "tools/sharc/nam_lite.py",
-            "tools/sharc/nam_multi.py", "tools/sharc/nam_multi_kernel.asm"}
+            "tools/sharc/nam_multi.py", "tools/sharc/nam_multi_kernel.asm",
+            *(f"tools/features/{f.name}" for f in (ROOT / "tools/features").glob("*.py"))}
     for d in ("tools", "tools/sharc"):
         for f in listed:
             if not f.endswith(".py"):
