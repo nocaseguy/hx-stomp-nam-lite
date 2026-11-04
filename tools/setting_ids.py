@@ -11,7 +11,8 @@ import sys
 
 IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stock state, and the settings it held in earlier builds)
     (29, 'tuner.activate', 'stock limits are not the 0..1 enum; GR Size (0..10) and GR Position (0..3) in early GR images'),
-    (102, 'bpm.dot', 'GR Position in the Own-IDs GR image (0..4); BPM Position (0..6) in early BPM images'),
+    (102, 'bpm.dot', 'GR Position in the Own-IDs GR image (0..4); BPM Position (0..6) in early BPM images; '
+                     'DSP Disp (0..3) in dsp-meter test images'),
     (104, 'tuner.lock', 'GR Direction in the Edge-meter GR image (0..1)'),
     (126, 'bpm.color', 'GR Thickness in the Edge-meter and Own-IDs GR images (0..20)'),
     (128, 'bpm.font', 'GR Direction in the Own-IDs GR image (0..1); BPM Font in an older order in early BPM images'),
