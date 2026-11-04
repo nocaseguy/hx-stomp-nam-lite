@@ -26,6 +26,10 @@ def test_ids_claimed_once():
     assert all(pid in pm.MAIN_STORE_IDS for pid in pids)
 
 
+def test_no_avoided_id_is_claimed():
+    assert [pid for pid, name, note in setting_ids.IDS if name and note.startswith('avoid')] == []
+
+
 def test_every_setting_has_an_id_and_every_claim_a_setting():
     ids = setting_ids.by_name()
     assert set(SETTINGS) - set(ids) == set(), 'settings with no line in tools/setting_ids.py'
