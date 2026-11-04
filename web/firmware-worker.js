@@ -49,6 +49,9 @@ var SOURCES = [
   "tools/l6ia_verify.py",
   "tools/patch_amp.py",
   "tools/patch_menu.py",
+  "tools/setting_ids.py",
+  "tools/features/__init__.py",
+  "tools/features/tuner.py",
   "tools/kit_patch_amp.py",
   "tools/sharc/entry4_blob.py",
   "tools/sharc/nam_lite.py",
@@ -93,7 +96,7 @@ async function boot() {
     if (!r.ok) throw new Error("Could not load " + path + " (" + r.status + ").");
     return [path, new Uint8Array(await r.arrayBuffer())];
   }));
-  ["/repo", "/repo/tools", "/repo/tools/sharc", "/repo/tools/ramboot", "/repo/build"].forEach(function (d) {
+  ["/repo", "/repo/tools", "/repo/tools/features", "/repo/tools/sharc", "/repo/tools/ramboot", "/repo/build"].forEach(function (d) {
     try { p.FS.mkdir(d); } catch (e) { /* exists */ }
   });
   files.forEach(function (f) { p.FS.writeFile("/repo/" + f[0], f[1]); });
