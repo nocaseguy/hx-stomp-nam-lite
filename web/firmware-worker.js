@@ -49,6 +49,7 @@ var SOURCES = [
   "tools/l6ia_verify.py",
   "tools/patch_amp.py",
   "tools/patch_menu.py",
+  "tools/image_store.py",
   "tools/setting_ids.py",
   "tools/features/__init__.py",
   "tools/features/tuner.py",

@@ -77,6 +77,7 @@ def patch():
     p.e0, p.mods, p.ids = bytearray(0x10000), [], {}
     p.segs = [(0, 0, 0x8000, BASE, 0x8000)] * 7
     p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'CustomOS', [], {}
+    p.load, p.values, p.entries, p.owned = None, {}, {}, {}
     return p
 
 
