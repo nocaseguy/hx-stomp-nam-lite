@@ -130,6 +130,8 @@ HX_STOMP_HXF=path/to/HX_Stomp_v3.80.0_0x103966115.hxf .venv/bin/pytest -m firmwa
 
 GitHub Actions runs the first two on every push and pull request. The firmware tests need your own stock file (`HX_STOMP_HXF`, `HX_STOMP_XL_HXF`) and are skipped without one. They build the whole `.hxf` and compare its MD5 with the one pinned in `tests/test_firmware.py`, so a changed byte anywhere in the firmware fails until the pin is updated on purpose. `web/firmware-worker.js` carries the same pin.
 
+M4 code (the caves `tools/patch_menu.py` writes, and each feature's `.s` module) is tested by running it in [unicorn](https://www.unicorn-engine.org) as a Cortex-M4, with `tests/m4emu.py`: it assembles a module with the generated `customos.inc`, stands in for firmware functions with Python stubs that log their calls, and checks that SP and r4-r11 come back unchanged. `tests/test_customos_m4.py` is the example. Tests that assemble `.s` files need Apple's Command Line Tools clang and are skipped without it.
+
 ## Layout
 
 ```
@@ -150,7 +152,7 @@ tools/sharc/sasm.py, ssim.py  SHARC assembler and simulator
 src/sharc/nam_a2.asm          reference NAM A2 implementation for the check
 src/ramboot/                  the RAM loader and its eMMC overlay hook (C, Cortex-M4; make -C src/ramboot)
 web/                          the setup page: build, RAM run and converter in the browser
-tests/                        pytest: unit, web parity, kernel (slow), firmware (needs a stock .hxf)
+tests/                        pytest: unit, M4 code in unicorn (m4emu.py), web parity, kernel (slow), firmware (needs a stock .hxf)
 ```
 
 ## Licence
