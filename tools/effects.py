@@ -1,4 +1,4 @@
-"""NAM A2 Lite for the HX Effects 3.80.0: the ten-knob block with its tone stack, as Distortion > NAM.
+"""NAM A2 Lite for the HX Effects 3.80.0: the ten-knob block with its tone stack, as Distortion > Mono.
 
 Used through tools/patch_amp.py: `effects-eq IN OUT` (everything but the kernel) and `patch`, which
 hooks the kernel with this unit's primitive record (kernel_hook). The kernel is
@@ -16,25 +16,21 @@ table in the application grows or changes its count, with one exception below.
   Entry 3  NAM's model built as a new model, its descriptor's meta, states, parameters and blob
            copied onto Xenomorph's model; that model listed once, in the mono effect slot list
   Entry 0  Table 1: 555's DSP cost; Table 2: Xenomorph's row as a distortion row of NAM's
-           (short name, counts); the browser: Xenomorph's item out of Distortion > Mono, and
-           that list's freed last 48 bytes are NAM's one-item list, Distortion's fourth folder, NAM
-           (the folder list's cursor kept on its three rows: ROW_*)
+           (short name, counts); the browser: Xenomorph replaced in place in Distortion > Mono;
+           the IR name title on Model with sibling knob suppression
   Title    this application shows a User IR's name on the IR Select knob's own line ("Model: name")
-           in the knob page's pop-up, the scribble strips and the one-parameter view, for blocks of
-           the IR category. The category loads (where a knob is turned, and where each is drawn)
-           become calls to helpers that also answer "IR" for a block with preset ID 555 at knob 6
-           (Model; knobs 6..8 for the pop-up and strips, as the Dual IR's IR B strip, so Mid Freq's
-           and Q's labels stay off the name's line), the knob-0 tests take knob 6 of 555 too, and
-           the value loads convert the float Model to a slot number (outside 1..128: the stock
-           "<EMPTY>"). The helpers (438
+           in the knob page's pop-up, for blocks of the IR category. Two category loads (where a
+           knob is turned, and where the page is drawn) become calls to helpers that also answer
+           "IR" for a block with preset ID 555 at knob 6 (Model), and one value load converts the
+           float Model to a slot number (outside 1..128: the stock "<EMPTY>"). The helpers (142
            bytes, below as bytes: the in-browser build has no assembler) need room inside the
            application: its zero-initialised memory starts right after its code segment, so
            nothing can be appended. Table 2 (777 rows) is read only by one linear search by name;
            its last 16 rows move over 16 cab rows that no Table 1 row lists (no preset can name
-           those models) and its count drops to 761, freeing 704 bytes for the helpers.
+           those models) and its count drops to 761, freeing 704 bytes for the helpers. The
+           scribble strips and the one-parameter view show Model as a number.
 
-The previous build (3bf0bd8e) ran on an HX Effects (an owner); this one, with the browser and title
-fixes for what that owner found, has static and simulator checks only.
+Ran on an HX Effects (an owner, who also wrote the browser and knob pop-up fixes).
 """
 import struct
 
@@ -70,33 +66,12 @@ PRIM, PRIM_DESC, PRIM_TEMPLATE = 0x9c75, 0x200588, 0x822     # the hook copies 0
 MOVE_FROM, MOVE_TO, MOVE_N = 761, 496, 16
 CAVE = TAB2_BASE + 44 * (TAB2_CNT - MOVE_N)
 CAVE_CODE = bytes.fromhex(
-    '13f8282c0b2a0bd003b4ddf82500062d18bf002040f22b21884208bf0b2203bc704713f8283c0b2b0cd003b4ddf82500062d18bf'
-    '002040f22b21884204bf0b23002503bc704713f8283c0b2b10d003b4ddf8e500bbf1060f38bf0020bbf1080f88bf002040f22b21'
-    '884208bf0b2303bc70479df8c8300b2b10d003b4ddf8c500bbf1060f38bf0020bbf1080f88bf002040f22b21884208bf0b2303bc'
-    '70479df8b8300b2b0cd003b4ddf8b500062c18bf002040f22b21884204bf0b23002403bc7047bbf1000f09d003b4ddf8c50040f2'
-    '2b21884208bfbbf1060f03bc704707b4ddf8e90040f22b218842ddf83d0012d1c20d0dd07f3a0ad4172a09dcc0f3160141f40001'
-    'c2f1170221fa02f000e00020411e7f2902d8054607bc704707bc4ff00005b5f7d6b907b4ddf8c90040f22b218842ddf8450012d1'
-    'c20d0dd07f3a0ad4172a09dcc0f3160141f40001c2f1170221fa02f000e00020411e7f2902d8814607bc704707bc4ff00009c4f7'
-    'a8be07b4ddf8b90040f22b218842ddf8290012d1c20d0dd07f3a0ad4172a09dcc0f3160141f40001c2f1170221fa02f000e00020'
-    '411e7f2902d8044607bc704707bc4ff00004dff767b8')
-# (site, its stock 4 bytes, the helper's offset in CAVE_CODE): the category where a knob is turned
-# (pop-up, strips), where the pop-up, strips and one-parameter view are drawn, the value each draws,
-# and the strips' knob-0 test
-TITLE_SITES = ((0x2809ee64, '13f8282c', 0x00), (0x280a47d8, '13f8283c', 0x22), (0x2807ac66, '13f8283c', 0x46),
-               (0x2808aa3c, '9df8c830', 0x72), (0x280a4cfa, '9df8b830', 0x9e), (0x2807aca8, 'ddf83150', 0xde),
-               (0x2808aa72, 'ddf83990', 0x126), (0x280a4d50, 'ddf81d40', 0x16e), (0x2808aa4c, 'bbf1000f', 0xc2))
-TITLE_FIXES = ((0x2808aa5e, '5a46', '0022'),)    # the strips' name line alignment: mov r2, fp (0 there) -> movs r2, #0
-
-# A fourth folder: the browser's folder list shows three rows, but keeps its cursor row (state
-# +0x27) below the folder count, not below 3 (no stock category has a fourth folder). On NAM the
-# row became 3, off the screen, and the rows above it drew "Stereo, Stereo, Legacy". The row's
-# three writers keep it at most 2: the scroll down's bound, and the two that set it to the
-# folder's index (opening the browser; entering the block's own category) through a 10-byte
-# helper storing min(index, 2), in the last category's unused fourth folder name (2 folders).
-ROW_DOWN, ROW_DOWN_STOCK, ROW_DOWN_NEW = 0x2809f172, '013b', '0223'    # subs r3, #1 -> movs r3, #2
-ROW_SETS, ROW_SET_STOCK = (0x2809f5c0, 0x2809fb22), '84f82730'      # strb.w r3, [r4, #39]
-ROW_HELPER = SUBCAT_NAMES + 104 * 12 + 26 * 3                       # 0x28100a16
-ROW_HELPER_CODE = '23ea5303' '84f82730' '7047'                      # bic.w r3, r3, r3, lsr #1; strb.w; bx lr
+    '13f8282c0b2a0bd003b4ddf82500062d18bf002040f22b21884208bf0b2203bc704713f8283c0b2b0cd003b4ddf8e50040f22b21'
+    '884204d1abf10600022800d80b2303bc704707b4ddf8e90040f22b218842ddf83d0012d1c20d0dd07f3a0ad4172a09dcc0f3160141'
+    'f40001c2f1170221fa02f000e00020411e7f2902d8054607bc704707bc4ff00005b5f722ba')
+# (site, its stock 4 bytes, the helper's offset in CAVE_CODE): the turned knob's category,
+# the drawn knob's category, the drawn knob's value
+TITLE_SITES = ((0x2809ee64, '13f8282c', 0x00), (0x2807ac66, '13f8283c', 0x22), (0x2807aca8, 'ddf83150', 0x46))
 
 # The ten knobs, resolved on the HX Stomp from patch_amp.py's EQ_FX_PARAMS (this application
 # has no amps to copy them from): slot, pid, source name, type, state, min, max, default, meta
@@ -255,23 +230,8 @@ def entry0(e0, info, nam):
     struct.pack_into('<IIiH', item, 0, btype, DONOR_NI, -1, DONOR_PID)
     item[14:40] = DISPLAY.encode('latin1')[:25].ljust(26, b'\0')
     struct.pack_into('<2I', item, 40, 1, 0)
-    keep = [it for it, n in zip(its, names) if n != DONOR_NI]
-    wr(lp, b''.join(keep) + bytes(item))
-    wr(BLIST_CNT_TAB + 4 * CAT_DIST, struct.pack('<I', len(keep)))
-    sub = u32(SUBCAT_CNT + 4 * CAT_DIST)
-    slot = 4 * CAT_DIST + sub
-    assert sub == 3 and not u32(BLIST_PTR_TAB + 4 * slot) and not any(rd(SUBCAT_NAMES + 104 * CAT_DIST + 26 * sub, 26))
-    wr(SUBCAT_CNT + 4 * CAT_DIST, struct.pack('<I', sub + 1))
-    wr(SUBCAT_NAMES + 104 * CAT_DIST + 26 * sub, FOLDER.encode('latin1').ljust(26, b'\0'))
-    wr(BLIST_PTR_TAB + 4 * slot, struct.pack('<I', lp + 48 * len(keep)))
-    wr(BLIST_CNT_TAB + 4 * slot, struct.pack('<I', 1))
-    assert rd(ROW_DOWN, 2).hex() == ROW_DOWN_STOCK, 'folder scroll-down bound'
-    assert all(rd(a, 4).hex() == ROW_SET_STOCK for a in ROW_SETS), 'folder row writers'
-    assert not any(rd(ROW_HELPER, 26)) and u32(SUBCAT_CNT + 4 * 12) == 2, 'last category fourth name'
-    wr(ROW_DOWN, bytes.fromhex(ROW_DOWN_NEW))
-    wr(ROW_HELPER, bytes.fromhex(ROW_HELPER_CODE))
-    for a in ROW_SETS:
-        wr(a, _bl(a, ROW_HELPER))
+    donor_idx = names.index(DONOR_NI)
+    wr(lp + 48 * donor_idx, bytes(item))
     # the title: Table 2's tail moved, its count 761, the helpers in the freed bytes, the sites
     listed = {r[0] for r in t1}
     trows = [rd(TAB2_BASE + 44 * k, 44) for k in range(TAB2_CNT)]
@@ -286,9 +246,6 @@ def entry0(e0, info, nam):
     for site, stock, off in TITLE_SITES:
         assert rd(site, 4) == bytes.fromhex(stock), f'title site {site:#x}'
         wr(site, _bl(site, CAVE + off))
-    for site, stock, new in TITLE_FIXES:
-        assert rd(site, 2) == bytes.fromhex(stock), f'title fix {site:#x}'
-        wr(site, bytes.fromhex(new))
     return bytes(l6ia.fix_internal_crcs(bytes(e0)))
 
 
@@ -303,7 +260,7 @@ def build_base(l6ia_bytes):
     new_e3 = entry3(e3, blob, nam)
     print(f'[+] Entry 3: model {DONOR_ID} ({DONOR}) carries {DISPLAY}: {len(nam)} parameters')
     new_e0 = entry0(kp.get_entry_swapped(l6ia_bytes, 0), info, nam)
-    print(f'[+] Entry 0: preset ID {DONOR_PID}, DSP cost {DSP_COST}, Distortion > {FOLDER}, the IR-name title on Model')
+    print(f'[+] Entry 0: preset ID {DONOR_PID}, DSP cost {DSP_COST}, Distortion > Mono, the IR-name title on Model')
     e = l6ia.parse(l6ia_bytes)[2]
     new_e2 = entry2(l6ia_bytes[e['payload_off']: e['payload_off'] + e['payload_len']])
     print(f'[+] Entry 2: Blob 0 buffer {BLOB0_WORDS:#x} -> {BLOB0_MAX:#x} words, Heap 6 moved')

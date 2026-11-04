@@ -10,7 +10,7 @@ This repository adds **Neural Amp Modeler (NAM) A2 Lite** to the stock Line 6 fi
 |---|---|---|---|
 | **HX Stomp** | `HX_Stomp_v3.80.0_0x103966115.hxf`<br>`a2cd8f4ae56f49415380270ebc484bf1` | Amp → NAM | **Runs.** This build ran on an HX Stomp from RAM: the on-device test suite passed (48 cases: one to three NAM blocks, both paths, every stock effect category beside NAM, model and preset changes) and every band of the tone stack was measured on the unit. |
 | **HX Stomp XL** | `HX_Stomp_XL_v3.80.0_0x103966115.hxf`<br>`329e3a26d60d3de1988b6785fa833ee1` | Amp → NAM | **NAM runs on an XL** (photo below). This ten-knob build has not run on an XL yet; its DSP program, model list and DSP graphs are byte for byte the HX Stomp's. |
-| **HX Effects** | `HX_Effects_v3.80.0_0xd97239907.hxf`<br>`7c2ebdf1bffb6bcc5f89dda97f91e40c` | Distortion → NAM | The previous build ran on an HX Effects (an owner); this one, with three display fixes, has not run on one yet. See [HX Effects](#hx-effects). |
+| **HX Effects** | `HX_Effects_v3.80.0_0xd97239907.hxf`<br>`7c2ebdf1bffb6bcc5f89dda97f91e40c` | Distortion → Mono | **Runs.** An owner ran it on an HX Effects, with the browser and knob pop-up fixes. See [HX Effects](#hx-effects). |
 
 Not the Helix Floor, LT or Rack: their firmware is a different design. Only firmware 3.80.0: the build refuses any other file.
 
@@ -30,7 +30,7 @@ Watch it on YouTube: https://www.youtube.com/watch?v=zQzj0qahJ6E
 
 - **A tone stack after the model, ten knobs.** Bass (a 150 Hz shelf), Mid (a band you sweep from 150 Hz to 3 kHz, with Q 0.7, 1.4 or 2.8), Treble (a 2.5 kHz band) and High Cut (a low-pass). Each band is ±12 dB, flat at 5.0.
 - **Knobs in live order.** Page 1 is Input, Treble, Output: the gain, tone and level you reach for on stage.
-- **HX Effects support** (Distortion → NAM; the previous build ran on an HX Effects).
+- **HX Effects support** (Distortion → Mono; runs on an HX Effects).
 - **HX Edit keeps NAM blocks.** NAM A2 Lite takes the place of a stock model HX Edit knows, now **Xenomorph Fuzz Mono**, with its knobs laid out like that model's, so HX Edit keeps the blocks and their settings when it rewrites a preset. HX Edit shows the block as "Xenomorph Fuzz". **MM4 Frequency Shifter**, which the four-knob build replaced, is back.
 - All NAM blocks count as effects: the two-amp limit doesn't apply to them.
 
@@ -38,7 +38,7 @@ Watch it on YouTube: https://www.youtube.com/watch?v=zQzj0qahJ6E
 
 ## What you get
 
-- **NAM A2 Lite** under **Amp → NAM** (HX Effects: **Distortion → NAM**), with ten knobs, in this order (the HX Stomp shows three a page):
+- **NAM A2 Lite** under **Amp → NAM** (HX Effects: **Distortion → Mono**), with ten knobs, in this order (the HX Stomp shows three a page):
 
   | Page | Knob | What it does |
   |---|---|---|
@@ -112,7 +112,7 @@ The HX Effects build is the same block with that unit's own steps (`patch_amp.py
 The results' MD5s are pinned in `tests/test_firmware.py`:
 - HX Stomp `e6431a5f2ba4d86f1f7f9300506a1101`. That exact file ran on an HX Stomp from RAM and passed the project's on-device test suite; its tone stack was measured on the unit with a fixed test signal (Mid at +12 dB read +11.8 to +12.0 dB at 150 Hz, 220 Hz and 1.8 kHz, −12.0 dB at −12; Treble +11.9 dB at 2.5 kHz; High Cut at 0.0 −3.4 dB at 2 kHz), and checked by ear, sweeping Mid Freq and High Cut while playing.
 - HX Stomp XL `a53e185be36fb4e8feedb5f2b89a1505` (not run on an XL).
-- HX Effects `ae2ef6c1c8ea27cfbe58698a65f3b6f7` (not run on an HX Effects; the previous build, `3bf0bd8e`, ran on one).
+- HX Effects `3a5b47d995c4af2319690bb4a6e8bd2f` (ran on an HX Effects).
 
 Only 4 of the 15 parts of the firmware change: the main application (its model tables and the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
@@ -144,10 +144,10 @@ The XL's firmware 3.80.0 is the Stomp's with another build of the main applicati
 
 ### HX Effects
 
-**The previous build (`3bf0bd8e`) ran on an HX Effects** (an owner). This one fixes three display issues that owner found (the browser's Distortion → NAM folder, the capture's name in the knob pop-up and on the scribble strips) and has not run on one yet. It is the same block and kernel, checked the same way in the simulator; what differs is how it is put into that unit's application (`tools/effects.py`):
-- The HX Effects application refuses a model it doesn't already know, so NAM A2 Lite takes **Xenomorph Fuzz Mono**'s place in its tables (preset ID 555, as on the Stomp) instead of being added. It is listed under **Distortion → NAM**: the HX Effects has no Amp category.
+**Runs on an HX Effects** (an owner, who also fixed the browser listing and the knob pop-up: thank you, Jerry Chuang). It is the same block and kernel, checked the same way in the simulator; what differs is how it is put into that unit's application (`tools/effects.py`):
+- The HX Effects application refuses a model it doesn't already know, so NAM A2 Lite takes **Xenomorph Fuzz Mono**'s place in its tables (preset ID 555, as on the Stomp) instead of being added. It is listed under **Distortion → Mono**, in Xenomorph Fuzz Mono's place: the HX Effects has no Amp category, and its browser shows at most three folders a category.
 - The kernel reads the User IRs from where the HX Effects keeps them (`nam_multi.py --effects`).
-- **The capture's name** shows on the Model knob's own line ("Model: name") in the knob pop-up when you turn Model, on the scribble strips and in the one-parameter view, as the HX Effects does for an IR block.
+- **The capture's name** shows on the Model knob's own line ("Model: name") in the knob pop-up when you turn Model, as the HX Effects does for an IR block; Mid Freq and Q, on the same page, step aside while it shows. The scribble strips and the one-parameter view show Model's number.
 - No run from RAM: the RAM loader is the HX Stomp's.
 - **Recovery:** hold the right arrow (**>**) while powering on for fail-safe update mode, then install the stock `HX_Effects_v3.80.0_0xd97239907.hxf` with Line 6 Updater (Choose File).
 
@@ -163,7 +163,7 @@ HX Effects support builds on **Scott's HX Effects port, [scottlynn73/hx-effects-
 
    **Input level.** If the capture records its interface's level (`input_level_dbu` in the `.nam` metadata), the converter stores it in the `.wav`, and the web page shows it as a "captured at … dBu" chip. The amp then trims its input by `11.5 − input_level_dbu` dB, so that at Input 5.0 the Stomp's input drives the model the way the capture's interface did. 11.5 dBu is the Stomp's input at 0 dBFS as users have measured it (one unit read 15.1). It is a constant in the firmware (`STOMP_DBU` in `tools/sharc/nam_lite.py`), so a better figure needs only a firmware rebuild, not new `.wav` files. `--no-level` leaves the level out. Captures without the level, and `.wav` files from older converters, play untrimmed.
 2. In HX Edit, import the `.wav` into a User IR slot, for example slot 5.
-3. On the unit, add **Amp → NAM → NAM A2 Lite** (HX Effects: **Distortion → NAM**) and set **Model** (page 3) to 5. For a second capture, import it into another slot and add a second NAM A2 Lite block set to that slot.
+3. On the unit, add **Amp → NAM → NAM A2 Lite** (HX Effects: **Distortion → Mono**) and set **Model** (page 3) to 5. For a second capture, import it into another slot and add a second NAM A2 Lite block set to that slot.
 
 Notes:
 - The Model knob shows slot numbers. The block's title shows the name of the IR in that slot (the name HX Edit gave it).
@@ -200,7 +200,7 @@ This has been done on a real unit after a modified firmware hung at the splash, 
 - **The title.** The application shows an IR's name in the block title only for IR blocks. `patch_amp.py ir-title` turns the two places that test for an IR block into jumps to a few added instructions that also take that path for NAM A2 Lite's preset ID. It changes what the screen shows only: the parameter, its DSP value and presets are as before.
 - **HX Edit.** HX Edit keeps its own copy of the preset, built with its own model list, and for some edits writes that copy back whole: a block of a model it doesn't know is left out. `patch_amp.py remove-model` frees a stock model's preset ID (Xenomorph Fuzz Mono, 555; its code stays, nothing selects it), and `add-fx-model --knobs eq` puts NAM there with its ten knobs in that model's order of value types (HX Edit writes each value in its own model's type and range, and the unit drops a whole preset holding a value of another type). Model is a float knob from 0 to 1000, which the unit steps one slot a click; the kernel truncates it. `move-folder` lists the effect under Amp → NAM, and `ir-title --knob 6` reads the title's IR from that float knob.
 - **The tone stack.** After the model, four biquads in 32-bit float: Bass, Treble and High Cut take their coefficients from tables (101 steps a knob); the Mid band's are computed on the DSP when Mid, Mid Freq or Q moves (sine and cosine by series, a reciprocal by Newton steps), so the sweep is continuous. The simulator check runs them op for op against a Python model of the same arithmetic.
-- **The HX Effects.** `tools/effects.py`: NAM takes Xenomorph Fuzz Mono's place in the application's tables in place, as that application refuses new models. The name-on-knob display is patched at nine instructions, each turned into a call to a few added instructions, which sit in room freed inside a model table the application reads only by name (its zero-initialised memory starts right after its code, so nothing can be appended). The browser's folder list shows three rows and no stock category has a fourth folder, as Distortion → NAM is, so its cursor is kept on those three rows (three instructions, with a 10-byte helper in an unused folder name).
+- **The HX Effects.** `tools/effects.py`: NAM takes Xenomorph Fuzz Mono's place in the application's tables in place, as that application refuses new models, including its place in the browser's Distortion → Mono list. The name-on-knob display is patched at three instructions, each turned into a call to a few added instructions, which sit in room freed inside a model table the application reads only by name (its zero-initialised memory starts right after its code, so nothing can be appended).
 - **The amp.** `tools/patch_amp.py` builds the amp's DSP graph, parameter map and menu entries. A parameter count has to agree in three places (the model table, the graph's parameter map and the menu's info row), or the Stomp shows the wrong name or crashes.
 - **The container.** `tools/hxf.py` and `tools/l6ia.py` read and write the `.hxf` container and the archive inside it. These use checksums only; there is no encryption or signature.
 
