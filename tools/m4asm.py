@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""m4asm.py - assemble a position-independent Thumb-2 .s file (Apple's Command Line Tools clang) and print its .text as hex.
-tools/patch_menu.py assembles a feature's .s itself at build time (Patch.module), with its symbols."""
+"""m4asm.py - assemble a position-independent Thumb-2 .s file (Apple's Command Line Tools clang) and print its .text as hex."""
 import struct
 import subprocess
 import sys

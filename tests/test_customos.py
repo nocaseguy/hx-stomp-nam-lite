@@ -165,8 +165,7 @@ def test_m4asm_refuses_relocations(tmp_path):
 
 @pytest.mark.firmware
 def test_a_feature_with_settings_and_a_shared_hook_builds():
-    """On the stock firmware: the tuner plus a feature with a 0..4 setting (limits code in its label slot) and a 0..1 one on a
-    second page, chaining the Home view's paint function."""
+    """The tuner plus a feature with a 0..4 and a 0..1 setting on a second page, chaining the Home view's paint function."""
     stock = os.environ.get('HX_STOMP_HXF')
     if not stock:
         pytest.skip('HX_STOMP_HXF is not set')

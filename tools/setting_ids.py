@@ -23,9 +23,7 @@ def by_name():
 
 
 def free(l6ia_bytes):
-    """[(ID, has the stock 0..1 limits entry)] of the IDs in the settings reader's main store with empty labels in both tables, not in
-    IDS. Candidates only: check that no stock code reads one (a `movs r0,#id` before a settings call) before claiming it; an ID
-    whose stock limits are something else may be a hidden stock setting."""
+    """[(ID, has the stock 0..1 limits)] of empty-label main-store IDs not in IDS: candidates, until no stock reader is found."""
     import patch_amp as pa
     import patch_menu as pm
     e0 = pa.get_entry_swapped(l6ia_bytes, 0)

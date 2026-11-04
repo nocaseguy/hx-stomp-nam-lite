@@ -157,16 +157,19 @@ def dispatch_cave(at, site, table):
 
 
 def text_cave(at, tables):
-    """Runs the two instructions the hook replaced, then answers our IDs with their value strings and leaves other IDs to stock."""
+    """Runs the two instructions the hook replaced, then answers our IDs (ID -> (strings, max, default)) and leaves others to stock."""
     a = Asm(at)
     a.raw(bytes.fromhex('30b5 85b0'))       # push {r4,r5,lr}; sub sp,#0x14
     for pid in tables:
         a.h(cmp_imm(0, pid))
         a.b16('eq', f'id{pid}')
     a.bw(TEXT_FN_CONT)
-    for pid, table in tables.items():
+    for pid, (table, max_, default) in tables.items():
         a.label(f'id{pid}')
-        a.h(0x684c)                         # ldr r4,[r1,#4]: the value
+        a.h(0x684c, cmp_imm(4, max_))       # ldr r4,[r1,#4]: the value; cmp r4,#max
+        a.b16('ls', f'in{pid}')
+        a.h(0x2400 | default)               # movs r4,#default
+        a.label(f'in{pid}')
         a.movw_movt(1, table)
         a.b16('b', 'common')
     a.label('common')
@@ -178,8 +181,7 @@ def text_cave(at, tables):
 
 
 def chain_cave(at, original, before, after):
-    """Calls each before handler, the original, then each after handler, all with the hook's r0-r3; returns the original's r0 and r1.
-    The hooked function must take its arguments in r0-r3 only: the stub's own frame sits where stack arguments would be."""
+    """Before handlers, the original, after handlers, each with the hook's r0-r3 (no stack arguments); returns the original's r0, r1."""
     a = Asm(at)
     a.h(0xb57f)                             # push {r0-r6,lr}: the arguments, r4 and r5 for the result, r6 to keep 8-byte alignment
     for h in before:
@@ -432,7 +434,7 @@ def menu_entry0(e0, mods=None, env=os.environ, ids=None):
         for lit in lits:
             p.put(lit, struct.pack('<I', array_va), f'the category array {key}')
     table_va = p.add(b''.join(struct.pack('<H', pid) for pid, _ in settings))
-    values = {pid: p.add(b''.join(padded(v) for v in s.values)) for pid, s in settings if s is not None}
+    values = {pid: (p.add(b''.join(padded(v) for v in s.values)), s.max, s.default) for pid, s in settings if s is not None}
 
     p.put(NAV_CMP, b'\x06\x2b', 'the category navigation')
     p.put(NAV_WRAP, b'\x06\x21', 'the category navigation')
