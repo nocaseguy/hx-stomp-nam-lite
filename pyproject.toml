@@ -5,4 +5,5 @@ addopts = "-ra --strict-markers"
 markers = [
     "slow: runs the kernel in the SHARC simulator (~20 s)",
     "firmware: needs a stock 3.80.0 .hxf (set HX_STOMP_HXF and/or HX_STOMP_XL_HXF)",
+    "nam: upstream NAM A2 Lite tests, skipped unless -m names nam (pytest -m nam)",
 ]

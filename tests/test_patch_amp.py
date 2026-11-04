@@ -3,6 +3,8 @@ import pytest
 
 import patch_amp
 
+pytestmark = pytest.mark.nam   # upstream NAM A2 Lite: skipped unless -m names nam (conftest.py)
+
 
 @pytest.mark.parametrize("rd, imm", [(0, 0), (3, 0x1234), (15, 0xFFFF), (7, 0x0800)])
 def test_thumb_movw_round_trip(rd, imm):
