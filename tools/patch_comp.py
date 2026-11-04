@@ -4,7 +4,8 @@
 Each model in COMP_MODELS gets three more parameters after its own, in the three places that must agree:
   Entry 3: the parameter records, their state records and the strings they name (the string section grows in place).
   Entry 4: the model's blob gets one parameter-map input node per knob, a default for each on the root, and a writer
-           handing it to the compressor core as pid 100, 101, 102, which the DSP wrapper's control function keeps.
+           handing it to the compressor core as pid 100, 101, 102, which the DSP wrapper's control function keeps;
+           and for each core an init record, pid 103, saying whether its output overwrites its first input or its second.
   Entry 0: the model's row in the UI Model Info Table counts the new parameters.
 Run it after every step that adds models (add-model, add-fx-model): those rebuild Entry 3's and Entry 4's tails
 from the models they added and would drop what this writes there.
@@ -18,6 +19,7 @@ import patch_amp as pa
 COMP_MODELS = (   # (model, its compressor core's primitive: src/sharc/frame_probe.asm wraps each of these)
     ('HD2_CompressorDeluxeCompMono', 0x271a), ('HD2_CompressorDeluxeCompStereo', 0x271a),
     ('HD2_CompressorLAStudioCompMono', 0x2719), ('HD2_CompressorLAStudioCompStereo', 0x2719),
+    ('HD2_CompressorKinkyCompMono', 0x2710), ('HD2_CompressorKinkyCompStereo', 0x2710),
 )
 GR_KNOBS = (   # (name, displayName, displayNameShort, value labels, default): integer lists, as Ratio
     ('GRPosition', 'Mtr Position', 'Mtr Pos', ('Middle', 'Top', 'Left', 'Bottom', 'Right'), 0),
@@ -160,14 +162,24 @@ def pmap_sizes(pm):
     return [sum(n[5] for n in nodes), nA, nD + sum(n[4] for n in nodes) + inputs, nC + nD + inputs, nD, nE]
 
 
-def core_path(b, pm, nodes, b0, prim):
-    """The path word of the first writer to a member running primitive `prim`: the compressor core."""
+def core_paths(b, pm, nodes, b0, prim):
+    """(path word, output-is-first-input) of each member running primitive `prim`, the compressor cores, by the path
+    words of the writers to them; the first is the GR knobs' target. The blob's node tree may override a member's
+    primitive (the Kinky Comp's core is 0x2710 there, 0x2719 in the composite) [verified on unit]."""
     members = pa.entry4_blob.parse_composite(b0, pa.entry4_blob.top_type(b))['members']
+    types = [m['type_id'] for m in members]
+    for slot, t, _, _ in list(pa.entry4_blob.nodes(b))[1:]:
+        if t != 0xffffffff:
+            types[slot - 1] = t
+    out = {}
     for nd in nodes:
         path = pm[nd[0]] if nd[3] == 1 else None
-        if path is not None and b[path] == 1 and members[b[path + 1] - 1]['type_id'] == prim:
-            return path
-    raise SystemExit(f'no writer to a member running primitive {prim:#x}')
+        if path is not None and b[path] == 1 and types[b[path + 1] - 1] == prim:
+            m = members[b[path + 1] - 1]
+            out.setdefault(b[path + 1], (path, int(b0[m['out_off']] == b0[m['in_off']])))
+    if len(out) != types.count(prim):
+        raise SystemExit(f'{types.count(prim)} members run primitive {prim:#x}, {len(out)} have a writer')
+    return list(out.values())
 
 
 def blob_add_knobs(b, first_slot, b0, prim):
@@ -191,7 +203,8 @@ def blob_add_knobs(b, first_slot, b0, prim):
     root = root.pop()
     c, nC = pm[4], pm[20]
     ct = [pm[c + 4 * k: c + 4 * k + 4] for k in range(nC)]
-    path = core_path(b, pm, nodes, b0, prim)
+    cores = core_paths(b, pm, nodes, b0, prim)
+    path = cores[0][0]
     n = len(GR_KNOBS)
     data = len(pm)                                  # the writers' data {path, pid, 1}, after the old tables
     pm += [w for k in range(n) for w in (path, GR_PID + k, 1)]
@@ -218,11 +231,14 @@ def blob_add_knobs(b, first_slot, b0, prim):
     new_po = len(out)
     out += pm
     new_pin = len(out)
-    vals = new_pin + 4 * (npin + n) + 2 * (nini + 2 * n) + 2 * nsub
+    nc = len(cores)                                 # one init record per core: which input its output overwrites
+    vals = new_pin + 4 * (npin + n + nc) + 2 * (nini + 2 * n + nc) + 2 * nsub
     for r in pins:
         out += r
     for k, (_, _, _, _, dflt) in enumerate(GR_KNOBS):
         out += [root, first_slot + k, vals + 2 * k, 1]
+    for k, (p, _) in enumerate(cores):
+        out += [p, GR_PID + n, vals + 2 * (n + k), 1]
     new_ini = len(out)
     for k in range(nini):
         t, off = b[ini + 2 * k: ini + 2 * k + 2]
@@ -235,7 +251,7 @@ def blob_add_knobs(b, first_slot, b0, prim):
         out += [t, off]
     for k in range(n):
         out += [1, new_po + data + 3 * k]
-    for k in range(n):
+    for k in range(n + nc):
         out += [1, new_pin + 4 * (npin + k)]
     new_sub = len(out)
     out += b[sub: sub + 2 * nsub]
@@ -243,8 +259,10 @@ def blob_add_knobs(b, first_slot, b0, prim):
     assert len(out) == vals
     for _, _, _, _, dflt in GR_KNOBS:
         out += [1, dflt]
-    out[4], out[5], out[6], out[7] = new_ini, nini + 2 * n, new_po, len(pm)
-    out[8], out[10], out[11] = new_sub, new_pin, npin + n
+    for _, first_in in cores:
+        out += [1, first_in]
+    out[4], out[5], out[6], out[7] = new_ini, nini + 2 * n + nc, new_po, len(pm)
+    out[8], out[10], out[11] = new_sub, new_pin, npin + n + nc
     return out
 
 

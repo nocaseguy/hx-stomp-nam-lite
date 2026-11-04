@@ -20,10 +20,13 @@
 .equ SCAN_C,  0x200000
 .equ SCAN_D,  0x330000
 .equ ORIG,    0x8d9c9                  // the stock process code of primitive 0x271a (Deluxe Comp)
-.equ ORIG_2719, 0x8d342                 // and of 0x2719 (LA Studio Comp)
+.equ ORIG_2719, 0x8d342                 // and of 0x2719 (LA Studio Comp) and 0x2710 (Kinky Comp), which share it
 .equ SLICE,   256                       // words looked at per call
 .equ ORIG_CTRL_271A, 0x6100bd          // the stock control functions (compiled C, VISA code in DDR2)
 .equ ORIG_CTRL_2719, 0x60cc71
+.equ ORIG_CTRL_2710, 0x60cf8e
+.equ ORI_N,   16
+.equ KK_N,    16
 .equ GR_PID,  100                       // patch_comp.py's GR Position, Direction and Thickness writers: pids 100..102, past every core's own
 .equ GR_TAG,  0x6B000000
 .equ WINDOW,  64                        // blocks per window peak: longer than a cycle of a low E; 1024 samples, as the Release power assumes
@@ -39,13 +42,19 @@ FP_WN:    .space 1
 FP_WC:    .space 1                      // windows so far
 FP_LOG:   .space 53                     // what goes to words 200..252
 FP_LIST:  .space 96                     // candidate addresses + 1
-FP_KIND:  .space 1                      // the core being run: 0 Deluxe Comp (0x271a), 1 LA Studio Comp (0x2719)
+FP_KIND:  .space 1                      // the core being run: 0 Deluxe Comp (0x271a), 1 LA Studio Comp (0x2719), 2 Kinky Comp (0x2710)
 FP_R0:    .space 1
+FP_I8:    .space 1                      // I8 as called: the core's pm words
+ORI_TAB:  .space 16                     // the state (I0) of each core whose output is its first input I1; both inputs change in the call [verified on unit]
 LA_ATT:   .word 0x3F7CABBA                // the meter's fixed Attack and Release for the LA Studio Comp (10 ms, 500 ms), as per-sample coefficients
 LA_REL:   .word 0x3F7FEED8
-GR_K:     .space 3                      // the GR knobs as the control function last got them
-GR_SEEN:  .space 1
 GR_PACK:  .space 1
+GR_CORE:  .space 1                      // the state (I0) of the core the meter shows: the last whose Mtr Thk was set above 0
+GR_MISS:  .space 1                      // other cores' calls since it last ran: past 64 it is gone (another preset)
+KN_TAB:   .space 65                     // per core: its state, then its Mtr Pos, Dir and Thk; then the next entry to replace
+KK_TAB:   .space 65                     // per 0x2710 core: its state, its Attack and Release as the meter's coefficients, 0; then the next
+FC_R3:    .space 1
+FS_BASE:  .space 1
 
 .section pm 0x0c4ef8
 CUSTOM_AMP_ENTRY:
@@ -56,9 +65,14 @@ ENTRY_271A:
 ENTRY_2719:
     DM(FP_R0) = R0;
     R0 = 1;
+    JUMP fp_entry;
+ENTRY_2710:
+    DM(FP_R0) = R0;
+    R0 = 2;
 fp_entry:
     DM(FP_KIND) = R0;
     R0 = DM(FP_R0);
+    DM(FP_I8) = I8;
     DM(FP_LOG + 3) = I1;                // as called
     DM(FP_LOG + 4) = I2;
     DM(FP_LOG + 5) = I3;
@@ -110,6 +124,21 @@ fp_ran:
     DM(FP_SAVE + 16) = L6;
     L4 = 0; L5 = 0; L6 = 0;
 
+    R0 = DM(FP_LOG + 6);                // only the metered core is measured: other compressors, the Busy One amps and the Sweep Echo run these cores too
+    R1 = DM(GR_CORE);
+    COMP(R0, R1);
+    IF EQ JUMP fp_mine;
+    R0 = DM(GR_MISS);
+    R1 = 65;
+    COMP(R0, R1);
+    IF GE JUMP fp_pack;
+    R0 = R0 + 1;
+    DM(GR_MISS) = R0;
+    JUMP fp_pack;
+fp_mine:
+    R0 = 0;
+    DM(GR_MISS) = R0;
+
     I4 = DM(FP_LOG + 3);                // and after
     CALL fp_max;
     DM(FP_LOG + 10) = R1;
@@ -125,6 +154,33 @@ fp_ran:
     DM(FP_LOG + 14) = R0;
     R0 = DM(1, I4);
     DM(FP_LOG + 15) = R0;
+    R0 = DM(FP_LOG + 6);                // the output is I2, or I1 for a core in ORI_TAB (patch_comp.py's pid GR_PID + 3)
+    I4 = ORI_TAB;
+    R2 = ORI_N;
+fp_ori:
+    R1 = DM(I4, 1);
+    COMP(R0, R1);
+    IF EQ JUMP fp_out1;
+    R2 = R2 - 1;
+    IF NE JUMP fp_ori;
+    JUMP fp_outb;
+fp_out1:
+    R0 = DM(FP_LOG + 10);
+    DM(FP_LOG + 11) = R0;
+fp_outb:
+    R0 = DM(FP_KIND);
+    R0 = PASS R0;
+    IF NE JUMP fp_peaks;
+    I4 = DM(FP_I8);                     // the Deluxe core's gain, PM(1, I8) [verified offline]: as A = 1 / gain, B = 1, its reduction even on a pick's attack
+    F1 = DM(1, I4);
+    F1 = ABS F1;
+    R0 = 0x358637BD;                    // 1e-6: -120 dB
+    F1 = MAX(F0, F1);
+    F0 = RECIPS F1;
+    DM(FP_LOG + 7) = R0;
+    R0 = 0x3F800000;
+    DM(FP_LOG + 11) = R0;
+fp_peaks:
 
     R0 = DM(FP_LOG + 7);                // window peaks: per-block peaks of input and output are taken at
     R1 = DM(FP_WA);                     // different points of the waveform when the core delays its output
@@ -147,12 +203,8 @@ fp_ran:
     R1 = R1 + 1;
     DM(FP_WC) = R1;
     DM(FP_LOG + 50) = R1;
-    R2 = DM(FP_KIND);
-    R2 = PASS R2;
-    R1 = DM(FP_LOG + 21);               // the comp's Release, a per-sample coefficient: to the power of a window's 1024 samples
-    IF EQ JUMP fp_rel;
-    R1 = DM(LA_REL);
-fp_rel:
+    R2 = 2;                             // the comp's Release, a per-sample coefficient: to the power of a window's 1024 samples
+    CALL fp_coef;
     F1 = F1 * F1;
     F1 = F1 * F1;
     F1 = F1 * F1;
@@ -164,12 +216,8 @@ fp_rel:
     F1 = F1 * F1;
     F1 = F1 * F1;
     DM(FP_LOG + 51) = R1;
-    R2 = DM(FP_KIND);
-    R2 = PASS R2;
-    R1 = DM(FP_LOG + 20);               // the comp's Attack: to the power of half a window, the meter's rise twice its time constant
-    IF EQ JUMP fp_att;
-    R1 = DM(LA_ATT);
-fp_att:
+    R2 = 1;                             // the comp's Attack: to the power of half a window, the meter's rise twice its time constant
+    CALL fp_coef;
     F1 = F1 * F1;
     F1 = F1 * F1;
     F1 = F1 * F1;
@@ -196,27 +244,43 @@ fp_s0: DM(I5, 1) = R0;
       R0 = DM(I4, 1);
 fp_s1: DM(I5, 1) = R0;
 
-    R0 = DM(GR_SEEN);                   // GR_TAG, Position, Direction, Thickness in bytes 3..0; 0 until valid knobs arrive
+fp_pack:
+    R0 = DM(GR_CORE);                   // GR_TAG, Position, Direction, Thickness in bytes 3..0; 0 with no metered core
     R0 = PASS R0;
     IF EQ JUMP fp_bad;
+    R1 = DM(GR_MISS);
+    R2 = 64;
+    COMP(R1, R2);
+    IF GT JUMP fp_bad;
+    I4 = KN_TAB;
+    R2 = 16;
+fp_kn:
+    R1 = DM(0, I4);
+    COMP(R0, R1);
+    IF EQ JUMP fp_knf;
+    MODIFY(I4, 4);
+    R2 = R2 - 1;
+    IF NE JUMP fp_kn;
+    JUMP fp_bad;
+fp_knf:
     R0 = 0;
-    R1 = DM(GR_K + 0);
+    R1 = DM(1, I4);
     R2 = 4;
     CALL gr_inrange;
-    R1 = DM(GR_K + 1);
+    R1 = DM(2, I4);
     R2 = 1;
     CALL gr_inrange;
-    R1 = DM(GR_K + 2);
+    R1 = DM(3, I4);
     R2 = 20;
     CALL gr_inrange;
     R0 = PASS R0;
     IF NE JUMP fp_bad;
-    R0 = DM(GR_K + 0);
+    R0 = DM(1, I4);
     R0 = LSHIFT R0 BY 16;
-    R1 = DM(GR_K + 1);
+    R1 = DM(2, I4);
     R1 = LSHIFT R1 BY 8;
     R0 = R0 OR R1;
-    R1 = DM(GR_K + 2);
+    R1 = DM(3, I4);
     R0 = R0 OR R1;
     R1 = GR_TAG;
     R0 = R0 OR R1;
@@ -438,6 +502,41 @@ gr_bad:
     R0 = 1;
     RTS;
 
+fp_coef:                                // R1 = the core's coefficient R2 (1 Attack, 2 Release): the Deluxe's state, the Kinky's KK_TAB entry, else LA_ATT/LA_REL
+    R1 = FP_LOG + 19;
+    R0 = DM(FP_KIND);
+    R0 = PASS R0;
+    IF EQ JUMP fp_cget;
+    R1 = LA_ATT - 1;
+    R3 = 1;
+    COMP(R0, R3);
+    IF EQ JUMP fp_cget;
+    R0 = DM(FP_LOG + 6);
+    I4 = KK_TAB;
+    R3 = KK_N;
+fp_ck:
+    R1 = DM(0, I4);
+    COMP(R0, R1);
+    IF EQ JUMP fp_cfound;
+    MODIFY(I4, 4);
+    R3 = R3 - 1;
+    IF NE JUMP fp_ck;
+    JUMP fp_cla;
+fp_cfound:
+    R1 = I4;
+    R1 = R1 + R2;
+    I4 = R1;
+    R1 = DM(0, I4);
+    R1 = PASS R1;
+    IF NE RTS;
+fp_cla:
+    R1 = LA_ATT - 1;
+fp_cget:
+    R1 = R1 + R2;
+    I4 = R1;
+    R1 = DM(0, I4);
+    RTS;
+
 fp_max:                                 // R1 = the largest |sample| of the 16 words at I4
     R1 = 0;
     LCNTR = 16, DO fp_mx UNTIL LCE;
@@ -453,7 +552,7 @@ CTRL_271A:
     R1 = GR_PID;
     COMP(R2, R1);
     IF LT JUMP ORIG_CTRL_271A;
-    R1 = GR_PID + 2;
+    R1 = GR_PID + 3;
     COMP(R2, R1);
     IF GT JUMP ORIG_CTRL_271A;
     JUMP fc_take;
@@ -462,25 +561,173 @@ CTRL_2719:
     R1 = GR_PID;
     COMP(R2, R1);
     IF LT JUMP ORIG_CTRL_2719;
-    R1 = GR_PID + 2;
+    R1 = GR_PID + 3;
     COMP(R2, R1);
     IF GT JUMP ORIG_CTRL_2719;
+    JUMP fc_take;
+CTRL_2710:
+    R2 = R4;
+    R1 = 2;
+    COMP(R2, R1);
+    IF EQ JUMP fc_kk;
+    R1 = 3;
+    COMP(R2, R1);
+    IF EQ JUMP fc_kk;
+    R1 = GR_PID;
+    COMP(R2, R1);
+    IF LT JUMP ORIG_CTRL_2710;
+    R1 = GR_PID + 3;
+    COMP(R2, R1);
+    IF GT JUMP ORIG_CTRL_2710;
 fc_take:
     I4 = R8;
-    R0 = DM(0, I4);
-    R1 = 0x1000;
-    COMP(R0, R1);
+    R1 = DM(0, I4);
+    R2 = 0x1000;
+    COMP(R1, R2);
     IF LT JUMP fc_int;                  // an integer as the input node has it, else a float
-    R0 = FIX F0;
+    R1 = FIX F1;
 fc_int:
-    R1 = GR_PID;
-    R2 = R2 - R1;
-    I4 = GR_K;
+    R2 = GR_PID + 3;
+    COMP(R4, R2);
+    IF EQ JUMP fc_ori;
+    DM(FC_R3) = R3;
+    I4 = R12;
+    R0 = DM(0, I4);
+    I4 = KN_TAB;
+    CALL fc_slot;
+    R2 = GR_PID - 1;
+    R2 = R4 - R2;
     M4 = R2;
-    DM(M4, I4) = R0;
-    R0 = 1;
-    DM(GR_SEEN) = R0;
+    DM(M4, I4) = R1;
+    R2 = GR_PID + 2;
+    COMP(R4, R2);
+    IF NE JUMP fc_kn1;
+    R1 = PASS R1;
+    IF EQ JUMP fc_koff;
+    DM(GR_CORE) = R0;
+    JUMP fc_kn1;
+fc_koff:                                // the metered core's Mtr Thk to 0: the meter goes to another core with one above 0, if any
+    R2 = DM(GR_CORE);
+    COMP(R2, R0);
+    IF NE JUMP fc_kn1;
+    I4 = KN_TAB;
+    R3 = 16;
+fc_ka:
+    R2 = DM(3, I4);
+    R2 = PASS R2;
+    IF NE JUMP fc_kb;
+    MODIFY(I4, 4);
+    R3 = R3 - 1;
+    IF NE JUMP fc_ka;
+    JUMP fc_kn1;
+fc_kb:
+    R2 = DM(0, I4);
+    DM(GR_CORE) = R2;
+fc_kn1:
+    R3 = DM(FC_R3);
+fc_ret:
     I12 = DM(M7, I6);
     JUMP (M14, I12) (DB);
     NOP;
     RFRAME;
+
+fc_ori:                                 // pid GR_PID + 3: 1 puts this core's state (R12's first word) in ORI_TAB, 0 takes it out
+    R0 = R1;
+    I4 = R12;
+    R1 = DM(0, I4);
+    I4 = ORI_TAB;
+    R2 = ORI_N;
+fc_o1:
+    R4 = DM(0, I4);
+    COMP(R4, R1);
+    IF NE JUMP fc_o2;
+    R4 = 0;
+    DM(0, I4) = R4;
+fc_o2:
+    MODIFY(I4, 1);
+    R2 = R2 - 1;
+    IF NE JUMP fc_o1;
+    R0 = PASS R0;
+    IF EQ JUMP fc_ret;
+    I4 = ORI_TAB;
+    R2 = ORI_N;
+fc_o3:
+    R4 = DM(0, I4);
+    R4 = PASS R4;
+    IF EQ JUMP fc_o4;
+    MODIFY(I4, 1);
+    R2 = R2 - 1;
+    IF NE JUMP fc_o3;
+    JUMP fc_ret;
+fc_o4:
+    DM(0, I4) = R1;
+    JUMP fc_ret;
+
+fc_kk:                                  // the Kinky Comp's Attack (pid 2) and Release (3) in ms, kept for the meter as 1 - 2pi/(48 t), then passed on
+    DM(FC_R3) = R3;
+    I4 = R8;
+    F0 = DM(0, I4);
+    R2 = 0x3F800000;
+    COMP(F0, F2);
+    IF GE JUMP fc_k0;
+    F0 = PASS F2;                       // at least 1 ms, where the coefficient's first-order form still holds
+fc_k0:
+    F1 = RECIPS F0;
+    F3 = F0 * F1;
+    F3 = F2 - F3;
+    F3 = F1 * F3;
+    F1 = F1 + F3;
+    F3 = F0 * F1;
+    F3 = F2 - F3;
+    F3 = F1 * F3;
+    F1 = F1 + F3;
+    R3 = 0x3E060A92;                    // 2pi/48
+    F1 = F1 * F3;
+    F1 = F2 - F1;
+    I4 = R12;
+    R0 = DM(0, I4);
+    I4 = KK_TAB;
+    CALL fc_slot;
+fc_kset:
+    R2 = 1;
+    R2 = R4 - R2;
+    M4 = R2;
+    DM(M4, I4) = R1;
+    R3 = DM(FC_R3);
+    JUMP ORIG_CTRL_2710;
+
+fc_slot:                                // I4 = the entry of state R0 in the 16 x 4-word table at I4, taken and zeroed if new; uses R2, R3
+    DM(FS_BASE) = I4;
+    R3 = 16;
+fs_1:
+    R2 = DM(0, I4);
+    COMP(R2, R0);
+    IF EQ RTS;
+    MODIFY(I4, 4);
+    R3 = R3 - 1;
+    IF NE JUMP fs_1;
+    I4 = DM(FS_BASE);
+    R3 = 16;
+fs_2:
+    R2 = DM(0, I4);
+    R2 = PASS R2;
+    IF EQ JUMP fs_new;
+    MODIFY(I4, 4);
+    R3 = R3 - 1;
+    IF NE JUMP fs_2;
+    I4 = DM(FS_BASE);                   // full: replace entries in turn
+    R2 = DM(64, I4);
+    R3 = R2 + 1;
+    R3 = BCLR R3 BY 4;
+    DM(64, I4) = R3;
+    R2 = LSHIFT R2 BY 2;
+    R3 = DM(FS_BASE);
+    R2 = R2 + R3;
+    I4 = R2;
+fs_new:
+    R2 = 0;
+    DM(1, I4) = R2;
+    DM(2, I4) = R2;
+    DM(3, I4) = R2;
+    DM(0, I4) = R0;
+    RTS;

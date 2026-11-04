@@ -4,8 +4,8 @@
 @ left to right or top to bottom, Reverse the other way). Middle, Top and Bottom are
 @ 30 px lights at a 32 px pitch, Middle on the divider line in place of its four segments; Left and Right are 21 px lights at a 24 px
 @ pitch, clear of the divider, which then stays stock.
-@ The lights are A before over B after in dB, from 64-block window peaks, at 1 2 3 4 6 8 10 14 19 25 dB. The measured gain already
-@ follows the comp's attack and release; the rise is slowed a little more by its Attack, and in silence the lights decay at its Release.
+@ The lights are A over B in dB, from 64-block window peaks (for the Deluxe Comp, A is 1 / the core's own gain), at 1 2 3 4 6 8 10 14
+@ 19 25 dB. The measured gain already follows the comp's attack and release; in silence the lights decay at its Release.
 @ Entry table: +0 the DSP stream's receive callback, +4 the Home view's constructor, +8 its paint function.
 @ Position independent; tools/m4asm.py turns it into the bytes patch_menu.py appends to the code segment.
 @ Integer maths only: the thread has no FPU context of its own.
@@ -89,18 +89,7 @@ wasshown:
     bl grdb
     cmp r2, #0
     blt silent
-    lsls r5, r2, #16
-    ldr r1, [r4, #0]
-    cmp r5, r1
-    bls risen                       @ falling: as measured
-    ldr.w r0, [r7, #1008]           @ word 252: the comp's Attack coefficient over half a window
-    bl q16
-    subs r1, r5, r1                 @ rising: the target less what is left of the gap
-    umull r2, r3, r1, r0
-    lsrs r2, r2, #16
-    orr.w r2, r2, r3, lsl #16
-    subs r5, r5, r2
-risen:
+    lsls r5, r2, #16                @ as measured both ways: the reduction already has the comp's attack and release
     str r5, [r4, #0]
     b grshow
 silent:                             @ nothing to measure: the comp's gain recovers at its Release
