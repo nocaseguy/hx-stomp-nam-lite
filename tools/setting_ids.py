@@ -11,11 +11,30 @@ import sys
 
 IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stock state, and the settings it held in earlier builds)
     (29, 'tuner.activate', 'stock limits are not the 0..1 enum; GR Size (0..10) and GR Position (0..3) in early GR images'),
+    (63, None, 'empty label, no stock read or write found; units hold 100 (its stock limits value), seen on a unit'),
+    (74, None, 'empty label, no stock read or write found; units hold 1 (its stock limits value); a value set on it survived a power-cycle and a stock boot, seen on a unit'),
+    (78, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
+    (101, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
     (102, 'bpm.dot', 'GR Position in the Own-IDs GR image (0..4); BPM Position (0..6) in early BPM images; '
                      'DSP Disp (0..3) in dsp-meter test images'),
     (104, 'tuner.lock', 'GR Direction in the Edge-meter GR image (0..1)'),
+    (105, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (106, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (107, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (108, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (109, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (110, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (111, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (112, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (113, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (114, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (115, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (116, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
+    (120, None, "empty label, no stock read or write found; units hold 1 (its stock limits value), seen on a unit; BPM Beat (0..4) in bpm-display images up to a72c76a, no longer used"),
     (126, 'bpm.color', 'GR Thickness in the Edge-meter and Own-IDs GR images (0..20)'),
     (128, 'bpm.font', 'GR Direction in the Own-IDs GR image (0..1); BPM Font in an older order in early BPM images'),
+    (132, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit; '
+                'BPM Downbeat (0..10) in bpm-display images up to a72c76a'),
 )
 
 
