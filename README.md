@@ -79,6 +79,7 @@ python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf --splash my_picture.jp
 - `--splash` takes any picture macOS can open (PNG, JPEG, HEIC, ...) at any size. The screen is **320x240**; a 320x240 PNG is used exactly as it is, and anything else is converted to it with macOS's `sips`: scaled to cover the screen and cropped at the centre, or with `--splash-fit fit`, scaled to fit inside it on black. Off macOS, give a 320x240 PNG.
 - The loading bar crosses the picture about halfway down, and the text sits on it in the bottom 40 rows, in grey (`0xb1b1b1`), so keep the bottom darkish.
 - `--splash-text` replaces "Firmware 3.80.0" with up to 23 ASCII characters (the fonts have no others).
+- The boot screen is a CustomOS feature (`tools/features/splash.py`). The flags set its inputs `HX_SPLASH`, `HX_SPLASH_FIT` and `HX_SPLASH_TEXT`, which work as environment variables too, as the other features' flags do.
 - `python3 tools/splash_topo.py out.png [--seed N]` draws a neon contour-map picture to start from; `python3 tools/patch_splash.py export firmware.hxf out.png` saves the picture an image has now.
 - The bootloader shows its own copy of the stock picture for a moment at power-on, before the firmware starts; that copy is not changed.
 
