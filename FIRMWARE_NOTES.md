@@ -43,7 +43,9 @@ Goal: a completely custom firmware for the HX Stomp, built in small steps, each 
 - `GET_VALUE` at `0x28e1f844` (call as `0x28e1f845`): `(id, out)`, result at `[out+4]`; the buffer must be at least 8 bytes.
 - Limits code for an int 0..3: `0x28e1ed1c`.
 - `HX_PROBE` reuses IDs 29 and 104 for its knobs and so disables the tuner features. `HX_GR` has no Global Settings: the meter is set by the compressor block's GR knobs. (Earlier GR images used IDs 102, 128 and 126 on a second CustomOS page; the settings reader `0x28e1f844` keeps IDs up to `0x95` in one store, and those three have empty labels, the stock 0..1 limits entry, and no stock reader.)
-- **Pages** [verified offline]: the generic category case reads slot `table[page * 3 + slot]` (halfword IDs, `0x17e` = empty), and the per-category array at `0x28e3b588` holds page counts (stock 3, 4, 2, 1, 4, 1); CustomOS's entry is `len(CAT_PAGES) // 3`.
+- **Pages** [verified offline]: the generic category case reads slot `table[page * 3 + slot]` (halfword IDs, `0x17e` = empty), and the per-category array at `0x28e3b588` holds page counts (stock 3, 4, 2, 1, 4, 1); CustomOS's entry is the number of its pages.
+- **Features** (`tools/features/`, one module each, see its `__init__.py`): a feature declares its `SETTINGS`, its `FLAG` and its hooks (`apply`); `patch_menu.py` gives each enabled feature its own CustomOS pages, writes the labels, limits (0..1: the stock enum entry; anything else: a snippet in the tail of the ID's long label slot, so labels stay short) and value text, and assembles its M4 `.s` at build time (`Patch.module`) with a generated `customos.inc` (`SETTING_<FEATURE>_<KEY>`, `_MAX`, `_DEFAULT`, and `CUSTOMOS_SETTING_GET`, which clamps a stored value to the setting's range). Every write goes through `Patch.put`, which fails on overlap; a place several features hook (the Home paint, the DSP stream callback, a function's start) is shared with `chain_ptr`, `chain_bl` or `chain_entry`, one stub calling every feature's handlers around the stock function.
+- **IDs** (`tools/setting_ids.py`): one line per ID, with its owner and the settings it held in earlier builds (a unit keeps values by ID). Of the main store's empty-label IDs, only 102, 104, 126 and 128 have the stock 0..1 limits entry; `python3 tools/setting_ids.py free <stock .hxf>` lists the empty-label IDs not yet in the file.
 
 ### Home screen and widgets [verified on unit]
 
@@ -105,10 +107,12 @@ Goal: a completely custom firmware for the HX Stomp, built in small steps, each 
 | `build.py` | Whole pipeline. `HX_FRAMEPROBE=1` swaps in `src/sharc/frame_probe.asm` and wraps the compressor cores `0x271a` and `0x2719`. |
 | `tools/l6ia.py`, `tools/l6ia_verify.py`, `tools/hxf.py` | Container parse/rebuild/verify/pack. |
 | `tools/patch_amp.py` | Add models, IR titles, SHARC kernel, `--wrap-prim`. |
-| `tools/patch_menu.py` | Global Settings section and the M4 caves. `HX_PROBE=1` / `HX_GR=1` are experiment modes. |
+| `tools/patch_menu.py` | The CustomOS section and the engine that builds in the features of `tools/features/`. |
+| `tools/features/` | One module a feature: settings, flag, hooks. |
+| `tools/setting_ids.py` | The Global Settings IDs CustomOS uses, one line each; `free` lists candidates. |
 | `tools/patch_divider.py` | Home divider 2 px green. |
 | `tools/patch_comp.py` | GR knobs on compressor models (`HX_GR=1` builds; after add-model and add-fx-model). |
-| `tools/m4asm.py` | Assemble a Thumb-2 `.s` with Apple clang, print hex. |
+| `tools/m4asm.py` | Assemble a Thumb-2 `.s` with Apple clang: its `.text` and symbols; refuses relocations. |
 | `tools/sharc/sasm.py`, `ssim.py` | SHARC assembler and simulator. |
 | `tools/hxf_ram.py`, `tools/ramboot/` | Run an image from RAM over USB. |
 | `src/sharc/frame_probe.asm` | DSP-side wrapper and frame-tail writer (test image). |
