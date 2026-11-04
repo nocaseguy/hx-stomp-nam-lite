@@ -198,16 +198,12 @@ def test_a_feature_with_settings_and_a_shared_hook_builds():
 
 
 def test_stock_uses_finds_reads_writes_and_loops():
-    def code(*parts):
-        return b''.join(parts)
-
     base = 0x28d90000
-    hw_at = lambda b, i: base + 2 * len(b) // 2 * 1
     a = struct.pack('<H', 0x203f) + pm.bl(base + 2, pm.GET_VALUE)                      # movs r0,#63; bl GET_VALUE
     b = struct.pack('<H', 0x2155) + pm.bl(base + len(a) + 2, setting_ids.SETTERS[1])   # movs r1,#85; bl a setter
     c = struct.pack('<4H', 0x2469, 0x2c6c, 0x4620, 0xbf00)                             # movs r4,#105; cmp r4,#108; mov r0,r4; nop
     c += pm.bl(base + len(a) + len(b) + len(c), pm.GET_VALUE)
-    blob = code(a, b, c)
+    blob = a + b + c
     uses = setting_ids.stock_uses(struct.unpack(f'<{len(blob) // 2}H', blob), base, pm.GET_VALUE)
     assert uses[63] == {'read': 1} and uses[85] == {'write': 1}
     assert [pid for pid in range(100, 112) if uses[pid]['loop']] == [105, 106, 107, 108]
