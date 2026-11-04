@@ -51,7 +51,8 @@ def build(e0, extra=(), monkeypatch=None):
         return m
 
     monkeypatch.setattr(pm.Patch, 'module', module)
-    new, on = pm.menu_entry0(e0, features.load() + list(extra), {'HX_BPM': '1'})
+    mods = sorted(features.load() + list(extra), key=lambda f: (getattr(f, 'ORDER', 100), features.name(f)))
+    new, on = pm.menu_entry0(e0, mods, {'HX_BPM': '1'})
     assert 'bpm' in [features.name(m) for m in on]
     return new, seen['src/m4/bpm.s']
 
@@ -113,7 +114,8 @@ def test_hooks_chain_the_handlers(monkeypatch):
 
 @pytest.mark.firmware
 @CLANG
-@pytest.mark.parametrize('site, what', [(bpm.LED_SEND, 'the LED send'), (bpm.TAP_LED_READS[0] - 2, 'a read of Tap Tempo LED'),
+@pytest.mark.parametrize('site, what', [(bpm.LED_SEND, f'the function at {bpm.LED_SEND:#x}'),
+                                        (bpm.TAP_LED_READS[0] - 2, 'a read of Tap Tempo LED'),
                                         (bpm.TAP_CORE, 'the start of the function'), (bpm.LED_TICK_CALL, 'the call')])
 def test_hooks_refuse_bytes_that_are_not_stock(monkeypatch, site, what):
     e0 = bytearray(stock_e0())
@@ -126,7 +128,7 @@ def test_hooks_refuse_bytes_that_are_not_stock(monkeypatch, site, what):
 @pytest.mark.firmware
 @CLANG
 def test_hooks_are_shared_with_other_features(monkeypatch):
-    """Another feature on the Home paint, the Home constructor and the tap core builds; one writing the LED send does not."""
+    """Another feature on the Home paint, the Home constructor and the tap core builds."""
     handler = {}
 
     def other(p):
@@ -135,18 +137,41 @@ def test_hooks_are_shared_with_other_features(monkeypatch):
         p.chain_bl(bpm.HOME_CTOR_CALL, bpm.HOME_CTOR, after=h)
         p.chain_entry(bpm.TAP_CORE, bpm.TAP_CORE_STOCK, before=h)
 
-    def clash(p):
-        p.put(bpm.LED_SEND, b'\0' * 4, 'its own LED hook')
-
-    e0 = stock_e0()
-    new, m = build(e0, [types.SimpleNamespace(__name__='features.other', ORDER=30, apply=other)], monkeypatch)
+    new, m = build(stock_e0(), [types.SimpleNamespace(__name__='features.other', ORDER=30, apply=other)], monkeypatch)
     read = reader(new)
     stub = struct.unpack('<I', read(bpm.HOME_PAINT_LIT, 4))[0] - 1
     want = pm.chain_cave(stub, bpm.HOME_PAINT & ~1, [m['bpm_before'], handler['h']], [m['bpm_after'], handler['h']])
     assert read(stub, len(want)) == want
     assert read(tuner.TAP_SITE, 4) != tuner.TAP_SITE_STOCK, 'the tuner still hooks its call of the tap core'
-    with pytest.raises(SystemExit, match=r'clash \(its own LED hook\) and bpm \(the LED send\) both patch'):
-        build(e0, [types.SimpleNamespace(__name__='features.clash', ORDER=30, apply=clash)], monkeypatch)
+
+
+LED = f'{bpm.LED_SEND:#x}'
+
+
+@pytest.mark.firmware
+@CLANG
+@pytest.mark.parametrize('order, take, error', [
+    (30, lambda p: p.put(bpm.LED_SEND, b'\0' * 4, 'its own LED hook'),
+     rf'clash \(its own LED hook\) and bpm \(the LED send\) both patch {LED}'),
+    (10, lambda p: p.put(bpm.LED_SEND, b'\0' * 4, 'its own LED hook'),
+     rf'bpm \(the start of the function at {LED}\) and clash \(its own LED hook\) both patch {LED}'),
+    (30, lambda p: p.own_entry(bpm.LED_SEND, bpm.LED_SEND_STOCK, 'its own LED hook', p.add(b'\x70\x47')),
+     rf'clash \(its own LED hook\) and bpm \(the LED send\) both own {LED}'),
+    (10, lambda p: p.own_entry(bpm.LED_SEND, bpm.LED_SEND_STOCK, 'its own LED hook', p.add(b'\x70\x47')),
+     rf'bpm \(the LED send\) and clash \(its own LED hook\) both own {LED}'),
+    (30, lambda p: p.chain_entry(bpm.LED_SEND, bpm.LED_SEND_STOCK, before=p.add(b'\x70\x47')),
+     rf'clash chains {LED}, which bpm owns \(the LED send\)'),
+    (30, lambda p: p.chain_bl(bpm.LED_SEND, pm.GET_VALUE, after=p.add(b'\x70\x47')),
+     rf'clash chains {LED}, which bpm owns \(the LED send\)'),
+    (30, lambda p: p.chain_ptr(bpm.LED_SEND, p.u32(bpm.LED_SEND), after=p.add(b'\x70\x47')),
+     rf'clash chains {LED}, which bpm owns \(the LED send\)'),
+    # before BPM, a chain can't even register: the literal load keeps the prologue out of the cave
+    (10, lambda p: p.chain_entry(bpm.LED_SEND, bpm.LED_SEND_STOCK, before=p.add(b'\x70\x47')),
+     'cannot run from the code cave'),
+], ids=['put-after', 'put-before', 'own-after', 'own-before', 'chain_entry', 'chain_bl', 'chain_ptr', 'chain_entry-before'])
+def test_the_led_send_is_bpms_alone(monkeypatch, order, take, error):
+    with pytest.raises(SystemExit, match=error):
+        build(stock_e0(), [types.SimpleNamespace(__name__='features.clash', ORDER=order, apply=take)], monkeypatch)
 
 
 # --- the handlers, run in unicorn ---
