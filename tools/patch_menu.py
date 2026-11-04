@@ -52,7 +52,7 @@ GR_METER = bytes.fromhex(open(os.path.join(os.path.dirname(os.path.abspath(__fil
 RX_CB_LIT, RX_CB_ROM = 0x28da6134, 0x10001095                       # the receive callback of the DSP stream (frames of 256 words)
 HOME_CTOR_CALL, HOME_CTOR = 0x28d96c44, 0x28dc91d0                   # bl to the Home view's constructor at boot
 HOME_PAINT_LIT, HOME_PAINT = 0x28d96e28, 0x28dc8d39                  # the Home view's paint function, as registered
-CAT_PAGES = (TUNER_ID, LOCK_ID, EMPTY_SLOT)   # three slots a page
+CAT_PAGES = (TUNER_ID, LOCK_ID, EMPTY_SLOT)                      # three slots a page
 # Sites that switch on the category with `cmp rN,#5; bhi exit; tbb`: (hook, cat reg, page reg, table reg, tbb, exit, stub).
 # The stub is category 2's generic case entered after its table load: it sets the slot in r4 itself, which some cases leave to the category.
 SITES = {
