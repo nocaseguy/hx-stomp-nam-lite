@@ -104,6 +104,20 @@ The HX Stomp result has MD5 `3670f1662290098c3071e64aa25c88eb` (pinned in `tests
 
 Only 4 of the 15 parts of the firmware change: the main application (its model tables and the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
+### Boot screen (HX Stomp only)
+
+```sh
+python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf --splash my_picture.jpg --splash-text "HXS OS v0.1"
+```
+
+- `--splash` takes any picture macOS can open (PNG, JPEG, HEIC, ...) at any size. The screen is **320x240**; a 320x240 PNG is used exactly as it is, and anything else is converted to it with macOS's `sips`: scaled to cover the screen and cropped at the centre, or with `--splash-fit fit`, scaled to fit inside it on black. Off macOS, give a 320x240 PNG.
+- The loading bar crosses the picture about halfway down, and the text sits on it in the bottom 40 rows, in grey (`0xb1b1b1`), so keep the bottom darkish.
+- `--splash-text` replaces "Firmware 3.80.0" with up to 23 ASCII characters (the fonts have no others).
+- `python3 tools/splash_topo.py out.png [--seed N]` draws a neon contour-map picture to start from; `python3 tools/patch_splash.py export firmware.hxf out.png` saves the picture an image has now.
+- The bootloader shows its own copy of the stock picture for a moment at power-on, before the firmware starts; that copy is not changed.
+
+This also changes the image store (part 8 of the 15).
+
 ## Try it first, from RAM
 
 You can run the built firmware from the Stomp's memory for one session before you install it. Nothing is written to the Stomp, and turning it off and on brings back what is installed. The Stomp must have stock 3.80.0 installed.

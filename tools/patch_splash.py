@@ -3,7 +3,7 @@
 
 usage:
   patch_splash.py export <in.hxf|in.l6ia> <out.png>          # the splash now in the image, as a template
-  patch_splash.py apply <in> <out> --png <320x181.png | 320x240.png> [--donor stock.hxf]
+  patch_splash.py apply <in> <out> --image <picture> [--fit fill|fit] [--donor stock.hxf]
   patch_splash.py text <in> <out> --text "HXS OS v0.1 🎸" [--glyph 🎸=guitar.png ...] [--donor stock.hxf]
 
 The app's boot view draws the image store's HXStomp_Splash (Entry 8, 320x181) at
@@ -19,15 +19,19 @@ becomes a colour glyph of the line's font in a free control-code slot (its PNG f
 the one colour the glyph blitters copy unchanged.
 The bootloader shows its own copy of the stock splash before that, from power-on
 until the app starts; this tool leaves it alone.
-PNG: 8-bit grey, RGB, palette or with alpha (blended onto black), not interlaced.
+Picture: a 320x240 (or 320x181) PNG, 8-bit grey, RGB, palette or with alpha (blended
+onto black), not interlaced, is used as it is. Any other picture (JPEG, HEIC, PNG of
+another size...) is converted on macOS with sips to sRGB at 320x240: scaled to cover
+the screen and cropped at the centre (fill, the default), or scaled to fit inside it
+on black (fit).
 """
 import argparse
 import hashlib
 import os
 import shutil
+import struct
 import subprocess
 import tempfile
-import struct
 import zlib
 
 import l6ia
@@ -51,6 +55,7 @@ EMOJI_TOP, EMOJI_H = 0, 18          # the font's capitals are rows 1..16 of the 
 # Control codes the line can hold: not NUL (the end), \n or \r (line breaks); all empty in every font
 FREE_SLOTS = [c for c in range(1, 32) if c not in (0x0a, 0x0d)]
 EMOJI_PNG = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'emoji_png.swift')
+SRGB = '/System/Library/ColorSync/Profiles/sRGB Profile.icc'
 
 
 def find_image(e7, e8, name, h_want):
@@ -123,6 +128,59 @@ def read_png(path, alpha=False):
             row.append(tuple(rgb) + (a,) if alpha else tuple(v * a // 255 for v in rgb))
         rows.append(row)
     return w, h, rows
+
+
+def read_bmp(path):
+    """Rows of (r, g, b) from a 24- or 32-bit uncompressed BMP, as sips writes them."""
+    raw = open(path, 'rb').read()
+    off, w, h, bpp = struct.unpack_from('<I', raw, 10)[0], *struct.unpack_from('<iiHH', raw, 18)[:2], \
+        struct.unpack_from('<H', raw, 28)[0]
+    if raw[:2] != b'BM' or bpp not in (24, 32) or struct.unpack_from('<I', raw, 30)[0] not in (0, 3):
+        raise SystemExit(f'{path}: not an uncompressed 24/32-bit BMP')
+    n, stride = bpp // 8, (w * bpp // 8 + 3) & ~3
+    rows = [[tuple(raw[off + y * stride + x * n + k] for k in (2, 1, 0)) for x in range(w)] for y in range(abs(h))]
+    return rows[::-1] if h > 0 else rows
+
+
+def png_size(path):
+    """(width, height) of a PNG that read_png can take, else None."""
+    head = open(path, 'rb').read(29)
+    if head[:8] != b'\x89PNG\r\n\x1a\n' or head[12:16] != b'IHDR':
+        return None
+    w, h, depth, ctype, _, _, interlace = struct.unpack('>IIBBBBB', head[16:29])
+    return (w, h) if depth == 8 and ctype in (0, 2, 3, 4, 6) and not interlace else None
+
+
+def load_picture(path, fit='fill'):
+    """(width, height, rows) for the splash: a 320x240 or 320x181 PNG as it is, anything else through sips at 320x240."""
+    if png_size(path) in ((W, SPLASH[1]), (W, FULL[1])):
+        return read_png(path)
+    if not shutil.which('sips'):
+        raise SystemExit(f'{path}: not a 320x240 PNG, and converting it needs macOS (sips)')
+    H = FULL[1]
+
+    def sips(*args):
+        r = subprocess.run(['sips', *args], capture_output=True, text=True)
+        if r.returncode:
+            raise SystemExit(f'{path}: sips could not convert it: {r.stderr.strip() or r.stdout.strip()}')
+        return r.stdout
+
+    info = sips('-g', 'pixelWidth', '-g', 'pixelHeight', path)
+    sw, sh = (int(line.split()[-1]) for line in info.splitlines()[1:3])
+    pick = max if fit == 'fill' else min
+    scale = pick(W / sw, H / sh)
+    rw, rh = pick(W, round(sw * scale)), pick(H, round(sh * scale))
+    with tempfile.TemporaryDirectory() as tmp:
+        scaled, final = os.path.join(tmp, 'scaled.bmp'), os.path.join(tmp, 'final.bmp')
+        sips('-s', 'format', 'bmp', '--matchTo', SRGB, '--resampleHeightWidth', str(rh), str(rw), path, '--out', scaled)
+        if fit == 'fill':
+            sips('--cropToHeightWidth', str(H), str(W), scaled, '--out', final)
+        else:
+            sips('--padToHeightWidth', str(H), str(W), '--padColor', '000000', scaled, '--out', final)
+        rows = read_bmp(final)
+    if (len(rows[0]), len(rows)) != (W, H):
+        raise SystemExit(f'{path}: sips made {len(rows[0])}x{len(rows)}, not {W}x{H}')
+    return W, H, rows
 
 
 def write_png(path, rows):
@@ -213,11 +271,8 @@ def transparent_text_entry0(e0):
     return bytes(out)
 
 
-def patch_splash(l6ia_bytes, png, log=print):
-    w, h, rows = read_png(png)
-    if (w, h) not in ((W, SPLASH[1]), (W, FULL[1])):
-        raise SystemExit(f'{png}: {w}x{h}; the splash is {W}x{SPLASH[1]} (above the version text) '
-                         f'or {W}x{FULL[1]} (the whole screen)')
+def patch_splash(l6ia_bytes, png, log=print, fit='fill'):
+    w, h, rows = load_picture(png, fit)
     name, _, stock_md5 = FULL if h == FULL[1] else SPLASH
     e0 = bytearray(pa.get_entry_swapped(l6ia_bytes, 0))
     o = name_offset(e0)
@@ -360,10 +415,12 @@ def main():
     ex = sub.add_parser('export', help='write the splash now in the image to a PNG')
     ex.add_argument('input', help='.hxf or L6IA')
     ex.add_argument('png')
-    apl = sub.add_parser('apply', help='replace the splash with a 320x181 PNG')
+    apl = sub.add_parser('apply', help='replace the splash with a picture')
     apl.add_argument('input', help='.hxf or L6IA')
     apl.add_argument('output')
-    apl.add_argument('--png', required=True)
+    apl.add_argument('--image', '--png', dest='image', required=True, help='a 320x240 PNG, or any picture sips can read')
+    apl.add_argument('--fit', choices=('fill', 'fit'), default='fill',
+                     help='for a converted picture: crop to fill the screen (default), or fit inside it on black')
     apl.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
     txt = sub.add_parser('text', help='replace the "Firmware 3.80.0" line under the picture')
     txt.add_argument('input', help='.hxf or L6IA')
@@ -379,7 +436,7 @@ def main():
         write_png(a.png, rows)
         print(f'[+] Wrote {a.png} ({W}x{len(rows)})')
         return
-    new = patch_splash(data, a.png) if a.cmd == 'apply' else \
+    new = patch_splash(data, a.image, fit=a.fit) if a.cmd == 'apply' else \
         patch_text(data, a.text, dict(g.split('=', 1) for g in a.glyph))
     pa.save_l6ia_to_any(new, a.output, donor_hxf=a.input if is_hxf else a.donor)
     print(f'[+] Wrote {a.output}')

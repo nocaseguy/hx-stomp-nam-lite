@@ -2,6 +2,7 @@
 the stock firmware changes only Entry 0 (the text hook), and a 320x240 PNG switches the boot view to Screen_Boot."""
 import os
 import random
+import shutil
 
 import pytest
 
@@ -28,7 +29,7 @@ def test_layout_column_major_from_bottom():
     rows = [[(0, 0, 0)] * ps.W for _ in range(h)]
     rows[0][1] = (255, 0, 0)
     px = ps.encode(rows)
-    assert px[2 * (1 * h + h - 1):][:2] == b"\x1f\x00"
+    assert px[2 * (1 * h + h - 1):][:2] == b"\x1f\x00"        # red in the bottom 5 bits, as stock Play_Red
 
 
 @pytest.fixture(scope="module")
@@ -143,18 +144,6 @@ def test_emoji_text(tmp_path, stock):
 
 
 @pytest.mark.firmware
-def test_stock_red_is_red(stock):
-    import struct
-    e7, e8 = pa.get_entry_swapped(stock, 7), pa.get_entry_swapped(stock, 8)
-    n, recs = struct.unpack_from("<I", e7, 0x10)[0], struct.unpack_from("<I", e7, 0x14)[0]
-    names = [e7[o:o + ln] for o, ln in (struct.unpack_from("<2I", e7, 0x24 + 8 * i) for i in range(n))]
-    idx, _, _, h, w, _ = struct.unpack_from("<6I", e7, recs + 48 * names.index(b"Play_Red") + 8)
-    ln, off = struct.unpack_from("<2I", e8, 0x18 + 8 * idx)
-    px = struct.unpack_from(f"<{w * h}H", e8, off)
-    assert ps.pixel_rgb(max(set(px), key=px.count)) == (255, 0, 0)
-
-
-@pytest.mark.firmware
 def test_find_image_follows_header(tmp_path, stock):
     import struct
     rgba_png(tmp_path / "e.png", 30, 30, lambda x, y: (255, 0, 0, 255))
@@ -164,3 +153,27 @@ def test_find_image_follows_header(tmp_path, stock):
     want = ps.find_image(e7, e8, ps.FULL[0], ps.FULL[1])
     e8[0x18:0x18 + 8 * n] = bytes(8 * n)
     assert ps.find_image(e7, e8, ps.FULL[0], ps.FULL[1]) == want
+
+
+@pytest.mark.skipif(not shutil.which("sips"), reason="converting pictures needs macOS sips")
+@pytest.mark.parametrize("fit", ["fill", "fit"])
+def test_any_picture(tmp_path, fit):
+    rows = [[(255, 0, 0) if x < 200 else (0, 0, 255) for x in range(400)] for _ in range(100)]
+    ps.write_png(tmp_path / "wide.png", rows)
+    w, h, out = ps.load_picture(tmp_path / "wide.png", fit)
+    assert (w, h) == (ps.W, ps.FULL[1])
+    assert out[120][0][0] > 200 and out[120][319][2] > 200
+    assert (out[0][160] == (0, 0, 0)) == (fit == "fit")        # fit pads the wide picture's top and bottom with black
+
+
+@pytest.mark.firmware
+def test_stock_colours(stock):
+    import struct
+    e7, e8 = pa.get_entry_swapped(stock, 7), pa.get_entry_swapped(stock, 8)
+    n, recs = struct.unpack_from("<2I", e7, 0x10)
+    names = {e7[o:o + ln]: i for i, (o, ln) in enumerate(struct.unpack_from("<2I", e7, 0x24 + 8 * i) for i in range(n))}
+    for name, channel in ((b"Play_Red", 0), (b"Play_Green", 1), (b"Play_Blue", 2)):
+        idx = struct.unpack_from("<I", e7, recs + 48 * names[name] + 8)[0]
+        ln, off = struct.unpack_from("<2I", e8, 0x18 + 8 * idx)
+        rgb = ps.pixel_rgb(max(set(px := struct.unpack_from(f"<{ln // 2}H", e8, off)) - {0}, key=px.count))
+        assert max(range(3), key=lambda k: rgb[k]) == channel, (name, rgb)
