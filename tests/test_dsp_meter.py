@@ -308,3 +308,13 @@ def test_without_the_flag_the_edit_paint_and_dsp_disp_id_stay_stock():
     assert on == ['tuner']
     assert struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0] == dsp_meter.EDIT_PAINT
     assert not any(read(pm.NAMES_LONG + pm.NAME_LEN * DISP, pm.NAME_LEN))
+
+
+@pytest.mark.firmware
+def test_builds_alongside_bpm():
+    """Both features on: no overlapping writes, and the Edit paint is still the meter's alone (BPM chains the Home paint)."""
+    read, on = built({'HX_DSP_METER': '1', 'HX_BPM': '1'})
+    assert on == ['tuner', 'bpm', 'dsp_meter']
+    stub = struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0] & ~1
+    head = pm.chain_cave(stub, dsp_meter.EDIT_PAINT & ~1, [], [stub])
+    assert read(stub, len(head) - 12) == head[:-12]
