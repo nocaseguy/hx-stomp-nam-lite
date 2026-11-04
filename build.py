@@ -2,7 +2,7 @@
 """Build HX Stomp (or HX Stomp XL) firmware 3.80.0 with NAM A2 Lite, from your own copy of the stock firmware.
 
 usage: python3 build.py <HX_Stomp_v3.80.0_0x103966115.hxf | HX_Stomp_XL_v3.80.0_0x103966115.hxf> [-o out.hxf] [--no-check]
-                        [--splash picture [--splash-fit fill|fit]] [--splash-text "text"]
+                        [--splash picture [--splash-fit fill|fit]] [--splash-text "text" [--splash-glyph EMOJI=picture ...]]
 
 The input is Line 6's own firmware file for your unit, version 3.80.0
 (Line 6 Updater keeps a copy; see README.md). Nothing of it is in this
@@ -21,7 +21,8 @@ Steps:
      block with its own SDRAM block
   3. tools/patch_amp.py ir-title: the IR name in the block title
   4. tools/patch_amp.py patch: the kernel into the SHARC boot stream
-     (with --splash / --splash-text, HX Stomp only: tools/patch_splash.py, the boot picture / the text under it, first)
+     (HX Stomp only, first: tools/patch_menu.py, the CustomOS features of tools/features; --splash, --splash-fit,
+     --splash-text and --splash-glyph are the splash feature's HX_SPLASH, HX_SPLASH_FIT, HX_SPLASH_TEXT and HX_SPLASH_GLYPHS)
   5. tools/l6ia_verify.py: every checksum of the result
   6. tools/hxf.py pack: the .hxf
 """
@@ -76,6 +77,15 @@ def main():
     splash_fit = argv[argv.index("--splash-fit") + 1] if "--splash-fit" in argv else "fill"
     if (splash or splash_text) and unit != "HX_Stomp":
         sys.exit("build.py: --splash and --splash-text are for the HX Stomp only")
+    if splash:
+        os.environ.update(HX_SPLASH=splash, HX_SPLASH_FIT=splash_fit)
+    if splash_text:
+        os.environ["HX_SPLASH_TEXT"] = splash_text
+    glyphs = [argv[i + 1].split("=", 1) for i, a in enumerate(argv) if a == "--splash-glyph"]
+    if any(len(g) != 2 for g in glyphs):
+        sys.exit("build.py: --splash-glyph takes EMOJI=picture")
+    if glyphs:
+        os.environ["HX_SPLASH_GLYPHS"] = ",".join(f"{e}={os.path.abspath(path)}" for e, path in glyphs)
     out = os.path.abspath(argv[argv.index("-o") + 1]) if "-o" in argv else \
         os.path.join(HERE, "build", f"{unit}_v3.80.0_CustomOS.hxf")
     build = os.path.join(HERE, "build")
@@ -93,14 +103,8 @@ def main():
     run(py, "tools/patch_amp.py", "ir-title", base, titled, *IR_TITLE[unit])
     os.replace(titled, base)
     if unit == "HX_Stomp":
-        run(py, "tools/patch_menu.py", base, titled)
+        run(py, "tools/patch_menu.py", base, titled, "--cwd", os.getcwd())
         os.replace(titled, base)
-        if splash:
-            run(py, "tools/patch_splash.py", "apply", base, titled, "--image", splash, "--fit", splash_fit)
-            os.replace(titled, base)
-        if splash_text:
-            run(py, "tools/patch_splash.py", "text", base, titled, "--text", splash_text)
-            os.replace(titled, base)
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:
