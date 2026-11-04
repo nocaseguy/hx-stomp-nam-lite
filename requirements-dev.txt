@@ -1,4 +1,4 @@
 numpy
 pytest
 pyusb
-unicorn
+unicorn==2.1.4
