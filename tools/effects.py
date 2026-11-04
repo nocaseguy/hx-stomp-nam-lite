@@ -33,7 +33,8 @@ table in the application grows or changes its count, with one exception below.
            its last 16 rows move over 16 cab rows that no Table 1 row lists (no preset can name
            those models) and its count drops to 761, freeing 704 bytes for the helpers.
 
-Static and simulator checks only: this build has not run on an HX Effects.
+The previous build (3bf0bd8e) ran on an HX Effects (an owner); this one, with the browser and title
+fixes for what that owner found, has static and simulator checks only.
 """
 import struct
 
