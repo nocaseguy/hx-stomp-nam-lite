@@ -28,7 +28,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Input:
     var: str                # the environment variable
-    default: object = None  # its value when unset or empty
+    default: str = None     # the text used when the variable is unset or empty, checked as a set value is
     choices: tuple = None   # the values it may take
     path: bool = False      # a file, relative to the directory the build started in; it must exist
     mapping: bool = False   # 'key=value,key=value' -> {key: value} (each value a path when path is set); unset is {}
@@ -72,8 +72,9 @@ def inputs(feature):
 
 def value(feature, i, raw, cwd=None):
     """An input's value from its environment variable's text raw."""
-    if not raw:
-        return {} if i.mapping and i.default is None else i.default
+    raw = raw or i.default
+    if raw is None:
+        return {} if i.mapping else None
     pairs = [kv.partition('=') for kv in raw.split(',')] if i.mapping else [('', '=', raw)]
     if any(not eq or not v for _, eq, v in pairs):
         raise SystemExit(f'{name(feature)}: {i.var} takes key=value pairs separated by commas, not {raw!r}')

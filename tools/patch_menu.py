@@ -181,24 +181,40 @@ def text_cave(at, tables):
     return a.bytes()
 
 
-def pc_relative(code):
-    """The offset of the first instruction in Thumb code that reads the PC (a literal load, adr, a branch, tbb), else None."""
+def cut(code):
+    """The offset of an instruction of Thumb code that its end cuts in two, else None."""
     i = 0
     while i < len(code):
-        hw = struct.unpack_from('<H', code, i)[0]
-        if hw >> 11 < 0x1d:
-            if (hw & 0xf800 in (0x4800, 0xa000, 0xe000) or hw & 0xf500 == 0xb100 or hw & 0xf000 == 0xd000 and hw >> 9 & 7 != 7
-                    or hw & 0xfc00 == 0x4400 and hw >> 3 & 0xf == 15):
-                return i
-            i += 2
-            continue
-        hw2 = struct.unpack_from('<H', code, i + 2)[0] if i + 4 <= len(code) else 0
-        if (hw & 0xf800 == 0xf000 and hw2 & 0x8000 and (hw2 & 0x5000 or hw & 0x0380 != 0x0380)      # b.w, bl, blx, b<c>.w
-                or hw & 0xfe1f == 0xf81f or hw & 0xfe5f == 0xe85f or hw == 0xe8df                    # literal loads, ldrd, tbb/tbh
-                or hw & 0xfbff in (0xf20f, 0xf2af) and not hw2 & 0x8000):                            # adr.w
+        n = 4 if struct.unpack_from('<H', code, i)[0] >> 11 >= 0x1d else 2
+        if i + n > len(code):
             return i
-        i += 4
+        i += n
     return None
+
+
+def unmovable(code):
+    """Why Thumb code cannot run at another address, as (offset of the instruction, reason), else None: an instruction that
+    reads the PC (a literal load, adr, a branch, tbb), one the end cuts in two, or an IT block that runs past the end."""
+    if cut(code) is not None:
+        return cut(code), 'is cut in two by the end of the bytes'
+    i, it_at, it_left = 0, 0, 0
+    while i < len(code):
+        hw = struct.unpack_from('<H', code, i)[0]
+        wide = hw >> 11 >= 0x1d
+        hw2 = struct.unpack_from('<H', code, i + 2)[0] if wide else 0
+        if not wide and (hw & 0xf800 in (0x4800, 0xa000, 0xe000) or hw & 0xf500 == 0xb100
+                         or hw & 0xf000 == 0xd000 and hw >> 9 & 7 != 7 or hw & 0xfc00 == 0x4400 and hw >> 3 & 0xf == 15):
+            return i, 'reads the PC'
+        if wide and (hw & 0xf800 == 0xf000 and hw2 & 0x8000 and (hw2 & 0x5000 or hw & 0x0380 != 0x0380)   # b.w, bl, blx, b<c>.w
+                     or hw & 0xfe1f == 0xf81f or hw & 0xfe5f == 0xe85f or hw == 0xe8df    # literal loads, ldrd, tbb/tbh
+                     or hw & 0xfe1f == 0xec1f                                              # vldr, ldc and vldm from the PC
+                     or hw & 0xfbff in (0xf20f, 0xf2af) and not hw2 & 0x8000):            # adr.w
+            return i, 'reads the PC'
+        it_left = max(it_left - 1, 0)
+        if not wide and hw & 0xff00 == 0xbf00 and hw & 0xf:
+            it_at, it_left = i, 4 - ((hw & 0xf) & -(hw & 0xf)).bit_length() + 1
+        i += 4 if wide else 2
+    return (it_at, 'starts an IT block that runs past the end') if it_left else None
 
 
 def chain_cave(at, original, before, after):
@@ -321,6 +337,9 @@ class Entry:
         """Entry 8: data as a new item after the entry's end; returns its index (an Entry 7 record or glyph refers to it by that)."""
         if self.n != 8:
             raise SystemExit(f'patch-menu: only Entry 8 (the image store) takes items, not Entry {self.n}')
+        if not self.items:
+            self.put(8, self.read(8, 8), "Entry 8's item count and table offset, which add_item rewrites")
+            self.put(20, self.read(20, 4), "Entry 8's size, which add_item rewrites")
         self.items.append(bytes(data))
         return struct.unpack_from('<I', self.data, 8)[0] + len(self.items) - 1
 
@@ -337,15 +356,15 @@ class Hook:
     def __init__(self, p, fn, prologue, owner, what):
         self.p, self.fn, self.prologue, self.owner, self.what = p, fn, prologue, owner, what
         self.handler = self._stock = None
-        if pc_relative(prologue) is None:     # placed now, so it never moves code the feature has already placed after p.next()
+        if unmovable(prologue) is None:       # takes the cave's next bytes: code laid out at p.next() before own_entry would move
             self._stock = p.add(prologue + thumb_bw(p.next() + len(prologue), fn + len(prologue)))
 
     @property
     def stock(self):
         """The stock function for a b.w (or a blx with bit 0 set): its prologue in the code cave, then a b.w past it in fn."""
         if self._stock is None:
-            at = pc_relative(self.prologue)
-            raise SystemExit(f'patch-menu: {self.owner} ({self.what}): the instruction at {self.fn + at:#x} reads the PC, so the '
+            at, why = unmovable(self.prologue)
+            raise SystemExit(f'patch-menu: {self.owner} ({self.what}): the instruction at {self.fn + at:#x} {why}, so the '
                              f'prologue cannot run elsewhere; redo it in the handler and branch to {self.fn + len(self.prologue):#x}')
         return self._stock
 
@@ -493,18 +512,21 @@ class Patch:
         self._chain(site, 'bl', stock, before, after)
 
     def chain_entry(self, fn, stock, before=None, after=None):
-        """Handlers around every call of fn, whose first instructions (at least 4 bytes, not PC-relative) are stock."""
+        """Handlers around every call of fn, whose first instructions (at least 4 bytes, whole, movable) are stock."""
         self._not_owned(fn)
+        if len(stock) < 4:
+            raise SystemExit(f'patch-menu: {self.owner}: give at least the 4 bytes a b.w takes of the start of {fn:#x}')
         self.expect(fn, stock, f'the start of the function at {fn:#x}')
-        if pc_relative(stock) is not None:
-            raise SystemExit(f'patch-menu: {self.owner}: the start of {fn:#x} reads the PC, so it cannot run from the code cave')
+        if unmovable(stock) is not None:
+            at, why = unmovable(stock)
+            raise SystemExit(f'patch-menu: {self.owner}: the instruction at {fn + at:#x} {why}, so it cannot run from the code cave')
         self._chain(fn, 'entry', stock, before, after)
 
     def own_entry(self, fn, stock, what, handler=None):
         """The start of fn (its first instructions, at least 4 bytes, are stock) for this feature alone, for a handler no chain
         can take: one with stack arguments, or one that rewrites them. Returns a Hook: hook.to(handler) (or handler=) puts a b.w
-        to the handler at fn, hook.stock is the stock function to branch to. Another feature that owns, chains or writes over
-        it fails the build."""
+        to the handler at fn, hook.stock is the stock function to branch to; lay out code at p.next() only after this call,
+        as hook.stock takes the cave's next bytes. Another feature that owns, chains or writes over it fails the build."""
         if fn in self.owned:
             o = self.owned[fn]
             raise SystemExit(f'patch-menu: {self.owner} ({what}) and {o.owner} ({o.what}) both own {fn:#x}: only one feature '
@@ -512,7 +534,7 @@ class Patch:
         if fn in self.chains:
             others = ', '.join(dict.fromkeys(self.chains[fn][4]))
             raise SystemExit(f'patch-menu: {self.owner} owns {fn:#x} ({what}), which {others} chain: it cannot be shared')
-        if len(stock) < 4 or len(stock) % 2:
+        if len(stock) < 4 or len(stock) % 2 or cut(stock) is not None:
             raise SystemExit(f'patch-menu: {self.owner} ({what}): give at least the 4 bytes a b.w takes, whole instructions')
         self.expect(fn, stock, f'the start of the function at {fn:#x}')
         self.put(fn, stock, what)       # reserves the bytes the b.w replaces

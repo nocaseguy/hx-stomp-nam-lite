@@ -27,7 +27,7 @@ def fake(name, **attrs):
     return m
 
 
-def store():
+def store(height=21):
     """A tiny image store: Entry 7 with an image Pic (3x2) and a 4-slot font with slot 0 drawn; Entry 8 with their two items."""
     names = [b'Pic', FONT]
     e7 = bytearray(0xf0)
@@ -40,10 +40,10 @@ def store():
         at += len(n)
     struct.pack_into('<6I', e7, 0x60 + 8, 0, 0, 0, 2, 3, 16)
     struct.pack_into('<2I', e7, 0x60 + ims.RECORD + 40, 4, 0xc0)
-    struct.pack_into('<3I', e7, 0xc0, 21, 9, 1)
+    struct.pack_into('<3I', e7, 0xc0, height, 9, 1)
     for slot in (1, 2, 3):
         struct.pack_into('<3I', e7, 0xc0 + 12 * slot, 0, 0, ims.EMPTY_GLYPH)
-    items = [b'\x11\x22' * 6, b'\x33\x44' * 9 * 21]
+    items = [b'\x11\x22' * 6, b'\x33\x44' * 9 * height]
     e8 = bytearray(struct.pack('<6I', ims.E8_MAGIC, 1, len(items), 0x18, 0x28, 0))
     e8 += b'\0' * 16
     for i, data in enumerate(items):
@@ -101,6 +101,41 @@ def test_a_wrong_input_fails_the_build(tmp_path, env, error):
         Input('HX_SPLASH_GLYPHS', path=True, mapping=True)))
     with pytest.raises(SystemExit, match=error):
         features.values(f, env, str(tmp_path))
+
+
+@pytest.mark.parametrize('inp, value', [
+    (Input('V', default='g.png', path=True), 'PATH/g.png'),
+    (Input('V', default='a=g.png', path=True, mapping=True), {'a': 'PATH/g.png'}),
+    (Input('V', default='fit', choices=('fill', 'fit')), 'fit'),
+])
+def test_an_input_default_is_read_as_a_set_value(tmp_path, inp, value):
+    (tmp_path / 'g.png').write_bytes(b'y')
+    f = fake('f', FLAG='HX_F', INPUTS=(inp,))
+    got = features.values(f, {}, str(tmp_path))['V']
+    assert got == (str(tmp_path / 'g.png') if value == 'PATH/g.png' else {'a': str(tmp_path / 'g.png')}
+                   if isinstance(value, dict) else value)
+
+
+@pytest.mark.parametrize('inp, error', [
+    (Input('V', default='missing.png', path=True), 'V: no file'),
+    (Input('V', default='stretch', choices=('fill', 'fit')), "V is one of fill, fit, not 'stretch'"),
+    (Input('V', default='g.png', mapping=True), 'V takes key=value pairs'),
+])
+def test_a_wrong_input_default_fails_the_build(tmp_path, inp, error):
+    with pytest.raises(SystemExit, match=error):
+        features.values(fake('f', FLAG='HX_F', INPUTS=(inp,)), {}, str(tmp_path))
+
+
+def test_inputs_are_checked_before_any_feature_applies():
+    applied = []
+
+    def load(n):
+        raise AssertionError('Entry 0 was read before the inputs were checked')
+    a = fake('a', ORDER=1, apply=lambda p: applied.append('a'))
+    b = fake('b', ORDER=2, FLAG='HX_B', INPUTS=(Input('HX_B', choices=('on',)),), apply=lambda p: applied.append('b'))
+    with pytest.raises(SystemExit, match="HX_B is one of on, not 'yes'"):
+        pm.menu_entries(load, [a, b], {'HX_B': 'yes'}, {})
+    assert applied == []
 
 
 def test_p_input_reads_only_the_features_own_inputs():
@@ -192,6 +227,42 @@ def test_an_entry_outgrowing_its_partition_fails(monkeypatch):
         p.entry(8).bytes()
 
 
+def test_an_entry_exactly_its_partition_fits(monkeypatch):
+    p = patch()
+    p.entry(8).add_item(b'\0' * 0x100)
+    monkeypatch.setitem(pm.Entry.MAX, 8, 0x2c8)
+    assert len(p.entry(8).bytes()) == 0x2c8
+    monkeypatch.setitem(pm.Entry.MAX, 8, 0x2c4)
+    with pytest.raises(SystemExit, match='Entry 8 would be 0x2c8 bytes'):
+        p.entry(8).bytes()
+
+
+@pytest.mark.parametrize('word', [8, 12, 20])
+def test_add_item_and_a_write_to_the_header_words_it_rewrites_fail(word):
+    p = patch()
+    p.owner = 'splash'
+    p.entry(8).put(word, b'\0' * 4, 'its header word')
+    p.owner = 'emoji'
+    with pytest.raises(SystemExit, match=r'emoji \(Entry 8.s .*which add_item rewrites\) and splash \(its header word\)'):
+        p.entry(8).add_item(b'x')
+    p = patch()
+    p.owner = 'emoji'
+    p.entry(8).add_item(b'x')
+    p.entry(8).add_item(b'y')
+    p.owner = 'splash'
+    with pytest.raises(SystemExit, match=r'splash \(its header word\) and emoji \(Entry 8.s .*which add_item rewrites\)'):
+        p.entry(8).put(word, b'\0' * 4, 'its header word')
+
+
+def test_add_glyph_takes_the_fonts_own_cell_height():
+    e7, e8 = store(height=28)
+    p = patch(entries={7: e7, 8: e8})
+    p.add_glyph(FONT, 1, 2, b'\1\0' * 2 * 28)
+    assert ims.glyph(p.entry(7).bytes(), 0xc0, 1) == (28, 2, 2)
+    with pytest.raises(SystemExit, match='a 2 wide glyph of hx21_regularFont is 112 bytes, not 84'):
+        p.add_glyph(FONT, 2, 2, b'\1\0' * 2 * 21)
+
+
 def test_add_glyph_fills_an_empty_slot_with_a_new_item():
     p = patch()
     p.owner = 'emoji'
@@ -265,6 +336,33 @@ def test_owning_a_chained_hook_fails():
         p.own_entry(FN, PROLOGUE, 'the text renderer')
 
 
+@pytest.mark.parametrize('stock, error', [
+    (bytes.fromhex('82b0 2de9'), 'give at least the 4 bytes a b.w takes, whole instructions'),
+    (bytes.fromhex('82b0'), 'give at least the 4 bytes a b.w takes, whole instructions'),
+    (bytes.fromhex('00b5 234b 2de9'), 'give at least the 4 bytes a b.w takes, whole instructions'),
+    (bytes.fromhex('10b5 86b0'), 'the start of the function at 0x28d8fe80 is not at its stock address'),
+])
+def test_own_entry_refuses_short_cut_or_wrong_stock_bytes(stock, error):
+    p = patch()
+    p.put(FN, PROLOGUE)
+    p.written.clear()
+    p.owner = 'splash'
+    with pytest.raises(SystemExit, match=error):
+        p.own_entry(FN, stock, 'the text renderer')
+    assert p.owned == {} and p.written == []
+
+
+@pytest.mark.parametrize('stock, error', [
+    (bytes.fromhex('82b0 2de9'), r'the instruction at 0x28d8fe82 is cut in two'),
+    (bytes.fromhex('82b0'), 'give at least the 4 bytes a b.w takes'),
+])
+def test_chain_entry_refuses_short_or_cut_prologues(stock, error):
+    p = patch()
+    p.put(FN, PROLOGUE)
+    with pytest.raises(SystemExit, match=error):
+        p.chain_entry(FN, stock, before=BASE + 0x9000)
+
+
 def test_an_owned_hook_needs_its_handler():
     p = patch()
     p.put(FN, PROLOGUE)
@@ -291,20 +389,25 @@ def test_a_pc_relative_prologue_can_be_owned_but_not_moved():
         p.chain_entry(FN + 0x100, led)
 
 
-@pytest.mark.parametrize('code, at', [
-    ('82b0 2de9f04f', None), ('10b5 86b0', None), ('f8b5 4678', None), ('30b5 85b0', None),
-    ('00b5 234b', 2), ('10b5 03a0', 2), ('00b1 0000', 0), ('fee7', 0), ('01d0', 0), ('7844', 0),
-    ('10b5 dff80c00', 2), ('10b5 5ff80c00', 2), ('10b5 fff7febf', 2), ('10b5 fff7feff', 2), ('10b5 dfe800f0', 2),
-    ('10b5 0ff20400', 2), ('10b5 eff30080', None), ('10b5 4df8044d', None),
+PC, CUT, IT = 'reads the PC', 'is cut in two by the end of the bytes', 'starts an IT block that runs past the end'
+
+
+@pytest.mark.parametrize('code, why', [
+    ('82b0 2de9f04f', None), ('10b5 86b0', None), ('f8b5 4678', None), ('30b5 85b0', None), ('10b5 eff30080', None),
+    ('10b5 4df8044d', None), ('08bf 0120', None), ('10b5 0cbf 0120 0020', None),
+    ('00b5 234b', (2, PC)), ('10b5 03a0', (2, PC)), ('00b1 0000', (0, PC)), ('fee7', (0, PC)), ('01d0', (0, PC)),
+    ('7844', (0, PC)), ('10b5 dff80c00', (2, PC)), ('10b5 5ff80c00', (2, PC)), ('10b5 fff7febf', (2, PC)),
+    ('10b5 fff7feff', (2, PC)), ('10b5 dfe800f0', (2, PC)), ('10b5 0ff20400', (2, PC)),
+    ('9fed020a', (0, PC)), ('10b5 dfed010b', (2, PC)),      # vldr s0,[pc,#8]; vldr d16,[pc,#4]
+    ('82b0 2de9', (2, CUT)), ('00b5 234b 2de9', (4, CUT)),
+    ('10b5 08bf', (2, IT)), ('0cbf 0120', (0, IT)),          # it eq with nothing after it; ite eq with one of its two
 ])
-def test_pc_relative_finds_literal_loads_and_branches(code, at):
-    assert pm.pc_relative(bytes.fromhex(code)) == at
+def test_unmovable_finds_pc_reads_cut_instructions_and_open_it_blocks(code, why):
+    assert pm.unmovable(bytes.fromhex(code)) == why
 
 
-def test_an_owned_hook_runs_the_handler_then_the_stock_function_with_its_stack_argument_rewritten():
-    """In unicorn: a 9-argument function whose 9th ([sp,#0x10] on entry) the handler sets to 1 before the stock body reads it."""
-    unicorn = pytest.importorskip('unicorn', reason='no unicorn (pip install unicorn)')
-    from unicorn import arm_const as A
+def test_an_owned_hook_runs_the_handler_then_the_stock_function_with_its_stack_argument_rewritten(m4emu):
+    """A 9-argument function whose 9th ([sp,#0x10] on entry) the handler sets to 1 before the stock body reads it."""
     p = patch()
     # the stock function: the prologue, r0 = the 9th argument, the epilogue
     p.put(FN, PROLOGUE + bytes.fromhex('0f98 bde8f04f 02b0 7047'))
@@ -317,41 +420,159 @@ def test_an_owned_hook_runs_the_handler_then_the_stock_function_with_its_stack_a
     hook.to(p.add(a.bytes()))
     p.finish_chains()
 
-    def run(code):
-        uc = unicorn.Uc(unicorn.UC_ARCH_ARM, unicorn.UC_MODE_THUMB | unicorn.UC_MODE_MCLASS)
-        uc.mem_map(BASE & ~0xfff, 0x20000)
-        uc.mem_map(0x20000000, 0x1000)
-        uc.mem_write(BASE, code)
-        uc.mem_write(BASE + 0x8000, bytes(p.cave.buf))
-        sp, stop = 0x20000800, BASE + 0x7000
-        uc.mem_write(sp, struct.pack('<5I', 5, 6, 7, 8, 9))
-        for reg, v in ((A.UC_ARM_REG_SP, sp), (A.UC_ARM_REG_LR, stop | 1), (A.UC_ARM_REG_R4, 0x44)):
-            uc.reg_write(reg, v)
-        uc.emu_start(FN | 1, stop, count=100)
-        return uc.reg_read(A.UC_ARM_REG_R0), uc.reg_read(A.UC_ARM_REG_SP) == sp, uc.reg_read(A.UC_ARM_REG_R4)
+    def run(fn_code):
+        m4 = m4emu.M4(fn_code, FN)
+        m4.load(p.cave.va, p.cave.buf)
+        for i in range(5):
+            m4.u32(m4emu.STACK_TOP + 4 * i, 5 + i)
+        return m4.call(FN, 1, 2, 3, 4), [m4.u32(m4emu.STACK_TOP + 4 * i) for i in range(5)]
 
-    stock = bytearray(p.e0[:0x8000])
-    stock[FN - BASE:FN - BASE + 6] = PROLOGUE
-    assert run(bytes(stock)) == (9, True, 0x44)
-    assert run(bytes(p.e0[:0x8000])) == (1, True, 0x44)
+    body = p.read(FN + 6, 12)
+    assert run(PROLOGUE + body) == (9, [5, 6, 7, 8, 9])
+    assert run(p.read(FN, 18)) == (1, [5, 6, 7, 8, 1])
 
 
 # On the stock firmware
 
 RENDER_FN, RENDER_STOCK = 0x28db7aa4, bytes.fromhex('82b02de9f04f')
+LED_SEND, LED_STOCK, LED_LIT, LED_LIT_VALUE = 0x28d98f74, bytes.fromhex('00b5234b'), 0x28d99004, 0x281c90a4
+HOME_PAINT_LIT, HOME_PAINT = 0x28d96e28, 0x28dc8d39
+HOME_CTOR_BL, HOME_CTOR = 0x28d96c44, 0x28dc91d0
 SPLASH_MD5 = '102fdff9f8738b232273a27d581c49ae'
+EPILOGUE = bytes.fromhex('bde8f04f 02b0 7047')     # pop.w {r4-r11,lr}; add sp,#8; bx lr: the renderer's prologue undone
+
+
+@pytest.fixture(scope='module')
+def stock():
+    path = os.environ.get('HX_STOMP_HXF')
+    if not path:
+        pytest.skip('HX_STOMP_HXF is not set')
+    return pa.load_l6ia_from_any(path)[0]
+
+
+def stock_patch(data):
+    return pm.Patch(pa.get_entry_swapped(data, 0), [], {})
+
+
+def chain(p, kind):
+    """A chain of each kind at its real site, which an owner then takes as a site of its own."""
+    return {'entry': lambda: p.chain_entry(RENDER_FN, RENDER_STOCK, before=p.next()),
+            'bl': lambda: p.chain_bl(HOME_CTOR_BL, HOME_CTOR, after=p.next()),
+            'ptr': lambda: p.chain_ptr(HOME_PAINT_LIT, HOME_PAINT, after=p.next())}[kind]
+
+
+SITES = {'entry': (RENDER_FN, RENDER_STOCK), 'bl': (HOME_CTOR_BL, pm.bl(HOME_CTOR_BL, HOME_CTOR)),
+         'ptr': (HOME_PAINT_LIT, struct.pack('<I', HOME_PAINT))}
 
 
 @pytest.mark.firmware
-def test_a_feature_over_entries_0_7_and_8_builds(tmp_path):
-    """A demo feature turned on by either of two variables: it repaints HXStomp_Splash in place, adds a glyph to hx21_regularFont
-    and owns the text renderer's start; the stock features stay as they were."""
-    stock = os.environ.get('HX_STOMP_HXF')
-    if not stock:
-        pytest.skip('HX_STOMP_HXF is not set')
-    data, _ = pa.load_l6ia_from_any(stock)
-    load = lambda n: pa.get_entry_swapped(data, n)
-    seen = {}
+@pytest.mark.parametrize('kind', SITES)
+def test_owning_a_site_and_chaining_it_fail_in_either_order(stock, kind):
+    site, data = SITES[kind]
+    p = stock_patch(stock)
+    p.owner = 'splash'
+    p.own_entry(site, data, 'its hook', p.next())
+    p.owner = 'bpm'
+    with pytest.raises(SystemExit, match=f'bpm chains {site:#x}, which splash owns \\(its hook\\)'):
+        chain(p, kind)()
+    p = stock_patch(stock)
+    p.owner = 'bpm'
+    chain(p, kind)()
+    p.owner = 'splash'
+    with pytest.raises(SystemExit, match=f'splash owns {site:#x} \\(its hook\\), which bpm chain'):
+        p.own_entry(site, data, 'its hook')
+
+
+@pytest.mark.firmware
+@pytest.mark.parametrize('site, data', [(RENDER_FN, RENDER_STOCK), (LED_SEND, LED_STOCK)])
+def test_two_owners_or_an_owner_and_a_write_fail_in_either_order(stock, site, data):
+    p = stock_patch(stock)
+    p.owner = 'splash'
+    p.own_entry(site, data, 'its hook', p.next())
+    p.owner = 'emoji'
+    with pytest.raises(SystemExit, match=f'emoji \\(the hook\\) and splash \\(its hook\\) both own {site:#x}'):
+        p.own_entry(site, data, 'the hook')
+    for at in range(site, site + 4, 2):
+        with pytest.raises(SystemExit, match=f'emoji \\(a write\\) and splash \\(its hook\\) both patch {at:#x}'):
+            p.put(at, p.read(at, 2))
+    p = stock_patch(stock)
+    p.owner = 'emoji'
+    p.put(site + 2, p.read(site + 2, 2), 'a write')
+    p.owner = 'splash'
+    with pytest.raises(SystemExit, match=f'splash \\(its hook\\) and emoji \\(a write\\) both patch {site + 2:#x}'):
+        p.own_entry(site, data, 'its hook')
+
+
+@pytest.mark.firmware
+def test_owned_hook_guard_rails_on_the_led_send(stock):
+    p = stock_patch(stock)
+    p.owner = 'bpm'
+    with pytest.raises(SystemExit, match='the start of the function at 0x28d98f74 is not at its stock address'):
+        p.own_entry(LED_SEND, bytes.fromhex('10b5 234b'), 'the LED send')
+    with pytest.raises(SystemExit, match='whole instructions'):
+        p.own_entry(LED_SEND, LED_STOCK[:2], 'the LED send')
+    with pytest.raises(SystemExit, match='whole instructions'):
+        p.own_entry(RENDER_FN, RENDER_STOCK[:4], 'the text renderer')
+    hook = p.own_entry(LED_SEND, LED_STOCK, 'the LED send')
+    with pytest.raises(SystemExit, match='the instruction at 0x28d98f76 reads the PC'):
+        hook.stock
+    with pytest.raises(SystemExit, match=r'bpm owns 0x28d98f74 \(the LED send\) but gave no handler'):
+        p.finish_chains()
+    hook.to(p.next())
+    assert p.read(LED_SEND, 4) == pm.thumb_bw(LED_SEND, p.next())
+    p.finish_chains()
+
+
+@pytest.mark.firmware
+@pytest.mark.parametrize('led', [0, 1, 2])
+def test_an_owned_led_send_rewrites_r1_and_runs_the_moved_instructions(stock, m4emu, led):
+    """A stand-in for BPM's handler: the moved push {lr} and literal load, r1 changed, then the rest of the LED send."""
+    p = stock_patch(stock)
+    p.owner = 'bpm'
+    hook = p.own_entry(LED_SEND, LED_STOCK, 'the LED send')
+    a = pm.Asm(p.next())
+    a.h(0xb500, 0xf081, 0x017f)            # push {lr}; eor r1,r1,#0x7f
+    a.movw_movt(3, LED_LIT)
+    a.h(0x681b)                            # ldr r3,[r3]: the literal the moved ldr r3,[pc,#0x8c] loads
+    a.bw(LED_SEND + 4)
+    hook.to(p.add(a.bytes()))
+    p.finish_chains()
+    m4 = m4emu.M4(p.read(LED_SEND, 4), LED_SEND)
+    m4.load(p.cave.va, p.cave.buf)
+    m4.write(LED_LIT, p.read(LED_LIT, 4))
+    m4.stub(LED_SEND + 4, code=b'\x00\xbd')          # pop {pc}: the rest of the send returns through the moved push
+    assert m4.call(LED_SEND, led, 0x123456) == led
+    (r0, r1, _, r3), = m4.calls(LED_SEND + 4)
+    assert (r0, r1, r3) == (led, 0x123456 ^ 0x7f, LED_LIT_VALUE)
+
+
+@pytest.mark.firmware
+def test_an_owned_text_renderer_sees_its_9th_argument_rewritten(stock, m4emu):
+    p = stock_patch(stock)
+    p.owner = 'splash'
+    hook = p.own_entry(RENDER_FN, RENDER_STOCK, 'the text renderer')
+    a = pm.Asm(p.next())
+    a.h(0xf04f, 0x0c01, 0xf8cd, 0xc010)    # mov.w r12,#1; str.w r12,[sp,#0x10]
+    a.bw(hook.stock)
+    hook.to(p.add(a.bytes()))
+    p.finish_chains()
+    m4 = m4emu.M4(p.read(RENDER_FN, 6), RENDER_FN)
+    m4.load(p.cave.va, p.cave.buf)
+    seen = []
+    m4.stub(RENDER_FN + 6, lambda m: seen.append([m.u32(m.reg('sp') + 44 + 4 * i) for i in range(5)]), EPILOGUE)
+    for i in range(5):
+        m4.u32(m4emu.STACK_TOP + 4 * i, 0x50 + i)
+    m4.call(RENDER_FN, 1, 2, 3, 4)
+    assert seen == [[0x50, 0x51, 0x52, 0x53, 1]]
+    assert m4.calls(RENDER_FN + 6) == [(1, 2, 3, 4)]
+
+
+@pytest.mark.firmware
+def test_patch_menu_writes_entries_7_and_8_and_both_owned_sites(stock, tmp_path, monkeypatch):
+    """Through patch_menu(), as build.py runs it: a demo feature, on by either of two variables, with a path input, repaints
+    HXStomp_Splash in place, adds a glyph, owns the text renderer and the LED send, and chains the Home paint."""
+    (tmp_path / 'pic.bin').write_bytes(b'x')
+    seen, handlers = {}, {}
 
     def apply(p):
         e7, e8 = p.entry(7), p.entry(8)
@@ -362,24 +583,32 @@ def test_a_feature_over_entries_0_7_and_8_builds(tmp_path):
         hook = p.own_entry(RENDER_FN, RENDER_STOCK, 'the text renderer')
         a = pm.Asm(p.next())
         a.bw(hook.stock)
-        hook.to(p.add(a.bytes()))
+        handlers[RENDER_FN] = p.add(a.bytes())
+        hook.to(handlers[RENDER_FN])
+        handlers[LED_SEND] = p.add(b'\x70\x47')
+        p.own_entry(LED_SEND, LED_STOCK, 'the LED send', handlers[LED_SEND])
+        p.chain_ptr(HOME_PAINT_LIT, HOME_PAINT, after=p.add(b'\x70\x47'))
         seen.update(text=p.input('HX_DEMO_TEXT'), pic=p.input('HX_DEMO'))
 
-    demo = fake('demo', FLAG=('HX_DEMO', 'HX_DEMO_TEXT'), apply=apply)
+    demo = fake('demo', FLAG=('HX_DEMO', 'HX_DEMO_TEXT'), INPUTS=(Input('HX_DEMO', path=True),), apply=apply)
+    load = lambda n: pa.get_entry_swapped(stock, n)
     plain, _ = pm.menu_entries(load, env={})
-    assert sorted(plain) == [0]
-    assert plain[0] == pm.menu_entry0(load(0), env={})[0]
+    assert sorted(plain) == [0] and plain[0] == pm.menu_entry0(load(0), env={})[0]
 
-    entries, on = pm.menu_entries(load, features.load() + [demo], {'HX_DEMO_TEXT': 'HXS OS \U0001f3b8'})
-    assert [features.name(m) for m in on] == ['tuner', 'demo'] and sorted(entries) == [0, 7, 8]
-    assert seen == {'text': 'HXS OS \U0001f3b8', 'pic': None}
-    new, _, _ = l6ia.rebuild_archive(data, entries)
+    real = features.load()
+    monkeypatch.setattr(features, 'load', lambda: real + [demo])
+    monkeypatch.setenv('HX_DEMO', 'pic.bin')
+    monkeypatch.setenv('HX_DEMO_TEXT', 'HXS OS \U0001f3b8')
+    log = []
+    new = pm.patch_menu(stock, log.append, cwd=str(tmp_path))
+    assert seen == {'text': 'HXS OS \U0001f3b8', 'pic': str(tmp_path / 'pic.bin')}
+    assert log == ['[+] Entry 0: Global Settings > CustomOS (tuner, demo); Entry 7; Entry 8']
     path = tmp_path / 'demo.l6ia'
     path.write_bytes(new)
     report = subprocess.run([sys.executable, os.path.join(ROOT, 'tools/l6ia_verify.py'), str(path)], capture_output=True, text=True)
     assert 'ALL OK' in report.stdout
 
-    e7, e8 = (pa.get_entry_swapped(new, n) for n in (7, 8))
+    e0, e7, e8 = (pa.get_entry_swapped(new, n) for n in (0, 7, 8))
     s7, s8 = load(7), load(8)
     img = ims.image(e7, e8, b'HXStomp_Splash')
     assert e8[img.offset:img.offset + 4] == b'\x1f\x00\x1f\x00'
@@ -393,16 +622,23 @@ def test_a_feature_over_entries_0_7_and_8_builds(tmp_path):
     changed = [i for i in range(0, len(s8), 4) if e8[i:i + 4] != s8[i:i + 4]]
     assert {i for i in changed if not img.offset <= i < img.offset + img.length} == {8, 12, 20}
     assert table + 20 in {i for i in range(0, len(s7), 4) if e7[i:i + 4] != s7[i:i + 4]} <= {table + 12, table + 16, table + 20}
-    segs = pa._parse_e0_segments(entries[0])
-    o = pa._e0_vaddr_to_foff(segs, RENDER_FN, 6)
-    assert entries[0][o + 4:o + 6] == b'\x00\xbf'
+
+    segs = pa._parse_e0_segments(e0)
+    read = lambda va, n: e0[pa._e0_vaddr_to_foff(segs, va, n):pa._e0_vaddr_to_foff(segs, va, n) + n]
+    assert read(RENDER_FN, 6) == pm.thumb_bw(RENDER_FN, handlers[RENDER_FN]) + b'\x00\xbf'
+    assert read(LED_SEND, 4) == pm.thumb_bw(LED_SEND, handlers[LED_SEND])
+    assert read(LED_SEND + 4, 4) == read_stock(stock, LED_SEND + 4, 4)
+    stub = struct.unpack('<I', read(HOME_PAINT_LIT, 4))[0]
+    assert stub != HOME_PAINT and stub & 1
+
+
+def read_stock(data, va, n):
+    e0 = pa.get_entry_swapped(data, 0)
+    o = pa._e0_vaddr_to_foff(pa._parse_e0_segments(e0), va, n)
+    return e0[o:o + n]
 
 
 @pytest.mark.firmware
-def test_menu_entry0_refuses_a_feature_that_needs_another_entry():
-    stock = os.environ.get('HX_STOMP_HXF')
-    if not stock:
-        pytest.skip('HX_STOMP_HXF is not set')
-    data, _ = pa.load_l6ia_from_any(stock)
+def test_menu_entry0_refuses_a_feature_that_needs_another_entry(stock):
     with pytest.raises(SystemExit, match='a feature needs Entry 8: build with menu_entries'):
-        pm.menu_entry0(pa.get_entry_swapped(data, 0), [fake('x', apply=lambda p: p.entry(8))], {}, {})
+        pm.menu_entry0(pa.get_entry_swapped(stock, 0), [fake('x', apply=lambda p: p.entry(8))], {}, {})
