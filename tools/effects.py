@@ -16,8 +16,8 @@ table in the application grows or changes its count, with one exception below.
   Entry 3  NAM's model built as a new model, its descriptor's meta, states, parameters and blob
            copied onto Xenomorph's model; that model listed once, in the mono effect slot list
   Entry 0  Table 1: 555's DSP cost; Table 2: Xenomorph's row as a distortion row of NAM's
-           (short name, counts); the browser: Xenomorph's item out of Distortion > Mono, and
-           that list's freed last 48 bytes are NAM's one-item list, Distortion's fourth folder, NAM
+           (short name, counts); the browser: Xenomorph replaced in place in Distortion > Mono;
+           the IR name title on Model with sibling knob suppression
   Title    this application shows a User IR's name on the IR Select knob's own line ("Model: name")
            in the knob page's pop-up, for blocks of the IR category. Two category loads (where a
            knob is turned, and where the page is drawn) become calls to helpers that also answer
@@ -66,8 +66,8 @@ PRIM, PRIM_DESC, PRIM_TEMPLATE = 0x9c75, 0x200588, 0x822     # the hook copies 0
 MOVE_FROM, MOVE_TO, MOVE_N = 761, 496, 16
 CAVE = TAB2_BASE + 44 * (TAB2_CNT - MOVE_N)
 CAVE_CODE = bytes.fromhex(
-    '13f8282c0b2a0bd003b4ddf82500062d18bf002040f22b21884208bf0b2203bc704713f8283c0b2b0cd003b4ddf8e500bbf1060f'
-    '18bf002040f22b21884208bf0b2303bc704707b4ddf8e90040f22b218842ddf83d0012d1c20d0dd07f3a0ad4172a09dcc0f3160141'
+    '13f8282c0b2a0bd003b4ddf82500062d18bf002040f22b21884208bf0b2203bc704713f8283c0b2b0cd003b4ddf8e50040f22b21'
+    '884204d1abf10600022800d80b2303bc704707b4ddf8e90040f22b218842ddf83d0012d1c20d0dd07f3a0ad4172a09dcc0f3160141'
     'f40001c2f1170221fa02f000e00020411e7f2902d8054607bc704707bc4ff00005b5f722ba')
 # (site, its stock 4 bytes, the helper's offset in CAVE_CODE): the turned knob's category,
 # the drawn knob's category, the drawn knob's value
@@ -230,16 +230,8 @@ def entry0(e0, info, nam):
     struct.pack_into('<IIiH', item, 0, btype, DONOR_NI, -1, DONOR_PID)
     item[14:40] = DISPLAY.encode('latin1')[:25].ljust(26, b'\0')
     struct.pack_into('<2I', item, 40, 1, 0)
-    keep = [it for it, n in zip(its, names) if n != DONOR_NI]
-    wr(lp, b''.join(keep) + bytes(item))
-    wr(BLIST_CNT_TAB + 4 * CAT_DIST, struct.pack('<I', len(keep)))
-    sub = u32(SUBCAT_CNT + 4 * CAT_DIST)
-    slot = 4 * CAT_DIST + sub
-    assert sub == 3 and not u32(BLIST_PTR_TAB + 4 * slot) and not any(rd(SUBCAT_NAMES + 104 * CAT_DIST + 26 * sub, 26))
-    wr(SUBCAT_CNT + 4 * CAT_DIST, struct.pack('<I', sub + 1))
-    wr(SUBCAT_NAMES + 104 * CAT_DIST + 26 * sub, FOLDER.encode('latin1').ljust(26, b'\0'))
-    wr(BLIST_PTR_TAB + 4 * slot, struct.pack('<I', lp + 48 * len(keep)))
-    wr(BLIST_CNT_TAB + 4 * slot, struct.pack('<I', 1))
+    donor_idx = names.index(DONOR_NI)
+    wr(lp + 48 * donor_idx, bytes(item))
     # the title: Table 2's tail moved, its count 761, the helpers in the freed bytes, the sites
     listed = {r[0] for r in t1}
     trows = [rd(TAB2_BASE + 44 * k, 44) for k in range(TAB2_CNT)]
@@ -268,7 +260,7 @@ def build_base(l6ia_bytes):
     new_e3 = entry3(e3, blob, nam)
     print(f'[+] Entry 3: model {DONOR_ID} ({DONOR}) carries {DISPLAY}: {len(nam)} parameters')
     new_e0 = entry0(kp.get_entry_swapped(l6ia_bytes, 0), info, nam)
-    print(f'[+] Entry 0: preset ID {DONOR_PID}, DSP cost {DSP_COST}, Distortion > {FOLDER}, the IR-name title on Model')
+    print(f'[+] Entry 0: preset ID {DONOR_PID}, DSP cost {DSP_COST}, Distortion > Mono, the IR-name title on Model')
     e = l6ia.parse(l6ia_bytes)[2]
     new_e2 = entry2(l6ia_bytes[e['payload_off']: e['payload_off'] + e['payload_len']])
     print(f'[+] Entry 2: Blob 0 buffer {BLOB0_WORDS:#x} -> {BLOB0_MAX:#x} words, Heap 6 moved')

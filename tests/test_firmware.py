@@ -19,7 +19,7 @@ pytestmark = pytest.mark.firmware
 BUILT_MD5 = {
     "HX_STOMP_HXF": "e6431a5f2ba4d86f1f7f9300506a1101",
     "HX_STOMP_XL_HXF": "a53e185be36fb4e8feedb5f2b89a1505",     # not run on an XL
-    "HX_EFFECTS_HXF": "3bf0bd8e70648fa18318db585306b177",      # Distortion > NAM (tools/effects.py); not run on an HX Effects
+    "HX_EFFECTS_HXF": "3a5b47d995c4af2319690bb4a6e8bd2f",      # Distortion > Mono (tools/effects.py); not run on an HX Effects
 }
 
 
