@@ -240,6 +240,7 @@ src/sharc/nam_a2.asm          reference NAM A2 implementation for the check
 src/ramboot/                  the RAM loader and its eMMC overlay hook (C, Cortex-M4; make -C src/ramboot)
 tests/                        pytest: unit, web parity, kernel (slow), firmware (needs a stock .hxf)
 docs/                         images for this README
+docs/research/                working notes: measurements on the unit, studies, dead ends
 ```
 
 ## Credits
