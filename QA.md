@@ -2,7 +2,7 @@
 
 These tools test a build on a real HX Stomp over USB, with nothing installed. Each run starts the image from RAM (see [RAM_RUN.md](RAM_RUN.md)). The tools then drive the Stomp the way HX Edit does: they put blocks into the edit buffer, change knobs and presets, record the Stomp's USB audio and check it. They never save a preset, and the eMMC isn't touched. Turn the Stomp off and on and it starts whatever is installed, as before.
 
-All of this was written for and run on an HX Stomp. The XL should behave the same but has not been tested with these tools, and the HX Effects can't run builds from RAM.
+**Status:** on 2026-11-05 the smoke suite from this repository ran on an HX Stomp against the Stomp build (MD5 e6431a5f) from RAM: 48 pass, 0 fail, 1 skip (the soak, which runs only with `--soak`). All of this was written for and run on an HX Stomp. The XL should behave the same but has not been tested with these tools, and the HX Effects can't run builds from RAM.
 
 ## What you need
 
