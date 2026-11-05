@@ -36,6 +36,8 @@ Watch it on YouTube: https://www.youtube.com/watch?v=zQzj0qahJ6E
 
 **Presets saved with an earlier NAM build don't open NAM A2 Lite in this one:** NAM now has another preset ID (555; it was 461, and 147/148 before that). Re-add the block in those presets.
 
+Earlier changes are in [CHANGELOG.md](CHANGELOG.md).
+
 ## What you get
 
 - **NAM A2 Lite** under **Amp → NAM** (HX Effects: **Distortion → Mono**), with ten knobs, in this order (the HX Stomp shows three a page):
