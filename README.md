@@ -215,6 +215,8 @@ HX_STOMP_HXF=path/to/HX_Stomp_v3.80.0_0x103966115.hxf .venv/bin/pytest -m firmwa
 
 GitHub Actions runs the first two on every push and pull request. The firmware tests need your own stock file (`HX_STOMP_HXF`, `HX_STOMP_XL_HXF`, `HX_EFFECTS_HXF`) and are skipped without one. They build the whole `.hxf` and compare its MD5 with the one pinned in `tests/test_firmware.py`: the build is deterministic, so a changed byte anywhere in the firmware fails until the pin is updated on purpose.
 
+On a real HX Stomp, `tools/hx_smoke.py` runs a build from RAM and tests it over USB: blocks, knobs, presets, the DSP budget and the recorded audio. See [QA.md](QA.md).
+
 Write the test first, watch it fail, then change the code:
 - **Kernel behaviour:** add a step to `KernelCheck` in `tools/sharc/nam_multi.py` and its name to `STEPS`. `tests/test_multi_kernel.py` runs them, and so does `build.py`.
 - **The converters:** `tests/test_web_parity.py` checks that `web/nam2ir-core.js` writes the same bytes as `nam2ir.py` and refuses the same captures, so a change to one fails until the other matches.
@@ -230,6 +232,8 @@ tools/effects.py              the HX Effects build's steps (patch_amp.py effects
 tools/hxf.py, l6ia.py         .hxf container and L6IA archive
 tools/l6ia_verify.py          checks every checksum in an archive
 tools/hxf_ram.py              runs a build from RAM (RAM_RUN.md); tools/ramboot/ holds the built loader and hook
+tools/hx_smoke.py             on-unit tests over USB (QA.md): hx_ctl.py (HX Edit's USB control), hx_dfu_reboot.py,
+                              hx_ramrun.sh, hx_reamp.py, qa/ (the factory-preset sweep), mac/ (recorder, player)
 tools/sharc/nam_multi.py      the kernel's layout, data and simulator check
 tools/sharc/nam_multi_kernel.asm
 tools/sharc/nam_lite.py       the model format (converter), test model, shared tables, reference run

@@ -4,7 +4,7 @@ Working notes from building NAM A2 Lite into the stock firmware: what was measur
 
 Addresses are those of HX Stomp 3.80.0 (SHARC Entry 2 or the ARM application, Entry 0) unless a note says otherwise. Labels such as **verified**, **likely** and **guess** say how a claim was checked.
 
-The notes name some tools and notes that are not in this repository, such as `hx_ctl.py` (USB control like HX Edit), `hx_smoke.py`, `nam_meter.py`, the `hx-stomp-kit` module builds, the NAM A2 Full kernel, and `KIT_*` notes on stock internals. Those belong to the working repository. A cycle count or load figure in these notes can't be reproduced from this repository alone.
+The on-unit test tools these notes use (`hx_ctl.py`, `hx_smoke.py`, `hx_reamp.py`, the preset sweep) are in this repository: see [QA.md](../../QA.md). Some other tools and notes they name are not, such as `nam_meter.py` and the meter images, the `hx-stomp-kit` module builds, the NAM A2 Full kernel, and the `KIT_*` notes on stock internals. Those belong to the working repository, so a cycle count or load figure in these notes can't be reproduced from this repository alone. Paths such as `research/stomp_test_a/` are the working repository's; here the raw rows are in `stomp_test_a/` and the scripts in `tools/qa/`.
 
 ## NAM A2 Lite on the HX Stomp
 
