@@ -1,6 +1,6 @@
 @ long_press.s - long-press footswitch actions: in Stomp mode, a latching stomp footswitch 1..5 with a Hold action set acts on release
 @ when tapped (its press is held back and replayed on the click) and runs the action when held for 1 s: the tuner, a press of FS4/FS5,
-@ or a virtual footswitch FS6..FS10, which toggles the blocks assigned to MIDI CC 20..24 (Bypass Assign > MIDI In).
+@ or a virtual footswitch FS6..FS10, which toggles the blocks assigned to MIDI CC 20..24 (Bypass Assign > MIDI In, where they read FS6..FS10).
 @ tools/features/long_press.py owns the footswitch event handler 0x28dd1978 and enters lp_event with the stock handler in r2.
 .syntax unified
 .thumb
@@ -273,6 +273,32 @@ none:
 action_out:
     add sp, #12
     pop {r4, r5, pc}
+
+.thumb_func
+lp_cc_text:                         @ after the itoa that puts a CC's digits after "CC" (r0 the CC, r1 the digits, at buffer + 2): CC 20..24 read FS6..FS10
+    subs r0, #VIRTUAL_CC
+    cmp r0, #4
+    bhi cc_text_out
+    subs r1, #2
+    movs r2, #'F'
+    strb r2, [r1]
+    movs r2, #'S'
+    strb r2, [r1, #1]
+    movs r3, #0
+    cmp r0, #4
+    beq cc_text_ten
+    adds r0, #'6'
+    strb r0, [r1, #2]
+    strb r3, [r1, #3]
+    bx lr
+cc_text_ten:
+    movs r2, #'1'
+    strb r2, [r1, #2]
+    movs r2, #'0'
+    strb r2, [r1, #3]
+    strb r3, [r1, #4]
+cc_text_out:
+    bx lr
 
 .ltorg
 .balign 2

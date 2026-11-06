@@ -14,6 +14,9 @@ HANDLER, HANDLER_STOCK = 0x28dd1978, bytes.fromhex('2de9 f043')    # push.w {r4-
 HOME_CTOR_CALL, HOME_CTOR = 0x28d96c44, 0x28dc91d0                  # boot: where the Hold settings' records become ints
 # Bypass Assign > MIDI In: the first step up from Off is CC 4 (movs r2,#4); it lands on FS6's CC instead, and CC 4..19 stay below it.
 MIDI_IN_FIRST, MIDI_IN_FIRST_STOCK = 0x28dbc2b4, bytes.fromhex('0422')
+# A CC shows as "CC" then the digits itoa writes; after it, CC 20..24 read FS6..FS10. Bypass Assign's redraw and knob refresh, and
+# Controller Assign's CC# (a parameter on CC 20 follows FS6 too). The Command Center's CCs are ones it sends, so they keep their numbers.
+ITOA, CC_TEXT_CALLS = 0x28daaf6c, (0x28dbb6b2, 0x28dbbcd6, 0x28d8ff4c)
 
 
 def apply(p):
@@ -22,6 +25,8 @@ def apply(p):
     p.chain_bl(HOME_CTOR_CALL, HOME_CTOR, after=m['lp_boot'])
     p.expect(MIDI_IN_FIRST, MIDI_IN_FIRST_STOCK, 'the MIDI In knob\'s first CC')
     p.put(MIDI_IN_FIRST, bytes([VIRTUAL_CC, 0x22]), 'the MIDI In knob\'s first CC')
+    for site in CC_TEXT_CALLS:
+        p.chain_bl(site, ITOA, after=m['lp_cc_text'])
     a = pm.Asm(p.next())
     a.movw_movt(2, hook.stock | 1)
     a.bw(m['lp_event'])

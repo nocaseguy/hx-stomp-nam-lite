@@ -193,6 +193,14 @@ Each block in the Edit view shows its DSP cost in whole per cent, and the top ri
   - Stock units hold in-range values on these IDs: 78 and 132 hold 0, 74 and 120 hold 1, 63 holds 100. Only 63's value would read as the default.
   - So `lp_boot` treats any Hold record that is not type 2, or not set, as the first boot, and writes all five defaults as ints. Later boots keep the values.
   - **[hypothesis]** If a saved record's type ever reverted to 1, every boot would reset the five to their defaults. To be checked on an installed build.
+- **CC text: FS6..FS10** [verified offline]:
+  - A CC shows on the device as a 9-byte buffer: cleared, then "CC" (`0x28daad94`, string `0x28e3a0ec`), then the digits from itoa `0x28daaf6c(cc, buf + 2)`. The buffer goes to the knob text setter `0x28dc654c(knob, buf)`, so stock reads "CC20".
+  - The only three such sites:
+    - `0x28dbb6b2`: Bypass Assign redraw `0x28dbb0fc`.
+    - `0x28dbbcd6`: Bypass Assign knob refresh `0x28dbbbf4`, after a turn or a learn.
+    - `0x28d8ff4c`: Controller Assign `0x28d8fc48`, its CC# knob.
+  - Each is chained with `lp_cc_text`, which rewrites CC 20..24 as FS6..FS10. The Command Center's "CC #" is a CC it sends, so it is left as it is. HX Edit still shows MIDI CC 20..24.
+  - Image MD5 `2240fc7cafb4acd1929fd5014309d26b` **[verified on unit]**: MIDI In reads FS6 one click up from Off, FS10 four clicks later, then CC25; it reads CC19 below FS6. Controller Assign's CC# 20 reads FS6, and an FS6 hold still toggles its block.
 - **Bypass assignment and controllers** [verified offline] (details in the long-press branch's research):
   - Bypass assignment is kept per footswitch list, not per block: list head `0x28d96084() + 0x20 + 32k` (`0x28128b4c`). Each footswitch has 8 nodes of 0x38 bytes at `+0xc0 + 0x1c0k`, and the 40 nodes end exactly at the next object (`0x281294cc`).
   - `0x28dd10c0(0x28128a80, k)` walks that list. The press handler's context is `0x28128a80`.

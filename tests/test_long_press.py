@@ -321,6 +321,26 @@ def test_later_boots_keep_the_chosen_values(h):
     assert h.boot() == []
 
 
+BUF = 0x28610000
+
+
+def cc_text(h, cc):
+    """The knob text after lp_cc_text runs on the stock "CC" + digits buffer, as at the three call sites."""
+    h.m.write(BUF, b'CC' + str(cc).encode() + b'\0' * 7)
+    h.m.call(CODE + h.sym['lp_cc_text'], cc, BUF + 2)
+    return h.m.read(BUF, 9).split(b'\0')[0].decode()
+
+
+@pytest.mark.parametrize('cc, text', [(20, 'FS6'), (21, 'FS7'), (22, 'FS8'), (23, 'FS9'), (24, 'FS10')])
+def test_ccs_20_to_24_read_as_the_virtual_footswitches(h, cc, text):
+    assert cc_text(h, cc) == text
+
+
+@pytest.mark.parametrize('cc', [0, 4, 19, 25, 82, 127])
+def test_other_ccs_keep_their_numbers(h, cc):
+    assert cc_text(h, cc) == f'CC{cc}'
+
+
 def built(env):
     stock = os.environ.get('HX_STOMP_HXF')
     if not stock:
@@ -359,6 +379,8 @@ def test_build_owns_the_handler_and_hands_lp_event_the_stock_handler():
     assert read(lp_event, 2) == bytes.fromhex('2de9')    # push.w {r4-r8,lr}
     assert read(long_press.HOME_CTOR_CALL, 4) != pm.bl(long_press.HOME_CTOR_CALL, long_press.HOME_CTOR)
     assert read(long_press.MIDI_IN_FIRST, 2) == bytes([20, 0x22]), 'MIDI In: the first step up from Off is FS6\'s CC 20'
+    for site in long_press.CC_TEXT_CALLS:
+        assert read(site, 4) != pm.bl(site, long_press.ITOA), f'the CC text at {site:#x} is chained'
 
 
 @pytest.mark.firmware
@@ -376,6 +398,8 @@ def test_without_the_flag_the_handler_stays_stock():
     assert read(long_press.HANDLER, 4) == long_press.HANDLER_STOCK
     assert read(long_press.HOME_CTOR_CALL, 4) == pm.bl(long_press.HOME_CTOR_CALL, long_press.HOME_CTOR)
     assert read(long_press.MIDI_IN_FIRST, 2) == long_press.MIDI_IN_FIRST_STOCK
+    for site in long_press.CC_TEXT_CALLS:
+        assert read(site, 4) == pm.bl(site, long_press.ITOA)
 
 
 @pytest.mark.firmware
