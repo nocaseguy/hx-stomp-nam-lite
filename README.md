@@ -28,11 +28,12 @@ Each feature is a module in `tools/features/`. The tuner settings are always bui
 | **Tuner** | always on | Tuner Activation and Lock Tuner Settings (below) |
 | **BPM** | `HX_BPM=1` | The tempo at the top left of the Home screen, and a beat dot that blinks with the TAP footswitch's ring. The dot keeps the beat in Preset and Snapshot footswitch modes too. |
 | **DSP meter** | `HX_DSP_METER=1` | Each block in the Edit view shows its share of the DSP in per cent, and the top right corner shows the blocks' total. |
-| **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Press the lit snapshot footswitch again to flip to snapshots 4–6 (and back); the camera icon at the top right and the footswitch labels show 4, 5 or 6. Snapshots 4–6 are saved with the preset on the HX Stomp (saving from 4–6, you hear the 1–3 snapshot for a moment). A stock firmware plays such a preset as snapshots 1–3. HX Edit exports and backups keep snapshots 1–3 only. |
+| **Long press** | `HX_LONG_PRESS=1` | In Stomp mode, hold a footswitch for 1 s for a second action: the tuner, FS4 or FS5, or a virtual footswitch FS6–FS10. A tap still toggles the switch's own blocks. See [Long press](#long-press). |
+| **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). |
 | **Boot screen** | `--splash`, `--splash-text` | Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). |
 
 ```sh
-HX_BPM=1 HX_DSP_METER=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
+HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
 ```
 
 ### Custom settings
@@ -46,9 +47,29 @@ The features' settings are in Global Settings, in a seventh section called **Cus
 | BPM | **BPM Font** | **41 Lite** (default), 35 Bold, 28 Bold, 28 Lite, 21 Bold, 21 Reg | The tempo's font |
 | BPM | **BPM Color** | **White** (default), Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple | The tempo's and the dot's colour |
 | BPM | **BPM Dot Pos** | **Left** (default), Right, Both | Where the beat dot sits, beside the preset number |
+| Long press | **FS1 Hold** … **FS5 Hold** | Off, Tuner, FS4, FS5, FS6 … FS10 (defaults FS6 … FS10) | What holding that footswitch for 1 s does. FS4 and FS5 are external switches. |
 | DSP meter | **DSP Disp** | **Used/All** (default, e.g. `47/75`), Free (`28`), Used% (`63%`) | What the top right corner shows. "All" is 75: the firmware's 90% preset limit less its fixed 15%. |
 
 The HX Stomp keeps a setting's value under its ID, which `tools/setting_ids.py` assigns. If a value another build stored under that ID is out of range, the menu shows the setting's default.
+
+### Long press
+
+In Stomp footswitch mode, each of FS1–FS5 can have a Hold action (Global Settings > CustomOS). Holding the switch for 1 s runs it; a tap still toggles the switch's own blocks, on release instead of on press, since the press can't tell yet whether it will become a hold.
+
+- **Tuner** opens the tuner, as holding TAP does.
+- **FS4, FS5** press that footswitch, as an external switch would.
+- **FS6 … FS10** are virtual footswitches. Each toggles the blocks you assign to it: in a block's Bypass Assign, set MIDI In to FS6 … FS10 (the first five steps up from Off). The assignment is saved in the preset, and parameters assigned to the same footswitch through Controller Assign follow it too. They are MIDI CC 20–24 underneath, which is how HX Edit and other MIDI gear see them.
+- A switch with Hold **Off**, a momentary switch, and the Preset and Snapshot footswitch modes work as stock.
+
+### More snapshots
+
+With Footswitch Mode on Snapshot, the three footswitches select snapshots 1–3 as usual. Press the lit one again and the same footswitches select snapshots 4–6; press the lit one again to come back.
+
+- **Which bank you're in:** in 4–6, the camera icon at the top right and the footswitch labels show 4, 5 or 6.
+- **New snapshots:** the first time you flip to a preset's 4–6, each one starts as a copy of the snapshot you flipped from. Edit them as any snapshot: snapshot-controlled parameters, block bypass, tempo and names are kept per snapshot.
+- **Saving:** a save keeps all six with the preset. Saving while in 4–6, you hear the matching snapshot of 1–3 for a moment, as the save writes 1–3 first.
+- **Stock firmware and HX Edit:** a preset saved with 4–6 still loads on a stock firmware, as snapshots 1–3, and the stock firmware drops 4–6 if it saves the preset again. HX Edit opens, exports and imports these presets, but its exports (`.hlx`) and backups (`.hxb`) hold snapshots 1–3 only. Snapshots 4–6 live on the HX Stomp.
+- **What else changes:** pressing the lit snapshot footswitch no longer does what Reselect Snapshot says. Next and previous snapshot, MIDI CC 69 and HX Edit's snapshot buttons work within the bank you're in.
 
 ## NAM A2 Lite
 
@@ -183,10 +204,10 @@ M4 code (the caves `tools/patch_menu.py` writes, and each feature's `.s` module)
 build.py                      one-step build from the stock .hxf
 FIRMWARE_NOTES.md             what is known about the 3.80.0 firmware
 tools/patch_menu.py           CustomOS: the feature engine, the Global Settings section and its caves (HX Stomp)
-tools/features/               the features: tuner.py, bpm.py, dsp_meter.py, splash.py
+tools/features/               the features: tuner.py, bpm.py, dsp_meter.py, long_press.py, more_snapshots.py, splash.py
 tools/setting_ids.py          which setting ID each feature's setting uses
 tools/m4asm.py                assembles a feature's src/m4/*.s with Apple's clang
-src/m4/                       the features' M4 code (bpm.s, dsp_meter.s)
+src/m4/                       the features' M4 code (bpm.s, dsp_meter.s, long_press.s, more_snapshots.s)
 tools/image_store.py          the image store (Entries 7 and 8): images, fonts, items
 tools/patch_splash.py         boot screen pictures; splash_topo.py draws one, splash_emoji.py and emoji_png.swift make emoji glyphs
 tools/patch_amp.py            inspect / add-model / ir-title / patch
