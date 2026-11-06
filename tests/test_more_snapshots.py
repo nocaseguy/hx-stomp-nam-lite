@@ -586,5 +586,5 @@ def test_without_the_flag_the_sites_stay_stock():
 
 @pytest.mark.firmware
 def test_builds_alongside_the_other_features():
-    _, on = built({'HX_MORE_SNAPSHOTS': '1', 'HX_BPM': '1', 'HX_DSP_METER': '1'})
-    assert {'bpm', 'dsp_meter', 'more_snapshots'} <= set(on)
+    _, on = built({'HX_MORE_SNAPSHOTS': '1', 'HX_BPM': '1', 'HX_DSP_METER': '1', 'HX_LONG_PRESS': '1'})
+    assert {'bpm', 'dsp_meter', 'long_press', 'more_snapshots'} <= set(on)
