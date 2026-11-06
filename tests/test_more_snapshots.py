@@ -19,6 +19,10 @@ MGR, CODE = 0x2812c630, 0x28e60000
 SELECT, RECORD_INIT = 0x28de2f90, 0x28de14b4
 LOCK, UNLOCK, MEMCPY, MEMSET = 0x28e24c00, 0x28e24bb0, 0x28e24c78, 0x28e24b78
 STREAM, HEADER = 0x28700000, 0x28700100     # a serializer's arguments: it finds the manager itself
+WRITE_FN, SINK = 0x28700200, 0x28700300      # the stream's write(context, bytes, length) and its context
+SERIALIZE, TOC_WRITE, SECTION_READ, PRESET, PRESET_FLAG = 0x28deacf4, 0x28deabdc, 0x28def9a8, 0x28d92a98, 0x28e026f0
+SECTION = 0x2821fcc8                         # section 10's buffer
+CONTROLLERS, SWITCHES = 0x741, 0x742
 ICON, LABELS, NODE, FB = 0x2812ade8, 0x2812a4bc, 0x28600000, 0x28d1ce98
 CAMERAS = {'white': (0x1a0, 0x71, 0x10f), 'red': (0x156, 0x105, 0x4f), 'lit': (0x13, 0x202, 0x12a)}   # Icon_Snapshot1..3, Red, Sel
 LABEL_X, LABEL_Y = (53, 160, 267), 100
@@ -53,6 +57,15 @@ class Manager:
         self.m.stub(MEMSET, lambda m: m.write(m.reg('r0'), bytes([m.reg('r1') & 0xff]) * m.reg('r2')))
         self.m.stub(SELECT, self._select)
         self.m.stub(RECORD_INIT, self._init)
+        self.written, self.section, self.flag = [], b'', 0
+        self.m.stub(WRITE_FN, lambda m: self.written.append(m.read(m.reg('r1'), m.reg('r2'))))
+        self.m.u32(STREAM, SINK)
+        self.m.u32(STREAM + 4, WRITE_FN | 1)
+        self.m.stub(SERIALIZE, lambda m: m.reg('r0', 5))
+        self.m.stub(TOC_WRITE, lambda m: m.reg('r0', 0))
+        self.m.stub(PRESET, lambda m: m.reg('r0', 0x28710000))
+        self.m.stub(PRESET_FLAG, lambda m: m.reg('r0', self.flag))
+        self.m.stub(SECTION_READ, self._section)
         self.events = []
         self.m.stub(WIDGET_LOCK, lambda m: self.events.append('widget lock'))
         self.m.stub(WIDGET_UNLOCK, lambda m: self.events.append('widget unlock'))
@@ -70,6 +83,11 @@ class Manager:
         self.m.u8(MGR + CUR, 0)
         self.m.u8(MGR + PREV, 0)
         self.m.u8(MGR + BUSY, 0)
+
+    def _section(self, m):
+        assert (m.reg('r1'), m.reg('r3'), m.stack_args(1)[0]) == (10, SECTION, 0x5000), 'section 10, as the load reads it'
+        m.write(SECTION, self.section)
+        m.reg('r0', len(self.section) or -0x2a)
 
     def _lock(self, m):
         assert m.reg('r0') == MGR + 4 and self.depth == 0, 'the manager lock, once: it may not be recursive'
@@ -130,6 +148,11 @@ class Manager:
 
     def call(self, sym, *args):
         return self.m.call(CODE + self.sym[sym], *args)
+
+    def read_section(self):
+        """The load's read of section 10: (file, 10, 0, buffer) and the buffer's size on the stack."""
+        self.m.u32(self.stack_top, 0x5000)
+        return self.call('snaps_file_section', 0x28720000, 10, 0, SECTION)
 
     def paint(self, view='top'):
         """The top view's (or Home view's) paint, then the module after it, with the cameras as stock sets them for the current
@@ -346,6 +369,109 @@ def test_a_save_in_bank_b_keeps_the_numbers(mgr):
     assert mgr.paint() == (top('4'), [])
 
 
+def entries(rec, at, size, keys):
+    """A record with entries (key, then size - 1 bytes of value) at offset at."""
+    rec = bytearray(rec)
+    for i, (key, value) in enumerate(keys):
+        rec[at + size * i:at + size * (i + 1)] = bytes([key]) + bytes([value]) * (size - 1)
+    return bytes(rec)
+
+
+def test_a_flip_matches_the_incoming_banks_entries_to_the_outgoing_ones(mgr):
+    """A controller assigned while bank B waited is in bank A's records only: on the flip, bank B takes it with bank A's value,
+    and keeps its own values for the controllers both have. Footswitch entries the same."""
+    mgr.press(0)                                        # bank B, made from bank A
+    mgr.press(0)                                        # back to A; B waits in the shadow
+    b0 = mgr.rec(0)
+    for i in range(3):
+        rec = entries(mgr.rec(i), 0x28, 7, [(3, 0x30 + i), (5, 0x50 + i)])
+        mgr.m.write(record(i), entries(rec, 0x1e8, 9, [(2, 0x20 + i)]))
+    shadow = CODE + mgr.sym['snaps_shadow']
+    for i in range(3):
+        rec = entries(mgr.m.read(shadow + REC * i, REC), 0x28, 7, [(3, 0x90 + i), (0x40, 0)])
+        mgr.m.write(shadow + REC * i, entries(rec, 0x1e8, 9, [(2, 0xa0 + i)]))
+    mgr.m.u8(MGR + CONTROLLERS, 2)
+    mgr.m.u8(MGR + SWITCHES, 1)
+    mgr.press(0)
+    for i in range(3):
+        rec = mgr.rec(i)
+        assert rec[0x28:0x28 + 14] == bytes([3]) + bytes([0x90 + i]) * 6 + bytes([5]) + bytes([0x50 + i]) * 6
+        assert rec[0x1e8:0x1e8 + 9] == bytes([2]) + bytes([0xa0 + i]) * 8, 'its own footswitch entry, the keys matching'
+
+
+def appended(mgr):
+    mgr.written.clear()
+    assert mgr.call('snaps_file_serialize', STREAM, HEADER) == 5, "the serializer's result"
+    return b''.join(mgr.written)
+
+
+def head():
+    return bytes([0x64, 0xc5, 0x07, 0x28]) + b'HX6B' + bytes([1, 0, 0, 0])
+
+
+def test_a_preset_file_without_bank_b_stays_stock(mgr):
+    assert appended(mgr) == b''
+    mgr.written.clear()
+    mgr.call('snaps_file_toc', STREAM, HEADER)
+    assert mgr.written == [], 'and its count is left alone'
+
+
+def test_a_preset_file_saved_in_bank_b_gets_bank_b_after_its_map(mgr):
+    mgr.press(0)
+    assert appended(mgr) == head() + b''.join(mgr.rec(i) for i in range(3))
+
+
+def test_a_preset_file_saved_in_bank_a_gets_the_waiting_bank_b(mgr):
+    mgr.press(0)
+    bank_b = b''.join(mgr.rec(i) for i in range(3))
+    mgr.press(0)
+    assert appended(mgr) == head() + bank_b
+
+
+@pytest.mark.parametrize('flag, count', [(0, 0x8a), (1, 0x8b)])
+def test_the_maps_count_counts_key_0x64(mgr, flag, count):
+    """The serializer writes (flag + 9) | 0x80 up front, flag saying whether key 12 follows; after the TOC's rewrite the file is at
+    that byte, which gets one more."""
+    mgr.flag = flag
+    mgr.press(0)
+    appended(mgr)
+    mgr.written.clear()
+    mgr.call('snaps_file_toc', STREAM, HEADER)
+    assert mgr.written == [bytes([count])]
+    mgr.written.clear()
+    mgr.call('snaps_file_toc', STREAM, HEADER)
+    assert mgr.written == [], 'once a save'
+
+
+def bank_b_file(records):
+    return head() + records
+
+
+@pytest.mark.parametrize('names', [b'', b'\x0c\x92\xa3abc\xc0', b'\x0c\xdc\x00\x02\xd9\x02hi\xa0'])
+def test_a_load_takes_bank_b_from_the_file(mgr, names):
+    """Section 10 holds key 12's names (if any), then key 0x64; bank B comes back with the preset's snapshots."""
+    records = b''.join(bytes([0xb0 + i]) * REC for i in range(3))
+    mgr.section = names + bank_b_file(records)
+    assert mgr.read_section() == len(mgr.section), "the read's result"
+    mgr.call('snaps_loaded', MGR, 0, 0, 0)
+    assert mgr.m.read(CODE + mgr.sym['snaps_shadow'], 3 * REC) == records
+    mgr.inits.clear()
+    mgr.press(0)
+    assert mgr.inits == [] and mgr.rec(0)[:VALID] == records[:VALID], "the file's snapshot 4, not a new one"
+
+
+@pytest.mark.parametrize('section', [b'', b'\x0c\x90', b'\x0c\x90' + bank_b_file(b'\0' * 0x100),
+                                     b'\x0c\x90' + head()[:4] + b'HX6C' + bytes(4 + 3 * REC)])
+def test_a_load_without_a_whole_bank_b_starts_bank_b_anew(mgr, section):
+    """No key 0x64, a short one, or another magic: bank B is made anew, as in a stock preset."""
+    mgr.section = section
+    mgr.read_section()
+    mgr.call('snaps_loaded', MGR, 0, 0, 0)
+    mgr.inits.clear()
+    mgr.press(0)
+    assert mgr.inits == [b'SNAPSHOT 4', b'SNAPSHOT 5', b'SNAPSHOT 6']
+
+
 def test_feature_flag():
     assert ms.FLAG == 'HX_MORE_SNAPSHOTS' and not getattr(ms, 'SETTINGS', ())
 
@@ -379,6 +505,7 @@ def test_build_sends_the_snapshot_footswitch_to_the_module_and_wraps_load_and_sa
     module = branch_target(ms.FS_SELECT_CALLS[0], read(ms.FS_SELECT_CALLS[0], 4)) - sym['snaps_select']
     assert read(module, len(code)) == code
     assert [branch_target(s, read(s, 4)) for s in ms.FS_SELECT_CALLS] == [module + sym['snaps_select']] * 2
+    assert [branch_target(s, read(s, 4)) for s, _, _ in ms.FILE_CALLS] == [module + sym[h] for _, _, h in ms.FILE_CALLS]
     for fn, before, after in ((ms.PARSE, 'snaps_loaded', None), *((fn, 'snaps_saving', 'snaps_saved') for fn, _ in ms.SERIALIZERS)):
         stub = branch_target(fn, read(fn, 4))
         assert branch_target(stub + 6, read(stub + 6, 4)) == module + sym[before], 'push, ldm, then the before handler'
@@ -452,6 +579,7 @@ def test_without_the_flag_the_sites_stay_stock():
     read, on = built({})
     assert 'more_snapshots' not in on
     assert all(read(s, 4) == pm.thumb_bw(s, ms.SELECT) for s in ms.FS_SELECT_CALLS)
+    assert all(read(s, 4) == pm.bl(s, fn) for s, fn, _ in ms.FILE_CALLS)
     assert read(ms.PARSE, 4) == ms.PARSE_STOCK and all(read(fn, 4) == stock for fn, stock in ms.SERIALIZERS)
     assert struct.unpack('<I', read(ms.TOP_PAINT_LIT, 4))[0] == ms.TOP_PAINT
 
