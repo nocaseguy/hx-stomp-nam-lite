@@ -11,9 +11,9 @@ import sys
 
 IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stock state, and the settings it held in earlier builds)
     (29, 'tuner.activate', 'stock limits are not the 0..1 enum; GR Size (0..10) and GR Position (0..3) in early GR images'),
-    (63, None, 'empty label, no stock read or write found; units hold 100 (its stock limits value), seen on a unit'),
-    (74, None, 'empty label, no stock read or write found; units hold 1 (its stock limits value); a value set on it survived a power-cycle and a stock boot, seen on a unit'),
-    (78, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
+    (63, 'long_press.fs1', 'empty label, no stock read or write found; units hold 100 (its stock limits value), seen on a unit'),
+    (74, None, 'empty label, no stock read or write found; units hold 1 (its stock limits value); a value set on it survived a power-cycle and a stock boot, seen on a unit; FS2 Hold (0..3) in long-press image 2fe68426'),
+    (78, 'long_press.fs2', 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit; stock type-1 (bool) limits: its record keeps type 1, so the menu offers two values until long_press rewrites it as an int at boot'),
     (101, 'dsp_meter.disp', 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
     (102, 'bpm.dot', 'GR Position in the Own-IDs GR image (0..4); BPM Position (0..6) in early BPM images; '
                      'DSP Disp (0..3) in dsp-meter test images'),
@@ -33,7 +33,7 @@ IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stoc
     (120, None, "empty label, no stock read or write found; units hold 1 (its stock limits value), seen on a unit; BPM Beat (0..4) in bpm-display images up to a72c76a, no longer used"),
     (126, 'bpm.color', 'GR Thickness in the Edge-meter and Own-IDs GR images (0..20)'),
     (128, 'bpm.font', 'GR Direction in the Own-IDs GR image (0..1); BPM Font in an older order in early BPM images'),
-    (132, None, 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit; '
+    (132, 'long_press.fs3', 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit; stock type-1 (bool) limits, as 78; '
                 'BPM Downbeat (0..10) in bpm-display images up to a72c76a'),
 )
 
