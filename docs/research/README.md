@@ -19,6 +19,10 @@ The on-unit test tools these notes use (`hx_ctl.py`, `hx_smoke.py`, `hx_reamp.py
 | [KIT_UNIT_MEASUREMENTS.md](KIT_UNIT_MEASUREMENTS.md) | first probe measurements: call rate, the load word, the empty-preset base load |
 | [KIT_EP_DMA.md](KIT_EP_DMA.md) | external-port DMA on the ADSP-21469, from ADI's manual |
 
+## Original Helix Floor hardware
+
+[Saved A2 Lite presets on Floor 3.80](HELIX_FLOOR_RECALL.md) covers the tested port, cold-restart USB comparison, serial listening test and open control freeze.
+
 ## Stopped or not built
 
 | note | what it covers |
