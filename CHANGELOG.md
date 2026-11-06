@@ -2,6 +2,11 @@
 
 Major changes, newest first. The repository has no version numbers, so each entry is dated and names its commit. Status labels follow the README: "ran on" means a person ran that build on that unit.
 
+## 2026-11-06
+
+- **HX Effects: the capture's name in overview mode** (`26271c2`, PR #9 by Jerry Chuang). The scribble strip shows "Model: name" while Model turns, and the strips and parameter view show Model as a slot number (1..128). This build (MD5 4d2a4a8a) ran on an HX Effects.
+- **README and setup page name all three units** (HX Stomp, HX Stomp XL, HX Effects), with a table of what differs between them.
+
 ## 2026-11-05
 
 - **On-unit QA tools** (`eecdc60`, [QA.md](QA.md)). `tools/hx_smoke.py` runs a build from RAM and tests it over USB: NAM blocks, knobs, presets, the DSP budget, a stock block of each category, and the recorded audio. It also adds the USB control (`hx_ctl.py`), a one-step RAM run (`hx_ramrun.sh`), a reamp tool and the factory-preset sweep. The suite from this repository ran on an HX Stomp against the Stomp build (MD5 e6431a5f): 48 pass, 0 fail, 1 skip.

@@ -9,10 +9,22 @@ This repository adds **Neural Amp Modeler (NAM) A2 Lite** to the stock Line 6 fi
 | Device | Stock firmware (the build checks its MD5) | NAM A2 Lite in the menu | Status |
 |---|---|---|---|
 | **HX Stomp** | `HX_Stomp_v3.80.0_0x103966115.hxf`<br>`a2cd8f4ae56f49415380270ebc484bf1` | Amp → NAM | **Runs.** This build ran on an HX Stomp from RAM: the on-device test suite passed (48 cases: one to three NAM blocks, both paths, every stock effect category beside NAM, model and preset changes) and every band of the tone stack was measured on the unit. |
-| **HX Stomp XL** | `HX_Stomp_XL_v3.80.0_0x103966115.hxf`<br>`329e3a26d60d3de1988b6785fa833ee1` | Amp → NAM | **NAM runs on an XL** (photo below). This ten-knob build has not run on an XL yet; its DSP program, model list and DSP graphs are byte for byte the HX Stomp's. |
-| **HX Effects** | `HX_Effects_v3.80.0_0xd97239907.hxf`<br>`7c2ebdf1bffb6bcc5f89dda97f91e40c` | Distortion → Mono | **Runs.** An owner ran it on an HX Effects, with the browser and knob pop-up fixes. See [HX Effects](#hx-effects). |
+| **HX Stomp XL** | `HX_Stomp_XL_v3.80.0_0x103966115.hxf`<br>`329e3a26d60d3de1988b6785fa833ee1` | Amp → NAM | **NAM runs on an XL** (earlier builds; photo below). This ten-knob build has not run on an XL yet; its DSP program, model list and DSP graphs are byte for byte the HX Stomp's. |
+| **HX Effects** | `HX_Effects_v3.80.0_0xd97239907.hxf`<br>`7c2ebdf1bffb6bcc5f89dda97f91e40c` | Distortion → Mono | **Runs.** An owner ran this build on an HX Effects (with their browser, knob pop-up and scribble strip fixes, PRs #6 and #9). See [HX Effects](#hx-effects). |
 
 Not the Helix Floor, LT or Rack: their firmware is a different design. Only firmware 3.80.0: the build refuses any other file.
+
+The block, its ten knobs and the DSP kernel are the same on all three units. What differs:
+
+| | HX Stomp | HX Stomp XL | HX Effects |
+|---|---|---|---|
+| Where NAM A2 Lite is | Amp → NAM | Amp → NAM | Distortion → Mono |
+| The capture's name | the block's title | the block's title | the Model knob's pop-up, and the scribble strip in overview mode |
+| File the build writes | `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` | `build/HX_Stomp_XL_v3.80.0_NAM_A2_Lite.hxf` | `build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf` |
+| [Try it from RAM](#try-it-first-from-ram) | yes | yes (ran from the setup page) | no |
+| Update mode, for [recovery](#recovery) | hold Page Right at power-on | hold Page Right at power-on (not yet tried on an XL) | hold the right arrow (**>**) at power-on |
+
+More in [HX Stomp XL](#hx-stomp-xl) and [HX Effects](#hx-effects).
 
 [![An HX Stomp XL showing Amp → Guitar, Bass, NAM](docs/hx-stomp-xl-amp-nam.jpg)](docs/hx-stomp-xl-amp-nam.jpg)
 
@@ -151,7 +163,7 @@ The XL's firmware 3.80.0 is the Stomp's with another build of the main applicati
 - The kernel reads the User IRs from where the HX Effects keeps them (`nam_multi.py --effects`).
 - **The capture's name** shows on the Model knob's own line ("Model: name") in the knob pop-up when you turn Model, and on the scribble strip in overview mode (with sibling knobs stepping aside, matching stock IR block behavior). The scribble strips and parameter view cleanly show Model's integer slot number (1..128).
 - No run from RAM: the RAM loader is the HX Stomp's.
-- **Recovery:** hold the right arrow (**>**) while powering on for fail-safe update mode, then install the stock `HX_Effects_v3.80.0_0xd97239907.hxf` with Line 6 Updater (Choose File).
+- **Recovery:** see [Recovery](#recovery) (the right arrow, **>**, instead of Page Right).
 
 HX Effects support builds on **Scott's HX Effects port, [scottlynn73/hx-effects-nam-lite](https://github.com/scottlynn73/hx-effects-nam-lite)**, which first ran NAM A2 Lite on an HX Effects: it found where the HX Effects keeps its User IRs and its model tables, and that a NAM block has to take over a stock model's identity there. Thank you, Scott.
 
@@ -174,29 +186,31 @@ Notes:
 
 ## Limits
 
-- **At most 3 NAM A2 Lite blocks in a preset**, each with its own capture. The kernel (`tools/sharc/nam_multi.py`) has 3 model slots; a fourth block would pass its input through. They are effect blocks, so the two-amp limit doesn't count them. Run on an HX Stomp with three blocks; the XL build has the same kernel and layout but has not run on an XL.
-  - Each block uses about **23% of the DSP** on the HX Stomp with its tone stack (an empty preset alone is about 20%), and declares a DSP cost of **2275**. The Mid band's frequency and Q are computed only when a knob moves, so they cost nothing while you play.
+- **At most 3 NAM A2 Lite blocks in a preset**, each with its own capture. The kernel (`tools/sharc/nam_multi.py`) has 3 model slots; a fourth block would pass its input through. They are effect blocks, so the two-amp limit doesn't count them. Run on an HX Stomp with three blocks; the XL and HX Effects builds have the same kernel and slots.
+  - Each block uses about **23% of the DSP** on the HX Stomp with its tone stack (an empty preset alone is about 20%), and declares a DSP cost of **2275**. The XL runs the same DSP program; the HX Effects' load hasn't been measured. The Mid band's frequency and Q are computed only when a knob moves, so they cost nothing while you play.
   - **Three blocks leave room for one more light effect**; the Stomp greys out anything that doesn't fit. With two NAM blocks there is room for more.
   - Each block takes its own 0x5000-word block of DDR2 for its long rings; the Amp blocks' DDR2 allowance is raised to fit.
 - **In HX Edit the block shows as "Xenomorph Fuzz"**, with that model's knob names: Gain is Input, Tone is Treble, Level is Output, Clipping is Polarity, OscLevel is Bass, OscTone is Mid, MinFreq is Model, MaxFreq is Mid Freq, WaveShape is Q, Sensitivity is High Cut. Editing those knobs in HX Edit works, under those names. Turning Model on the unit is clearer (the title shows the capture).
 - Only the 3-channel A2 Lite architecture fits; standard and A2 Full captures don't.
-- Names on the Stomp hold 16 characters at most.
+- IR names hold 16 characters at most.
 
 ## Recovery
 
-If an HX Stomp or XL stops at the splash screen after an install (HX Effects: see [HX Effects](#hx-effects)):
+If the unit stops at the splash screen after an install:
 
 1. Power it off. **Hold Page Right while powering it on.** It comes up in update mode, with the screen dark.
 2. In Line 6 Updater, choose **Choose File** and pick the stock `HX_Stomp_v3.80.0_0x103966115.hxf`.
+
+On an XL, do the same with the stock `HX_Stomp_XL_v3.80.0_0x103966115.hxf` (the XL has Page Right too, but this hasn't been tried on one). On an HX Effects, hold the right arrow (**>**) while powering on (its fail-safe update mode) and install the stock `HX_Effects_v3.80.0_0xd97239907.hxf`.
 
 This has been done on a real unit after a modified firmware hung at the splash, and it restored stock 3.80.0. It works because the bootloader is left untouched.
 
 ## How it works
 
-- **The DSP.** The HX Stomp's audio runs on an Analog Devices SHARC ADSP-21469. The kernels are hand-written SHARC assembly, bit-exact with the reference:
+- **The DSP.** All three units run their audio on an Analog Devices SHARC ADSP-21469. The kernels are hand-written SHARC assembly, bit-exact with the reference:
   - `tools/sharc/nam_multi_kernel.asm`: the WaveNet layers run two samples at a time in SIMD. The free internal memory is split into 3 slots, one model each; the long rings live in each block's own DDR2 block, and their taps are copied in by chained external-port DMA while the previous layer computes.
 - **No vendor toolchain.** `tools/sharc/sasm.py` assembles the code and `tools/sharc/ssim.py` simulates it.
-- **Captures through the IR slots.** The Stomp already stores up to 128 User IRs of 2,048 samples and hands them to the DSP unchanged.
+- **Captures through the IR slots.** The unit already stores up to 128 User IRs of 2,048 samples and hands them to the DSP unchanged.
   - `nam2ir.py` packs a capture's weights into those samples, behind a small header the kernel recognises.
   - HX Edit refuses samples beyond about ±15.8, so the weights are scaled by a power of two, which is exact.
 - **The title.** The application shows an IR's name in the block title only for IR blocks. `patch_amp.py ir-title` turns the two places that test for an IR block into jumps to a few added instructions that also take that path for NAM A2 Lite's preset ID. It changes what the screen shows only: the parameter, its DSP value and presets are as before.
