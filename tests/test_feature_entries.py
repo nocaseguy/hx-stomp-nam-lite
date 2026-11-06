@@ -689,7 +689,7 @@ def test_owning_the_led_send_beside_bpm_fails_in_either_order(stock, order, firs
     def apply(p):
         p.own_entry(LED_SEND, LED_STOCK, 'the LED send', p.add(b'\x70\x47'))
     demo = fake('demo', ORDER=order, apply=apply)
-    with pytest.raises(SystemExit, match=f'{second} \\(.+\\) and {first} \\(the LED send\\) both patch 0x28d98f74'):
+    with pytest.raises(SystemExit, match=f'{second} \\(the LED send\\) and {first} \\(the LED send\\) both own 0x28d98f74'):
         mods = sorted(features.load() + [demo], key=lambda m: getattr(m, 'ORDER', 100))
         pm.menu_entries(lambda n: pa.get_entry_swapped(stock, n), mods, {'HX_BPM': '1'})
 
