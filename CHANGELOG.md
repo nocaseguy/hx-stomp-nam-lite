@@ -4,6 +4,7 @@ Major changes, newest first. The repository has no version numbers, so each entr
 
 ## 2026-11-06
 
+- **Loudness normalisation.** The converter (`tools/nam2ir.py` and the web page) stores a capture's loudness in the `.wav`, and the amp brings its output to −18 dB, as the NAM plugin's Normalized mode does. `.wav` files from older converters play as before. A capture converted again plays at a new volume. The converter also refuses captures not trained at 48 kHz and models that aren't the A2 shape. Builds: HX Stomp a37659d0 (ran on an HX Stomp from RAM; test suite 48 pass, 0 fail, 1 skip), HX Stomp XL 8918ab60 (not run on an XL), HX Effects 2efb9879 (not run on an HX Effects).
 - **HX Effects: the capture's name in overview mode** (`26271c2`, PR #9 by Jerry Chuang). The scribble strip shows "Model: name" while Model turns, and the strips and parameter view show Model as a slot number (1..128). This build (MD5 4d2a4a8a) ran on an HX Effects.
 - **README and setup page name all three units** (HX Stomp, HX Stomp XL, HX Effects), with a table of what differs between them.
 

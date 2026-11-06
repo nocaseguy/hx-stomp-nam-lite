@@ -10,7 +10,7 @@ This repository adds **Neural Amp Modeler (NAM) A2 Lite** to the stock Line 6 fi
 |---|---|---|---|
 | **HX Stomp** | `HX_Stomp_v3.80.0_0x103966115.hxf`<br>`a2cd8f4ae56f49415380270ebc484bf1` | Amp → NAM | **Runs.** This build ran on an HX Stomp from RAM: the on-device test suite passed (48 cases: one to three NAM blocks, both paths, every stock effect category beside NAM, model and preset changes) and every band of the tone stack was measured on the unit. |
 | **HX Stomp XL** | `HX_Stomp_XL_v3.80.0_0x103966115.hxf`<br>`329e3a26d60d3de1988b6785fa833ee1` | Amp → NAM | **NAM runs on an XL** (earlier builds; photo below). This ten-knob build has not run on an XL yet; its DSP program, model list and DSP graphs are byte for byte the HX Stomp's. |
-| **HX Effects** | `HX_Effects_v3.80.0_0xd97239907.hxf`<br>`7c2ebdf1bffb6bcc5f89dda97f91e40c` | Distortion → Mono | **Runs.** An owner ran this build on an HX Effects (with their browser, knob pop-up and scribble strip fixes, PRs #6 and #9). See [HX Effects](#hx-effects). |
+| **HX Effects** | `HX_Effects_v3.80.0_0xd97239907.hxf`<br>`7c2ebdf1bffb6bcc5f89dda97f91e40c` | Distortion → Mono | **Runs.** An owner ran the previous build on an HX Effects (with their browser, knob pop-up and scribble strip fixes, PRs #6 and #9). This one adds only the loudness step to the DSP code and hasn't run on an HX Effects yet. See [HX Effects](#hx-effects). |
 
 Not the Helix Floor, LT or Rack: their firmware is a different design. Only firmware 3.80.0: the build refuses any other file.
 
@@ -124,9 +124,9 @@ This writes `build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf` (from the XL's file `build/
 The HX Effects build is the same block with that unit's own steps (`patch_amp.py effects-eq`, `tools/effects.py`); see [HX Effects](#hx-effects).
 
 The results' MD5s are pinned in `tests/test_firmware.py`:
-- HX Stomp `e6431a5f2ba4d86f1f7f9300506a1101`. That exact file ran on an HX Stomp from RAM and passed the project's on-device test suite; its tone stack was measured on the unit with a fixed test signal (Mid at +12 dB read +11.8 to +12.0 dB at 150 Hz, 220 Hz and 1.8 kHz, −12.0 dB at −12; Treble +11.9 dB at 2.5 kHz; High Cut at 0.0 −3.4 dB at 2 kHz), and checked by ear, sweeping Mid Freq and High Cut while playing.
-- HX Stomp XL `a53e185be36fb4e8feedb5f2b89a1505` (not run on an XL).
-- HX Effects `4d2a4a8a40b6625f2c3a3b3c93e7e2f0` (ran on an HX Effects).
+- HX Stomp `a37659d04cf97218bd1c470c6519cdad`. That exact file ran on an HX Stomp from RAM and passed the project's on-device test suite (48 pass, 0 fail, 1 skip), and a loudness-normalised capture was checked on it by ear. Its tone stack (unchanged since the previous build, `e6431a5f`) was measured on the unit with a fixed test signal (Mid at +12 dB read +11.8 to +12.0 dB at 150 Hz, 220 Hz and 1.8 kHz, −12.0 dB at −12; Treble +11.9 dB at 2.5 kHz; High Cut at 0.0 −3.4 dB at 2 kHz), and checked by ear, sweeping Mid Freq and High Cut while playing.
+- HX Stomp XL `8918ab60ebff62ebfccd4fccb2bed85a` (not run on an XL).
+- HX Effects `2efb98791581b67116ba82c5ecd30ea2`. The previous build (`4d2a4a8a`) ran on an HX Effects; this one adds only the loudness step to the DSP code, the same as the HX Stomp's, and has not run on an HX Effects yet.
 
 Only 4 of the 15 parts of the firmware change: the main application (its model tables and the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
@@ -176,6 +176,10 @@ HX Effects support builds on **Scott's HX Effects port, [scottlynn73/hx-effects-
    The web page converts several files at once. It runs entirely in your browser, uploads nothing, and writes the same bytes as `nam2ir.py`.
 
    **Input level.** If the capture records its interface's level (`input_level_dbu` in the `.nam` metadata), the converter stores it in the `.wav`, and the web page shows it as a "captured at … dBu" chip. The amp then trims its input by `11.5 − input_level_dbu` dB, so that at Input 5.0 the Stomp's input drives the model the way the capture's interface did. 11.5 dBu is the Stomp's input at 0 dBFS as users have measured it (one unit read 15.1). It is a constant in the firmware (`STOMP_DBU` in `tools/sharc/nam_lite.py`), so a better figure needs only a firmware rebuild, not new `.wav` files. `--no-level` leaves the level out. Captures without the level, and `.wav` files from older converters, play untrimmed.
+
+   **Loudness.** If the capture gives its loudness (`loudness` in the `.nam` metadata, the trainer's measure of the model's output), the converter stores it in the `.wav` too, and the web page shows a "normalised … dB" chip. When the model loads, the amp scales its output by `−18 − loudness` dB, the level the NAM plugin's Normalized output mode uses, so captures play at about the same volume. The −18 dB target is a constant in the firmware (`LOUD_TARGET` in `tools/sharc/nam_lite.py`). `--no-loudness` leaves it out. Captures without it, and `.wav` files from older converters, play as they come out. A capture converted again plays at a new volume, so presets that use it may need their Output level changed.
+
+   The converter refuses a capture trained at another sample rate than 48 kHz (the Stomp doesn't resample it), and a model that isn't the A2 shape the amp computes (the same rules as NeuralAmpModelerCore's A2 fast path).
 2. In HX Edit, import the `.wav` into a User IR slot, for example slot 5.
 3. On the unit, add **Amp → NAM → NAM A2 Lite** (HX Effects: **Distortion → Mono**) and set **Model** (page 3) to 5. For a second capture, import it into another slot and add a second NAM A2 Lite block set to that slot.
 

@@ -27,9 +27,9 @@ var STOCK_MD5 = {
   "7c2ebdf1bffb6bcc5f89dda97f91e40c": "HX_Effects",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "e6431a5f2ba4d86f1f7f9300506a1101",
-  "HX_Stomp_XL": "a53e185be36fb4e8feedb5f2b89a1505",
-  "HX_Effects": "4d2a4a8a40b6625f2c3a3b3c93e7e2f0",
+  "HX_Stomp": "a37659d04cf97218bd1c470c6519cdad",
+  "HX_Stomp_XL": "8918ab60ebff62ebfccd4fccb2bed85a",
+  "HX_Effects": "2efb98791581b67116ba82c5ecd30ea2",
 };
 
 // build.py's KERNEL and STEPS (tests/test_web_build.py keeps them equal): per unit, the kernel

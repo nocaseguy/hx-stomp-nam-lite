@@ -17,9 +17,9 @@ pytestmark = pytest.mark.firmware
 # (build.py's STEPS), the kernel's --mid-sweep, DSP cost 2275. The HX Stomp's is the image that ran on an
 # HX Stomp from RAM (the on-device smoke suite, every EQ band measured); the XL's has not run on an XL.
 BUILT_MD5 = {
-    "HX_STOMP_HXF": "e6431a5f2ba4d86f1f7f9300506a1101",
-    "HX_STOMP_XL_HXF": "a53e185be36fb4e8feedb5f2b89a1505",     # not run on an XL
-    "HX_EFFECTS_HXF": "4d2a4a8a40b6625f2c3a3b3c93e7e2f0",      # Distortion > Mono (tools/effects.py); ran on an HX Effects
+    "HX_STOMP_HXF": "a37659d04cf97218bd1c470c6519cdad",
+    "HX_STOMP_XL_HXF": "8918ab60ebff62ebfccd4fccb2bed85a",     # not run on an XL
+    "HX_EFFECTS_HXF": "2efb98791581b67116ba82c5ecd30ea2",      # Distortion > Mono (tools/effects.py); 4d2a4a8a ran on an HX Effects, this not yet
 }
 
 

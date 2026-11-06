@@ -28,7 +28,9 @@ Memory (normal words):
       the job, layer and clear tables, Drive's and the fade's tables, then NSLOTS
       slots: state, tone stack, the model's 1,943 words, its short rings.
   DDR2 0x324500..: the tone stack's table and STOMP_GAIN (10^(STOMP_DBU/20): a loaded model's IR word 5,
-      10^(-input_level_dbu/20), x this is its slot's input trim, x Drive).
+      10^(-input_level_dbu/20), x this is its slot's input trim, x Drive), then LOUD_GAIN
+      (10^((LOUD_TARGET - LOUD_REF)/20): IR word 6, 10^((LOUD_REF - loudness)/20), x this
+      multiplies the head's scale when the model loads; nam_lite.py).
   Each instance's SDRAM block: its long rings (d >= FAR_D), each with a 16-word
       mirror, HIST (the crossfade's 512 outputs) and the two sentinel words.
 """
@@ -144,7 +146,7 @@ def names():
     return list(S) + list(ST) + list(REPW) + list(T) + list(J) + list(P) + [
         "SAVE", "REP", "G_SDR", "G_JOBS", "G_LEVEL", "J_NEXT", "J_BUSY", "J_DONE", "EVENTS", "DMA_FAIL", "J_CHKADR",
         "J_CHKVAL", "FLAGL", "SLOTTAB", "NSLOTS", "IN", "X", "HS", "TABLE", "NLAYERS", "JOBS", "NJOBS", "CLR",
-        "NCLR", "DRIVE_TAB", "FADE_TAB", "EQ_TAB", "STOMP_GAIN", "LBUF", "LBUF_N", "LCH", "LCH_CP",
+        "NCLR", "DRIVE_TAB", "FADE_TAB", "EQ_TAB", "STOMP_GAIN", "LOUD_GAIN", "LBUF", "LBUF_N", "LCH", "LCH_CP",
         "FARTAB", "WADDR", "NFAR", "S_STREAM", "S_HB0", "S_HB1", "S_HB2", "HIST_OFF", "SENT_OFF", "SENT2_OFF",
         "SDR_NEED", "DM_BASE", "PM_BASE", "MAGIC", "POLLMAX", "LPOLLMAX", "BACKOFF_N", "T_MAX", "N_STREAM", "KM1", "T_SIZE",
         "TCB_EI", "TCB_IC", "TCB_II", "IR_FLAG", "IR_TOP", "DMAC0", "EIEP0", "EMEP0", "ICEP0", "IIEP0", "IMEP0",
@@ -315,12 +317,13 @@ class Layout:
         # DDR2 (shared): the tone stack's table
         self.eq_tab = DDR2
         self.stomp_gain = self.eq_tab + 4 * 101 * 5      # 10^(STOMP_DBU/20) (nam_lite.py)
-        self.ddr2_to = self.stomp_gain + 1
+        self.loud_gain = self.stomp_gain + 1               # 10^((LOUD_TARGET - LOUD_REF)/20)
+        self.ddr2_to = self.loud_gain + 1
         assert self.ddr2_to <= DDR2_END
         v.update(SAVE=alloc["SAVE"], REP=REP, SLOTTAB=alloc["SLOTTAB"], NSLOTS=slots, IN=alloc["IN"], X=alloc["X"],
                  HS=alloc["HS"], TABLE=alloc["TABLE"], NLAYERS=NL, JOBS=alloc["JOBS"], NJOBS=F + len(self.groups), CLR=alloc["CLR"],
                  NCLR=self.nclr, DRIVE_TAB=alloc["DRIVE_TAB"], FADE_TAB=alloc["FADE_TAB"], EQ_TAB=self.eq_tab,
-                 STOMP_GAIN=self.stomp_gain, COLD_PM=self.cold_pm, WBUF=self.wbuf, HEADL=HEADL,
+                 STOMP_GAIN=self.stomp_gain, LOUD_GAIN=self.loud_gain, COLD_PM=self.cold_pm, WBUF=self.wbuf, HEADL=HEADL,
                  LBUF=self.sb[0], LBUF_N=2 * SB_WORDS, LCH=alloc["LCH"],
                  LCH_CP=(alloc["LCH"] + TCB_II) & 0x7FFFF, FARTAB=alloc["FARTAB"],
                  WADDR=alloc["WADDR"], NFAR=F, S_STREAM=S_STREAM, S_HB0=self.hb[0], S_HB1=self.hb[1],
@@ -438,6 +441,7 @@ class Layout:
         # DDR2: the tone stack's table
         put(self.eq_tab, eq_table_midq() if MIDQ else nam_lite.eq_table())
         put(self.stomp_gain, [nam_pack.f2b(10.0 ** (nam_lite.STOMP_DBU / 20))])
+        put(self.loud_gain, [nam_pack.f2b(10.0 ** ((nam_lite.LOUD_TARGET - nam_lite.LOUD_REF) / 20))])
         return mem
 
     def claims(self):
@@ -1200,10 +1204,13 @@ class KernelCheck:
         sim = self.rig.sim
         # each slot model's capture at its own input level (IR word 5): the kernel trims
         # each block's input by STOMP_DBU - that; the test model in slot 1 (no level) by nothing
+        # and at its own loudness (IR word 6): the kernel scales its head's output by
+        # 10^((LOUD_TARGET - loudness)/20); slots 1 and 9 (none) by nothing
         self.dbu = {id(self.w): None, id(self.w2): 15.0, id(self.w3): 6.0, id(self.w4): None}
+        self.loud = {id(self.w2): -12.0, id(self.w3): -30.0}
         set_ir(sim, 1, nam_lite.ir_samples(self.w, None))
-        set_ir(sim, 3, nam_lite.ir_samples(self.w2, 15.0))
-        set_ir(sim, 7, nam_lite.ir_samples(self.w3, 6.0))
+        set_ir(sim, 3, nam_lite.ir_samples(self.w2, 15.0, -12.0))
+        set_ir(sim, 7, nam_lite.ir_samples(self.w3, 6.0, -30.0))
         set_ir(sim, 9, nam_lite.ir_samples(self.w4, None))
         cab = [ssim.f2b(rnd.uniform(-1, 1) * math.exp(-k / 300)) for k in range(2048)]
         set_ir(sim, 5, cab)
@@ -1232,7 +1239,9 @@ class KernelCheck:
         w from the silence state on sig, fading in."""
         inst.pipe.cut()
         self.expect(inst, sig[0], f"{label} (load)", None, kind="load")
-        inst.player = Player(inst, w, sig[1:], nam_lite.input_trim(self.dbu.get(id(w))))
+        g = nam_lite.loud_gain(self.loud.get(id(w)))
+        wl = list(w[:-1]) + [f32(f32(w[-1]) * g)] if g != 1.0 else w   # the head's scale x its gain
+        inst.player = Player(inst, wl, sig[1:], nam_lite.input_trim(self.dbu.get(id(w))))
         inst.sig = sig[1:]
         if not NO_TONE:                  # (no-tone: the kernel never reads the knobs, the stack stays flat)
             inst.pipe.knobs(inst.eq)

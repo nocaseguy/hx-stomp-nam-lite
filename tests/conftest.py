@@ -9,11 +9,16 @@ def nam_json(weights, slimmable=False, metadata=None, **layer):
     """A .nam file's text: a 3-channel A2 Lite WaveNet (made up, no capture in the repo)."""
     lc = {"channels": nam_lite.C, "kernel_sizes": list(nam_lite.nam_pack.KERNEL),
           "dilations": list(nam_lite.nam_pack.DILATION),
-          "activation": [{"type": "LeakyReLU", "negative_slope": 0.01}] * 23, "gating_mode": ["none"] * 23}
+          "activation": [{"type": "LeakyReLU", "negative_slope": 0.01}] * 23, "gating_mode": ["none"] * 23,
+          "bottleneck": nam_lite.C, "input_size": 1, "condition_size": 1,
+          "head": {"bias": True, "kernel_size": 16, "out_channels": 1}, "head1x1": {"active": False},
+          "layer1x1": {"active": True, "groups": 1}, "secondary_activation": [None] * 23, "slimmable": None}
     lc.update(layer)
-    m = {"architecture": "WaveNet", "config": {"layers": [lc]}, "weights": list(weights), "sample_rate": 48000}
+    m = {"architecture": "WaveNet", "config": {"layers": [lc], "head": None, "head_scale": 0.02},
+         "weights": list(weights), "sample_rate": 48000}
     if slimmable:
-        big = {"architecture": "WaveNet", "config": {"layers": [dict(lc, channels=8)]}, "weights": [0.0]}
+        big = {"architecture": "WaveNet", "config": {"layers": [dict(lc, channels=8, bottleneck=8)], "head": None,
+                                                      "head_scale": 0.02}, "weights": [0.0]}
         m = {"architecture": "SlimmableContainer", "config": {"submodels": [{"model": big}, {"model": m}]}}
     if metadata is not None:
         m["metadata"] = metadata

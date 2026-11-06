@@ -48,7 +48,9 @@
 // DM(P_PHASE) (a bool: not 0 inverts the output, by negating Ch Vol's gain).
 // Drive is x the slot's S_TRIM, set on each load from the model's IR word 5
 // (10^(-input_level_dbu/20); 0 none, as the built-in model and older .wav files)
-// x STOMP_GAIN (10^(STOMP_DBU/20), nam_lite.py): as nam-a2-lite's N_TRIM.
+// x STOMP_GAIN (10^(STOMP_DBU/20), nam_lite.py): as nam-a2-lite's N_TRIM. The head's
+// scale is x the model's IR word 6 (10^((LOUD_REF - loudness)/20); 0 none) x LOUD_GAIN
+// (10^((LOUD_TARGET - LOUD_REF)/20)), set on each load: the loudness normalisation.
 
 .equ PEYEN,    0x200000
 .equ BDCST9,   0x400000
@@ -1379,6 +1381,14 @@ ld_cp: DM(I4, 1) = F0;
     IF LT JUMP ld_chunk;
     R0 = 0;
     DM(DMAC0) = R0;
+    I3 = R8;                            // its loudness: the head's scale x word 6,
+    F0 = DM(-6, I3);                    // 10^((LOUD_REF - loudness)/20) (0: none), x
+    F1 = DM(LOUD_GAIN);                 // 10^((LOUD_TARGET - LOUD_REF)/20)
+    F0 = F0 * F1;
+    F1 = DM(S_STREAM + ST_SCALE, I6);
+    F0 = PASS F0;
+    IF NE F1 = F1 * F0;
+    DM(S_STREAM + ST_SCALE, I6) = F1;
     // the slot's rings to the silence state; the far rings are patched as read
     I4 = CLR;
     R11 = I6;
