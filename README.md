@@ -28,6 +28,7 @@ Each feature is a module in `tools/features/`. The tuner settings are always bui
 | **Tuner** | always on | Tuner Activation and Lock Tuner Settings (below) |
 | **BPM** | `HX_BPM=1` | The tempo at the top left of the Home screen, and a beat dot that blinks with the TAP footswitch's ring. The dot keeps the beat in Preset and Snapshot footswitch modes too. |
 | **DSP meter** | `HX_DSP_METER=1` | Each block in the Edit view shows its share of the DSP in per cent, and the top right corner shows the blocks' total. |
+| **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Press the lit snapshot footswitch again to flip to snapshots 4–6 (and back); the camera icon at the top right and the footswitch labels show 4, 5 or 6. Snapshots 4–6 last until the next preset load. A save writes snapshots 1–3: in 4–6 you hear 1–3's snapshot for a moment while it saves. |
 | **Boot screen** | `--splash`, `--splash-text` | Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). |
 
 ```sh
