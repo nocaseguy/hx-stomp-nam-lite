@@ -57,6 +57,7 @@ var SOURCES = [
   "tools/features/bpm.py",
   "tools/features/dsp_meter.py",
   "tools/features/long_press.py",
+  "tools/features/more_snapshots.py",
   "tools/features/splash.py",
   "tools/features/tuner.py",
   "tools/kit_patch_amp.py",
