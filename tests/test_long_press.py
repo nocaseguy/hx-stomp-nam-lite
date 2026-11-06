@@ -13,7 +13,7 @@ from features import long_press
 
 MODS = features.load()
 IDS = setting_ids.by_name()
-HOLD_IDS = [IDS[f'long_press.fs{n}'] for n in (1, 2, 3)]
+HOLD_IDS = [IDS[f'long_press.fs{n}'] for n in (1, 2, 3, 4, 5)]
 
 CODE, OBJ, EVENT, LISTS = 0x28e60000, 0x28128a80, 0x28600000, 0x28128b4c
 STOCK = 0x28700000                  # the stock handler, as the veneer hands it over
@@ -22,6 +22,10 @@ SETTER_CTX, SETTER, CTX = 0x28e007ec, 0x28e1f8f4, 0x28400000
 FS_MODE = 21
 PRESS, RELEASE, CLICK, HOLD = 1, 2, 3, 5
 TUNER, FS4, FS5 = 1, 2, 3
+FS6 = 4                             # FS6..FS10: 4..8
+GET_CONTROLLERS, CONTROLLERS, LOCK, UNLOCK = 0x28d9608c, 0x28480000, 0x28e24c00, 0x28e24bb0
+TONE_OF, TONE, GET_BYPASS, CONTROL = 0x28d92a98, 0x28490000, 0x28e04514, 0x28dde408
+ON, OFF = 0x3f800000, 0
 
 
 class Handler:
@@ -30,7 +34,7 @@ class Handler:
     def __init__(self, m4emu):
         code, self.sym = m4emu.assemble('src/m4/long_press.s', MODS, IDS)
         self.m = m4emu.M4(code, CODE)
-        self.settings, self.types = {FS_MODE: 0}, {}
+        self.settings, self.types = {FS_MODE: 0, **{pid: 0 for pid in HOLD_IDS}}, {}     # Off unless a test sets an action
         self.momentary, self.guard, self.seen, self.written = set(), 0, [], []
         self.m.stub(pm.GET_VALUE, self._get_value)
         self.m.stub(STOCK, self._stock)
@@ -40,6 +44,15 @@ class Handler:
         self.m.stub(MOMENTARY, lambda m: m.reg('r0', int(m.reg('r1') in self.momentary)))
         self.m.stub(SETTER_CTX, lambda m: m.reg('r0', CTX))
         self.m.stub(SETTER, self._set)
+        self.bypassed, self.order = {}, []
+        self.m.stub(GET_CONTROLLERS, lambda m: m.reg('r0', CONTROLLERS))
+        self.m.stub(LOCK, lambda m: self.order.append(('lock', m.reg('r0'))))
+        self.m.stub(UNLOCK, lambda m: self.order.append(('unlock', m.reg('r0'))))
+        self.m.stub(TONE_OF, lambda m: m.reg('r0', TONE))
+        self.m.stub(GET_BYPASS, self._get_bypass)
+        self.m.stub(CONTROL, lambda m: self.order.append(('control', m.reg('r0'), m.reg('r1'), m.reg('r2'), m.reg('r3'))))
+        for i in range(64):
+            self.node(i)
         for k in range(5):
             self.function(k, 2)
 
@@ -60,6 +73,27 @@ class Handler:
     def _set(self, m):
         rec = m.read(m.reg('r2'), 8)
         self.written.append((m.reg('r0'), m.reg('r1'), rec[0], struct.unpack_from('<I', rec, 4)[0], m.reg('r3')))
+
+    def _get_bypass(self, m):
+        assert m.reg('r0') == TONE
+        self.order.append(('get', m.reg('r1')))
+        if m.reg('r1') in self.bypassed:
+            m.u8(m.reg('r2'), self.bypassed[m.reg('r1')])
+        m.reg('r0', 0)
+
+    def node(self, i, kind=None, controller=8, cc=0, block=0):
+        """Controller node i: free (kind None), or kind 2 a bypass assignment of block to controller (8 MIDI CC) at cc."""
+        at = CONTROLLERS + 0xac + 0x48 * i
+        self.m.u8(at + 0x44, 0x40 if kind is None else 0)
+        self.m.u8(at + 0x28, kind or 0)
+        self.m.u8(at + 0x10, controller)
+        self.m.u32(at + 0x14, cc)
+        self.m.u32(at + 0x2c, block)
+
+    def hold(self, code):
+        self.order.clear()
+        self.run(*held(code))
+        return [o for o in self.order if o[0] in ('get', 'control')]
 
     def boot(self):
         self.written.clear()
@@ -100,11 +134,13 @@ def h(m4emu):
 
 
 def test_hold_settings():
-    for n, s in zip((1, 2, 3), long_press.SETTINGS):
-        assert (s.key, s.label, s.values, s.default) == (f'fs{n}', f'FS{n}\nHold'.encode(), (b'Off', b'Tuner', b'FS4', b'FS5'), 0)
+    assert len(long_press.SETTINGS) == 5
+    for n, s in zip((1, 2, 3, 4, 5), long_press.SETTINGS):
+        assert (s.key, s.label, s.default) == (f'fs{n}', f'FS{n}\nHold'.encode(), n + 3), 'FS1..FS5 Hold default to FS6..FS10'
+        assert s.values == (b'Off', b'Tuner', b'FS4', b'FS5', b'FS6', b'FS7', b'FS8', b'FS9', b'FS10')
         assert all(len(v) <= 8 for v in s.values)
-    assert HOLD_IDS == [63, 78, 132], 'a unit keeps a setting\'s value by ID: never move it once a build has used it'
-    assert long_press.FLAG == 'HX_LONG_PRESS'
+    assert HOLD_IDS == [63, 78, 132, 74, 120], 'a unit keeps a setting\'s value by ID: never move it once a build has used it'
+    assert long_press.FLAG == 'HX_LONG_PRESS' and long_press.VIRTUAL_CC == 20
 
 
 def test_with_no_hold_action_every_event_reaches_the_stock_handler_unchanged(h):
@@ -166,10 +202,24 @@ def test_a_momentary_footswitch_stays_stock(h):
     assert h.m.calls(GET_LISTS) and h.m.calls(MOMENTARY)[0][1] == 1
 
 
+@pytest.mark.parametrize('n, code', [(4, 15), (5, 16)])
+def test_external_footswitches_4_and_5_have_hold_actions(h, n, code):
+    h.hold_action(n, TUNER)
+    assert h.run(*held(code)) == ([(code, RELEASE)], 1)
+    assert h.run(*tap(code)) == ([(code, RELEASE), (code, PRESS), (code, RELEASE)], 0)
+
+
+def test_external_footswitch_holds_reach_virtual_footswitches(h):
+    h.hold_action(5, FS6 + 4)
+    h.node(2, kind=2, cc=24, block=6)
+    h.bypassed[6] = 0
+    assert h.hold(16) == [('get', 6), ('control', CONTROLLERS, 8, 24, OFF)]
+
+
 def test_other_keys_and_sources_pass(h):
-    for n in (1, 2, 3):
+    for n in (1, 2, 3, 4, 5):
         h.hold_action(n, TUNER)
-    events = held(15) + held(16) + held(9) + held(11)
+    events = held(17) + held(9) + held(11) + held(0)
     assert h.run(*events) == (events, 0)
     h.seen.clear()
     h.event(12, PRESS, source=2)
@@ -188,25 +238,86 @@ def test_stray_clicks_and_holds_pass(h):
     assert h.run((12, CLICK), (12, HOLD)) == ([(12, CLICK), (12, HOLD)], 0)
 
 
-def test_a_stored_value_out_of_range_reads_off(h):
-    h.hold_action(1, 100)               # ID 63 holds its stock 100 on a unit that never set it
-    assert h.run(*held(12)) == (held(12), 0)
+@pytest.mark.parametrize('bypassed, value', [(1, ON), (0, OFF)])
+def test_virtual_footswitch_turns_its_blocks_to_the_opposite_of_the_first_ones_state(h, bypassed, value):
+    h.hold_action(1, FS6)
+    h.node(5, kind=2, cc=20, block=7)
+    h.node(9, kind=2, cc=20, block=8)
+    h.bypassed[7], h.bypassed[8] = bypassed, 1 - bypassed
+    assert h.hold(12) == [('get', 7), ('control', CONTROLLERS, 8, 20, value)]
+    assert h.seen == [(1, 12, RELEASE)]
 
 
-def test_boot_makes_bool_hold_records_ints_and_keeps_their_value(h):
-    for pid, (kind, value) in zip(HOLD_IDS, ((2, 3), (1, 1), (1, 0))):
-        h.settings[pid], h.types[pid] = value, kind
-    assert h.boot() == [(CTX, HOLD_IDS[1], 2, 1, 6), (CTX, HOLD_IDS[2], 2, 0, 6)]
+@pytest.mark.parametrize('action, cc', [(FS6, 20), (FS6 + 1, 21), (FS6 + 4, 24)])
+def test_each_virtual_footswitch_has_its_cc(h, action, cc):
+    h.hold_action(2, action)
+    h.node(3, kind=2, cc=cc, block=4)
+    h.bypassed[4] = 1
+    assert h.hold(13) == [('get', 4), ('control', CONTROLLERS, 8, cc, ON)]
 
 
-def test_boot_clamps_a_value_out_of_range_and_skips_unset_ids(h):
-    h.settings[HOLD_IDS[0]], h.types[HOLD_IDS[0]] = 100, 1
-    assert h.boot() == [(CTX, HOLD_IDS[0], 2, 0, 6)]
+def test_the_scan_skips_free_nodes_other_kinds_controllers_and_ccs(h):
+    h.hold_action(1, FS6)
+    h.node(0, kind=None, cc=20, block=1)
+    h.node(1, kind=1, cc=20, block=2)
+    h.node(2, kind=2, controller=3, cc=20, block=3)
+    h.node(3, kind=2, cc=21, block=4)
+    h.node(63, kind=2, cc=20, block=5)
+    h.bypassed[5] = 0
+    assert h.hold(12) == [('get', 5), ('control', CONTROLLERS, 8, 20, OFF)]
 
 
-def test_boot_leaves_int_records_alone(h):
+def test_the_scan_holds_only_the_controllers_lock_and_releases_it_before_the_calls(h):
+    h.hold_action(1, FS6)
+    h.node(4, kind=2, cc=20, block=9)
+    h.bypassed[9] = 1
+    h.hold(12)
+    assert [o[0] for o in h.order] == ['lock', 'unlock', 'get', 'control']
+    assert h.order[0][1] == h.order[1][1] == CONTROLLERS + 4
+
+
+def test_with_no_block_to_read_the_virtual_footswitch_alternates(h):
+    h.hold_action(1, FS6)
+    assert h.hold(12) == [('control', CONTROLLERS, 8, 20, ON)]
+    assert h.hold(12) == [('control', CONTROLLERS, 8, 20, OFF)]
+    h.node(6, kind=2, cc=20, block=11)          # assigned, but the getter does not know the block: alternate on
+    assert h.hold(12) == [('get', 11), ('control', CONTROLLERS, 8, 20, ON)]
+    h.bypassed[11] = 1                           # a read state wins over the alternation
+    assert h.hold(12) == [('get', 11), ('control', CONTROLLERS, 8, 20, ON)]
+
+
+@pytest.mark.parametrize('n, code', [(1, 12), (3, 14), (5, 16)])
+def test_a_stored_value_out_of_range_reads_the_default(h, n, code):
+    h.hold_action(n, 100)               # ID 63 holds its stock 100 on a unit that never set it
+    assert h.hold(code) == [('control', CONTROLLERS, 8, 20 + n - 1, ON)]
+
+
+DEFAULTS = [(CTX, pid, 2, n + 3, 6) for n, pid in zip((1, 2, 3, 4, 5), HOLD_IDS)]
+
+
+@pytest.mark.parametrize('stock', [1, 4])
+def test_the_first_boot_writes_every_default_as_an_int(h, stock):
+    """A record not yet an int (78, 120, 132 are stock bools) marks the first boot, as stock values are in range."""
     for pid in HOLD_IDS:
-        h.settings[pid] = 5
+        h.settings[pid], h.types[pid] = 1, 2
+    h.types[HOLD_IDS[stock]] = 1
+    assert h.boot() == DEFAULTS
+
+
+def test_the_first_boot_overrides_in_range_stock_values(h):
+    for pid, (kind, value) in zip(HOLD_IDS, ((2, 100), (1, 0), (1, 0), (2, 1), (1, 1))):    # a stock unit
+        h.settings[pid], h.types[pid] = value, kind
+    assert h.boot() == DEFAULTS
+
+
+def test_an_unset_hold_id_counts_as_a_first_boot(h):
+    del h.settings[HOLD_IDS[2]]
+    assert h.boot() == DEFAULTS
+
+
+def test_later_boots_keep_the_chosen_values(h):
+    for pid, value in zip(HOLD_IDS, (0, 1, 2, 3, 8)):
+        h.settings[pid] = value
     assert h.boot() == []
 
 
@@ -247,12 +358,13 @@ def test_build_owns_the_handler_and_hands_lp_event_the_stock_handler():
     lp_event = branch_target(veneer + 8, read(veneer + 8, 4))
     assert read(lp_event, 2) == bytes.fromhex('2de9')    # push.w {r4-r8,lr}
     assert read(long_press.HOME_CTOR_CALL, 4) != pm.bl(long_press.HOME_CTOR_CALL, long_press.HOME_CTOR)
+    assert read(long_press.MIDI_IN_FIRST, 2) == bytes([20, 0x22]), 'MIDI In: the first step up from Off is FS6\'s CC 20'
 
 
 @pytest.mark.firmware
 def test_build_sets_the_hold_labels():
     read, _ = built({'HX_LONG_PRESS': '1'})
-    for n, pid in zip((1, 2, 3), HOLD_IDS):
+    for n, pid in zip((1, 2, 3, 4, 5), HOLD_IDS):
         for tab in (pm.NAMES_LONG, pm.NAMES_SHORT):
             assert read(tab + pm.NAME_LEN * pid, 9) == f'FS{n}\nHold\0'.encode()
 
@@ -263,6 +375,7 @@ def test_without_the_flag_the_handler_stays_stock():
     assert 'long_press' not in on
     assert read(long_press.HANDLER, 4) == long_press.HANDLER_STOCK
     assert read(long_press.HOME_CTOR_CALL, 4) == pm.bl(long_press.HOME_CTOR_CALL, long_press.HOME_CTOR)
+    assert read(long_press.MIDI_IN_FIRST, 2) == long_press.MIDI_IN_FIRST_STOCK
 
 
 @pytest.mark.firmware

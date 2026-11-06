@@ -171,6 +171,28 @@ Each block in the Edit view shows its DSP cost in whole per cent, and the top ri
   - **Setting records** [verified offline]: IDs up to `0x88` keep a 40-byte record at `0x2845ee9c + 40 * id`, with the type byte at +8 and the value at +0xc. `GET_VALUE` returns `{type, value}`. The store write (`0x28e1f206`) copies the given record's type and value in and marks the store dirty.
   - 78, 120 and 132 have stock type-1 (bool) limits (`0x28e1ec4c`, `0x28e1ec82`); 63, 74 and 101 have type 2. **[hypothesis]** The menu steps a setting by its record's type, so an ID that was ever a bool shows two values whatever its limits say.
   - Image `4892843b5e04cc8b16e161433b891052` (FS2 back on 78, records rewritten at boot) **[verified on unit]**: FS1, FS2 and FS3 Hold all offer four values, and FS3 Hold = FS5 toggles the block assigned to FS5. Persistence was not tested: a plain RAM run does not save settings.
+- **MIDI CC bypass, as the virtual footswitches use it** [verified offline]:
+  - **Nodes:** controller nodes are `0x28125d30 + 0xac + 0x48i`, i = 0..63. Fields: +0x44 is 0x40 when free; +0x28 is the kind (2 = bypass); +0x10 is the controller (8 = MIDI CC); +0x14 is the CC; +0x2c is the block. The stock MIDI In lookup `0x28ddebcc` reads them under the controllers' lock (`+4`).
+  - **Reading a block's state:** `0x28e04514(0x28d92a98(), block, &out)` sets out to 1 when the block is bypassed. It takes the DSP-model lock itself, and leaves `out` unwritten for an unknown block. The stock toggle at `0x28d9489c` gets the state, then sets the opposite with `0x28e045a0`.
+  - **Driving a CC:** `0x28dde408(0x28125d30, 8, cc, value)` drives every assignment on that CC. The value is float bits in r3: below 0.5 bypasses, 1.0 turns the block on. That is the stock MIDI receive's path (`0x28d9b91a`, CC value / 127.0), and the footswitch toggle calls it from the event handler (`0x28dd123a`).
+  - **Which CCs:** MIDI receive (`0x28d9b89c`) keeps CC 0..3, 32 and 49..81 for global functions. Every other CC, 102..106 included, goes to `0x28dde408`.
+- **Virtual footswitches FS6..FS10** (Hold values 4..8; first CC 102..106, image MD5 `c4e06138ff8c8c0da6cf53927b528521`):
+  - A hold finds the first bypass node on the CC, reads that block's state and sends the opposite: 1.0 when it is bypassed, else 0.0.
+  - With no block to read, it flips the value it sent last.
+  - **[verified on unit]**:
+    - A block on CC 102 (Bypass Assign > MIDI In, on a later knob page) toggles on each hold of FS1 (Hold = FS6), and FS1's own block stays as it was.
+    - The first hold after a preset or snapshot change and back still toggles it.
+    - Two blocks on CC 103 (FS2 Hold = FS7) both follow the first one's opposite.
+  - **Now CC 20..24** (undefined in the MIDI spec; 102..119 is used by some makers for their own parameters).
+    - The Bypass Assign MIDI In knob [verified offline]: turning up from Off sets CC 4 (`movs r2,#4` at `0x28dbc2b4`); turning down from Off does nothing; each step is one CC, skipping 0..3, 32 and 49..81. So CC 102 took about 65 clicks.
+    - That instruction now sets CC 20, so FS6 is one click from Off and FS10 five. CC 4..19 stay below it.
+    - Image MD5 `bec419ffac5c6ee340d26d369b976cbc` **[verified on unit]**: one click up from Off reads CC 20. FS6 and FS10 toggle their blocks.
+- **FS4/FS5 Hold and mapped defaults** (image MD5 `e62bb229d2a1df8c5cf53606ca64314c`, **[verified on unit]**: FS1..FS5 Hold read FS6..FS10 after boot; FS1's default hold toggles a block on CC 20; FS4 Hold = Tuner opens the tuner from an external switch, and a tap toggles on release):
+  - FS4 Hold (ID 74) and FS5 Hold (ID 120) are for external switches on codes 15, 16.
+  - FS1..FS5 Hold default to FS6..FS10.
+  - Stock units hold in-range values on these IDs: 78 and 132 hold 0, 74 and 120 hold 1, 63 holds 100. Only 63's value would read as the default.
+  - So `lp_boot` treats any Hold record that is not type 2, or not set, as the first boot, and writes all five defaults as ints. Later boots keep the values.
+  - **[hypothesis]** If a saved record's type ever reverted to 1, every boot would reset the five to their defaults. To be checked on an installed build.
 - **Bypass assignment and controllers** [verified offline] (details in the long-press branch's research):
   - Bypass assignment is kept per footswitch list, not per block: list head `0x28d96084() + 0x20 + 32k` (`0x28128b4c`). Each footswitch has 8 nodes of 0x38 bytes at `+0xc0 + 0x1c0k`, and the 40 nodes end exactly at the next object (`0x281294cc`).
   - `0x28dd10c0(0x28128a80, k)` walks that list. The press handler's context is `0x28128a80`.
