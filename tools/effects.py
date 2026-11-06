@@ -65,13 +65,40 @@ PRIM, PRIM_DESC, PRIM_TEMPLATE = 0x9c75, 0x200588, 0x822     # the hook copies 0
 # the freed tail the helpers (assembled at CAVE), each site's 4-byte load becoming a BL to one.
 MOVE_FROM, MOVE_TO, MOVE_N = 761, 496, 16
 CAVE = TAB2_BASE + 44 * (TAB2_CNT - MOVE_N)
+# CAVE_CODE contains six helpers (416 B):
+# 0x00: Helper 0 (0x2809ee64) - turned knob category (34 B)
+# 0x22: Helper 1 (0x2807ac66) - drawn knob category & sibling suppression for 555 knobs 6..8 (36 B)
+# 0x46: Helper 2 (0x2807aca8) - main LCD Model float to slot 1..128 truncation (72 B)
+# 0x8e: Helper 3 (0x2807a976 & 0x2808a9be) - Model integer slot decimal formatting (normal & overview) (174 B)
+# 0x13c: Helper 4 (0x280a47d8) - turn handler: activate overview turn flag when turning Model (40 B)
+# 0x164: Helper 5 (0x2808aa3c) - overview drawer: draw IR banner on Model, blank sibling scribble strips (60 B)
 CAVE_CODE = bytes.fromhex(
     '13f8282c0b2a0bd003b4ddf82500062d18bf002040f22b21884208bf0b2203bc704713f8283c0b2b0cd003b4ddf8e50040f22b21'
     '884204d1abf10600022800d80b2303bc704707b4ddf8e90040f22b218842ddf83d0012d1c20d0dd07f3a0ad4172a09dcc0f3160141'
-    'f40001c2f1170221fa02f000e00020411e7f2902d8054607bc704707bc4ff00005b5f722ba')
-# (site, its stock 4 bytes, the helper's offset in CAVE_CODE): the turned knob's category,
-# the drawn knob's category, the drawn knob's value
-TITLE_SITES = ((0x2809ee64, '13f8282c', 0x00), (0x2807ac66, '13f8283c', 0x22), (0x2807aca8, 'ddf83150', 0x46))
+    'f40001c2f1170221fa02f000e00020411e7f2902d8054607bc704707bc4ff00005b5f722ba'
+    'f0b5059c069d1e4682b0009401954df060fc02b0002848dbbdf8d11040f22b22914203d0bdf8f11091423ed1bbf1060f3bd1d6f801'
+    '00c20d2fd07f3a2dd4172a2bdcc0f3160141f40001c2f1170221fa02f0411e7f2920d8c6f80100cd224243d20a0a2302fb13033033'
+    '0a2a0bd3312004f8010b0a3a303204f8012b04f8013b0020207011e0002a02d0303204f8012b04f8013b0020207007e00020c6f80100'
+    '2d2004f8010b002020700020f0bd'
+    'bdf81d2040f22b218a420ad1062d06d10123322284f86d302267def764bddef75dbd13f8283c7047'
+    '97f86d30002b17d0bdf8bd1040f22b22914206d1bbf1060f01d0c4f7b5bec4f782be9df8c8300b2b06d1bbf1000f01d1c4f779bec4f7'
+    'a8bec4f7c0be')
+# (site, its stock 4 bytes, the helper's offset in CAVE_CODE):
+# Helper 0 (0x00): turned knob category
+# Helper 1 (0x22): drawn knob category & sibling suppression
+# Helper 2 (0x46): main LCD Model float to slot 1..128 truncation
+# Helper 3 (0x8e): Model integer slot decimal formatting (normal & overview)
+# Helper 4 (0x13c): turn handler: activate overview turn flag when turning Model
+# Helper 5 (0x164): overview drawer: draw IR banner on Model, blank sibling scribble strips
+TITLE_SITES = (
+    (0x2809ee64, '13f8282c', 0x00),
+    (0x2807ac66, '13f8283c', 0x22),
+    (0x2807aca8, 'ddf83150', 0x46),
+    (0x2807a976, '98f0d7fd', 0x8e),
+    (0x2808a9be, '88f0b3fd', 0x8e),
+    (0x280a47d8, '13f8283c', 0x13c),
+    (0x2808aa3c, '9df8c830', 0x164),
+)
 
 # The ten knobs, resolved on the HX Stomp from patch_amp.py's EQ_FX_PARAMS (this application
 # has no amps to copy them from): slot, pid, source name, type, state, min, max, default, meta
@@ -246,6 +273,8 @@ def entry0(e0, info, nam):
     for site, stock, off in TITLE_SITES:
         assert rd(site, 4) == bytes.fromhex(stock), f'title site {site:#x}'
         wr(site, _bl(site, CAVE + off))
+    assert rd(0x2808aa5e, 2) == bytes.fromhex('5a46'), 'overview IR name alignment patch site'
+    wr(0x2808aa5e, bytes.fromhex('0022'))
     return bytes(l6ia.fix_internal_crcs(bytes(e0)))
 
 

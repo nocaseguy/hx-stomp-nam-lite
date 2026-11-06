@@ -114,7 +114,7 @@ The HX Effects build is the same block with that unit's own steps (`patch_amp.py
 The results' MD5s are pinned in `tests/test_firmware.py`:
 - HX Stomp `e6431a5f2ba4d86f1f7f9300506a1101`. That exact file ran on an HX Stomp from RAM and passed the project's on-device test suite; its tone stack was measured on the unit with a fixed test signal (Mid at +12 dB read +11.8 to +12.0 dB at 150 Hz, 220 Hz and 1.8 kHz, −12.0 dB at −12; Treble +11.9 dB at 2.5 kHz; High Cut at 0.0 −3.4 dB at 2 kHz), and checked by ear, sweeping Mid Freq and High Cut while playing.
 - HX Stomp XL `a53e185be36fb4e8feedb5f2b89a1505` (not run on an XL).
-- HX Effects `3a5b47d995c4af2319690bb4a6e8bd2f` (ran on an HX Effects).
+- HX Effects `4d2a4a8a40b6625f2c3a3b3c93e7e2f0` (ran on an HX Effects).
 
 Only 4 of the 15 parts of the firmware change: the main application (its model tables and the title code), the DSP program, the model list and the DSP graph library. **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
@@ -149,7 +149,7 @@ The XL's firmware 3.80.0 is the Stomp's with another build of the main applicati
 **Runs on an HX Effects** (an owner, who also fixed the browser listing and the knob pop-up: thank you, Jerry Chuang). It is the same block and kernel, checked the same way in the simulator; what differs is how it is put into that unit's application (`tools/effects.py`):
 - The HX Effects application refuses a model it doesn't already know, so NAM A2 Lite takes **Xenomorph Fuzz Mono**'s place in its tables (preset ID 555, as on the Stomp) instead of being added. It is listed under **Distortion → Mono**, in Xenomorph Fuzz Mono's place: the HX Effects has no Amp category, and its browser shows at most three folders a category.
 - The kernel reads the User IRs from where the HX Effects keeps them (`nam_multi.py --effects`).
-- **The capture's name** shows on the Model knob's own line ("Model: name") in the knob pop-up when you turn Model, as the HX Effects does for an IR block; Mid Freq and Q, on the same page, step aside while it shows. The scribble strips and the one-parameter view show Model's number.
+- **The capture's name** shows on the Model knob's own line ("Model: name") in the knob pop-up when you turn Model, and on the scribble strip in overview mode (with sibling knobs stepping aside, matching stock IR block behavior). The scribble strips and parameter view cleanly show Model's integer slot number (1..128).
 - No run from RAM: the RAM loader is the HX Stomp's.
 - **Recovery:** hold the right arrow (**>**) while powering on for fail-safe update mode, then install the stock `HX_Effects_v3.80.0_0xd97239907.hxf` with Line 6 Updater (Choose File).
 

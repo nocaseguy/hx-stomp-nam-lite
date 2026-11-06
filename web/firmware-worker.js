@@ -29,7 +29,7 @@ var STOCK_MD5 = {
 var BUILT_MD5 = {
   "HX_Stomp": "e6431a5f2ba4d86f1f7f9300506a1101",
   "HX_Stomp_XL": "a53e185be36fb4e8feedb5f2b89a1505",
-  "HX_Effects": "3a5b47d995c4af2319690bb4a6e8bd2f",
+  "HX_Effects": "4d2a4a8a40b6625f2c3a3b3c93e7e2f0",
 };
 
 // build.py's KERNEL and STEPS (tests/test_web_build.py keeps them equal): per unit, the kernel
