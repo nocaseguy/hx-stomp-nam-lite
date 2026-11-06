@@ -28,11 +28,11 @@ Each feature is a module in `tools/features/`. The tuner settings are always bui
 | **Tuner** | always on | Tuner Activation and Lock Tuner Settings (below) |
 | **BPM** | `HX_BPM=1` | The tempo at the top left of the Home screen, and a beat dot that blinks with the TAP footswitch's ring. The dot keeps the beat in Preset and Snapshot footswitch modes too. |
 | **DSP meter** | `HX_DSP_METER=1` | Each block in the Edit view shows its share of the DSP in per cent, and the top right corner shows the blocks' total. |
-| **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Press the lit snapshot footswitch again to flip to snapshots 4–6 (and back); the camera icon at the top right and the footswitch labels show 4, 5 or 6. Snapshots 4–6 are saved with the preset on the HX Stomp (saving from 4–6, you hear the 1–3 snapshot for a moment). A stock firmware plays such a preset as snapshots 1–3. HX Edit exports and backups keep snapshots 1–3 only. |
+| **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). |
 | **Boot screen** | `--splash`, `--splash-text` | Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). |
 
 ```sh
-HX_BPM=1 HX_DSP_METER=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
+HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
 ```
 
 ### Custom settings
@@ -49,6 +49,16 @@ The features' settings are in Global Settings, in a seventh section called **Cus
 | DSP meter | **DSP Disp** | **Used/All** (default, e.g. `47/75`), Free (`28`), Used% (`63%`) | What the top right corner shows. "All" is 75: the firmware's 90% preset limit less its fixed 15%. |
 
 The HX Stomp keeps a setting's value under its ID, which `tools/setting_ids.py` assigns. If a value another build stored under that ID is out of range, the menu shows the setting's default.
+
+### More snapshots
+
+With Footswitch Mode on Snapshot, the three footswitches select snapshots 1–3 as usual. Press the lit one again and the same footswitches select snapshots 4–6; press the lit one again to come back.
+
+- **Which bank you're in:** in 4–6, the camera icon at the top right and the footswitch labels show 4, 5 or 6.
+- **New snapshots:** the first time you flip to a preset's 4–6, each one starts as a copy of the snapshot you flipped from. Edit them as any snapshot: snapshot-controlled parameters, block bypass, tempo and names are kept per snapshot.
+- **Saving:** a save keeps all six with the preset. Saving while in 4–6, you hear the matching snapshot of 1–3 for a moment, as the save writes 1–3 first.
+- **Stock firmware and HX Edit:** a preset saved with 4–6 still loads on a stock firmware, as snapshots 1–3, and the stock firmware drops 4–6 if it saves the preset again. HX Edit opens, exports and imports these presets, but its exports (`.hlx`) and backups (`.hxb`) hold snapshots 1–3 only. Snapshots 4–6 live on the HX Stomp.
+- **What else changes:** pressing the lit snapshot footswitch no longer does what Reselect Snapshot says. Next and previous snapshot, MIDI CC 69 and HX Edit's snapshot buttons work within the bank you're in.
 
 ## NAM A2 Lite
 
@@ -183,10 +193,10 @@ M4 code (the caves `tools/patch_menu.py` writes, and each feature's `.s` module)
 build.py                      one-step build from the stock .hxf
 FIRMWARE_NOTES.md             what is known about the 3.80.0 firmware
 tools/patch_menu.py           CustomOS: the feature engine, the Global Settings section and its caves (HX Stomp)
-tools/features/               the features: tuner.py, bpm.py, dsp_meter.py, splash.py
+tools/features/               the features: tuner.py, bpm.py, dsp_meter.py, long_press.py, more_snapshots.py, splash.py
 tools/setting_ids.py          which setting ID each feature's setting uses
 tools/m4asm.py                assembles a feature's src/m4/*.s with Apple's clang
-src/m4/                       the features' M4 code (bpm.s, dsp_meter.s)
+src/m4/                       the features' M4 code (bpm.s, dsp_meter.s, long_press.s, more_snapshots.s)
 tools/image_store.py          the image store (Entries 7 and 8): images, fonts, items
 tools/patch_splash.py         boot screen pictures; splash_topo.py draws one, splash_emoji.py and emoji_png.swift make emoji glyphs
 tools/patch_amp.py            inspect / add-model / ir-title / patch
