@@ -24,6 +24,7 @@ SERIALIZE, TOC_WRITE, SECTION_READ, PRESET, PRESET_FLAG = 0x28deacf4, 0x28deabdc
 SECTION = 0x2821fcc8                         # section 10's buffer
 CONTROLLERS, SWITCHES = 0x741, 0x742
 ICON, LABELS, NODE, FB = 0x2812ade8, 0x2812a4bc, 0x28600000, 0x28d1ce98
+FS_FUNCTIONS = 0x28128a74                    # footswitch k's function at + 2k: 14 snapshot k (Snapshot mode), 2 stomp, 1 TAP
 CAMERAS = {'white': (0x1a0, 0x71, 0x10f), 'red': (0x156, 0x105, 0x4f), 'lit': (0x13, 0x202, 0x12a)}   # Icon_Snapshot1..3, Red, Sel
 LABEL_X, LABEL_Y = (53, 160, 267), 100
 WIDGET_LOCK, WIDGET_UNLOCK, REDRAW, FILL, TEXT = 0x28e24970, 0x28e24ae8, 0x28db8508, 0x100017e8, 0x28db7aa4
@@ -83,6 +84,12 @@ class Manager:
         self.m.u8(MGR + CUR, 0)
         self.m.u8(MGR + PREV, 0)
         self.m.u8(MGR + BUSY, 0)
+        self.mode([14, 14, 14])
+
+    def mode(self, functions):
+        """The footswitches' functions, as Footswitch Mode sets them."""
+        for i, f in enumerate(functions):
+            self.m.u8(FS_FUNCTIONS + 2 * i, f)
 
     def _section(self, m):
         assert (m.reg('r1'), m.reg('r3'), m.stack_args(1)[0]) == (10, SECTION, 0x5000), 'section 10, as the load reads it'
@@ -340,6 +347,17 @@ def test_hidden_or_other_images_get_no_number(mgr):
     mgr.m.u8(LABELS + 0x1d, 0)
     mgr.m.u8(LABELS + 0x24 + 0x1d, 0)
     assert mgr.paint('home') == (labels(0)[:1] + labels(0)[5:], [])
+
+
+@pytest.mark.parametrize('functions', [[2, 2, 2], [2, 2, 1]], ids=['stomp', 'stomp with TAP'])
+def test_bank_b_in_another_footswitch_mode_leaves_the_labels_alone(mgr, functions):
+    """The labels keep their last cameras outside Snapshot mode; numbering them filled black boxes over the stomp or preset names."""
+    mgr.press(0)
+    mgr.mode(functions)
+    assert mgr.paint('home') == ([], [])
+    assert mgr.paint() == (top('4'), []), 'the top icon still shows the bank'
+    mgr.mode([14, 14, 14])
+    assert mgr.paint('home') == (labels(0), []), 'back in Snapshot mode'
 
 
 def test_back_in_bank_a_the_cameras_are_drawn_again(mgr):
