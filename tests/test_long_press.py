@@ -136,7 +136,7 @@ def h(m4emu):
 def test_hold_settings():
     assert len(long_press.SETTINGS) == 5
     for n, s in zip((1, 2, 3, 4, 5), long_press.SETTINGS):
-        assert (s.key, s.label, s.default) == (f'fs{n}', f'FS{n}\nHold'.encode(), n + 3), 'FS1..FS5 Hold default to FS6..FS10'
+        assert (s.key, s.label, s.default) == (f'fs{n}', f'Hold\nFS{n}'.encode(), n + 3), 'FS1..FS5 Hold default to FS6..FS10'
         assert s.values == (b'Off', b'Tuner', b'FS4', b'FS5', b'FS6', b'FS7', b'FS8', b'FS9', b'FS10')
         assert all(len(v) <= 8 for v in s.values)
     assert HOLD_IDS == [63, 78, 132, 74, 120], 'a unit keeps a setting\'s value by ID: never move it once a build has used it'
@@ -388,7 +388,7 @@ def test_build_sets_the_hold_labels():
     read, _ = built({'HX_LONG_PRESS': '1'})
     for n, pid in zip((1, 2, 3, 4, 5), HOLD_IDS):
         for tab in (pm.NAMES_LONG, pm.NAMES_SHORT):
-            assert read(tab + pm.NAME_LEN * pid, 9) == f'FS{n}\nHold\0'.encode()
+            assert read(tab + pm.NAME_LEN * pid, 9) == f'Hold\nFS{n}\0'.encode()
 
 
 @pytest.mark.firmware

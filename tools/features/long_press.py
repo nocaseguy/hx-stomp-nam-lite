@@ -7,7 +7,7 @@ FLAG = 'HX_LONG_PRESS'
 VALUES = (b'Off', b'Tuner', b'FS4', b'FS5', b'FS6', b'FS7', b'FS8', b'FS9', b'FS10')
 VIRTUAL_CC = 20                     # FS6..FS10 are MIDI CC 20..24 (undefined in the MIDI spec), as Bypass Assign > MIDI In sets them
 # FS1..FS5 Hold default to FS6..FS10 (values 4..8), written once on the first boot (src/m4/long_press.s lp_boot).
-SETTINGS = tuple(Setting(f'fs{n}', f'FS{n}\nHold'.encode(), VALUES, default=n + 3) for n in (1, 2, 3, 4, 5))
+SETTINGS = tuple(Setting(f'fs{n}', f'Hold\nFS{n}'.encode(), VALUES, default=n + 3) for n in (1, 2, 3, 4, 5))
 
 # The footswitch event handler (event, object): owned, as a held-back press means not running it for that event.
 HANDLER, HANDLER_STOCK = 0x28dd1978, bytes.fromhex('2de9 f043')    # push.w {r4-r9,lr}
