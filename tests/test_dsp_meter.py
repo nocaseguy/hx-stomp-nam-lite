@@ -1,5 +1,6 @@
 """tools/features/dsp_meter.py and src/m4/dsp_meter.s: the DSP Disp setting, the module run in unicorn against a fake DSP model and Edit
-view (each block's per cent, the total in each format, rounding and the ends, placement, locks), and the firmware it builds."""
+view (each block's per cent, the total in each format, rounding and the ends, placement, locks) and a fake model browser (each listed
+model's per cent on its icon), and the firmware it builds."""
 import os
 import struct
 
@@ -102,10 +103,16 @@ class Meter:
         self.m.call(CODE + self.sym['paint'], FB, VIEW, 0, 0)
         return self
 
-    def texts(self, colour):
-        """[(text, left, right, top, bottom, scale)] of the glyph cells drawn in colour, left to right."""
+    def texts(self, colour, rows=None):
+        """[(text, left, right, top, bottom, scale)] of the glyph cells drawn in colour, left to right (top to bottom when rows
+        gives the rows' (bottom, top) bands)."""
+        if rows:
+            return [t for lo, hi in rows for t in self._texts(colour, lambda y: lo <= y < hi)]
+        return self._texts(colour, lambda y: True)
+
+    def _texts(self, colour, within):
         cells = sorted((x, y, w) for x, y, w, h, c, a in self.fills if c == colour and a == 0 and w == h and w in (1, 2)
-                       and (x, y, w) != (270, 222, 46))
+                       and (x, y, w) != (270, 222, 46) and within(y))
         runs = []
         for x, y, s in cells:
             if runs and runs[-1][2] == s and x - runs[-1][1] <= 2 * s:
@@ -259,6 +266,187 @@ def test_no_dsp_model_draws_nothing_and_takes_no_dsp_lock(meter):
     assert m.events == ['widget lock', 'widget unlock'] and m.fills == []
 
 
+# The model browser: its list level, category and subcategory, first row's item, and five row icons, as 0x28dc3424 fills them
+BROWSER = 0x28900000
+LEVEL, COUNT, ITEM, COST = 0x28df0280, 0x28e0edcc, 0x28e01204, 0x28e01d50
+ITEMS = 0x28a00000
+MODELS = 2
+NAMES_X = 60
+ICON_W = 28
+
+
+def wipe(r, w=ICON_W):
+    """Row r's label box, cleared in black from the right edge of its w-px icon, centred on x 21, to the names."""
+    return (21 + w // 2, 175 - 40 * r, NAMES_X - 21 - w // 2, 14, BLACK, 0)
+
+
+class Browser(Meter):
+    """The module's browser handler in unicorn: lists of model costs by (category, subcategory), and the browser showing one."""
+
+    def __init__(self, m4emu):
+        super().__init__(m4emu)
+        self.lists, self.items, self.bad_items, self.level = {}, {}, set(), 0
+        self.m.stub(LEVEL, self._level)
+        self.m.stub(COUNT, self._count)
+        self.m.stub(ITEM, self._item)
+        self.m.stub(COST, self._cost)
+        self.show(MODELS, cat=2, sub=0)
+        for r in range(5):
+            self.icon(r, 0x175)
+
+    def _level(self, m):
+        m.u8(m.reg('r0'), self.level)
+        m.reg('r0', 0)
+        self.events.append('level')
+
+    def _count(self, m):
+        self.events.append('count')
+        costs = self.lists.get((m.reg('r0'), m.reg('r1')))
+        m.reg('r0', -3 if costs is None else len(costs))
+
+    def _item(self, m):
+        key = (m.reg('r0'), m.reg('r1'), m.reg('r2'))
+        if key in self.bad_items:
+            m.reg('r0', -3)
+            return
+        at = ITEMS + 0x30 * len(self.items)
+        self.items[at] = self.lists[key[:2]][key[2]]
+        m.u32(m.reg('r3'), at)
+        m.reg('r0', 0)
+
+    def _cost(self, m):
+        cost = self.items.get(m.reg('r0'))
+        if cost is None:
+            m.reg('r0', -0x15)
+            return
+        m.u32(m.reg('r1'), cost)
+        m.reg('r0', 0)
+
+    def show(self, level, cat, sub, first=0, path=0):
+        """The browser at a list level showing (cat, sub) from item first, with the stock level getter giving path."""
+        self.level = path
+        self.m.u8(BROWSER + 0x40, level)
+        self.m.u8(BROWSER + 0x569, first)
+        self.m.u8(BROWSER + 0x56e + path, cat)
+        self.m.u8(BROWSER + 0x570 + path, sub)
+
+    def icon(self, r, image, w=ICON_W):
+        """Row r's icon (None: hidden), w px wide, top-centre anchored at x 21, as the ROM list init places them."""
+        wd = BROWSER + 0x22c + 0x24 * r
+        self.m.u32(wd, image or 0)
+        self.m.u32(wd + 0xc, 21)
+        self.m.u32(wd + 0x10, 194 - 40 * r)
+        self.m.u32(wd + 0x14, w)
+        self.m.u32(wd + 0x18, 24)
+        self.m.u8(wd + 0x1c, 7)
+        self.m.u8(wd + 0x1d, image is not None)
+
+    def paint(self):
+        self.fills.clear()
+        self.events.clear()
+        self.items.clear()
+        assert self.m.call(CODE + self.sym['browser'], FB, BROWSER, 0, 0) == 0
+        return self
+
+    def texts(self, colour, rows=None):
+        return super().texts(colour, rows or [(194 - 40 * (r + 1), 194 - 40 * r) for r in range(5)])
+
+    def numbers(self):
+        return [t[0] for t in self.texts(WHITE)]
+
+
+@pytest.fixture
+def browser(m4emu):
+    return Browser(m4emu)
+
+
+def test_browser_shows_each_listed_models_per_cent(browser):
+    browser.lists[(2, 0)] = [509, 520, 2345, 49, 9950]
+    assert browser.paint().numbers() == ['5', '5', '23', '0', '100']
+
+
+@pytest.mark.parametrize('cost, width', [(2345, 14), (509, 6)])
+@pytest.mark.parametrize('icon_w', [22, 28, 36])
+def test_browser_number_is_centred_between_its_rows_icon_and_name(browser, cost, width, icon_w):
+    browser.lists[(2, 0)] = [cost] * 5
+    for r in range(5):
+        browser.icon(r, 0x175, icon_w)
+    edge = 21 + icon_w // 2
+    for r, (text, left, right, top, bottom, s) in enumerate(browser.paint().texts(WHITE)):
+        assert s == 2 and (top, bottom) == (187 - 40 * r, 177 - 40 * r)
+        assert right - left == width and abs((left - edge) - (NAMES_X - right)) <= 1 and edge < left
+
+
+def test_browser_wipes_each_rows_label_before_drawing_it(browser):
+    browser.lists[(2, 0)] = [2345, 509]
+    browser.icon(1, None)
+    browser.icon(2, 0x175, 36)
+    f = browser.paint().fills
+    assert wipe(2, 36) in f
+    f[f.index(wipe(2, 36))] = wipe(2)
+    boxes = [f.index(wipe(r)) for r in range(5)]
+    assert boxes == sorted(boxes) and all(c == WHITE for *_, c, _ in f[boxes[0] + 1:boxes[1]])
+    assert [c for *_, c, _ in f[boxes[1]:]] == [BLACK] * 4
+
+
+def test_browser_reads_the_page_from_the_first_rows_item(browser):
+    browser.lists[(11, 0)] = [100 * k for k in range(10)]
+    browser.show(MODELS, cat=11, sub=0, first=3)
+    assert browser.paint().numbers() == ['3', '4', '5', '6', '7']
+
+
+def test_browser_takes_the_list_the_stock_level_picks(browser):
+    browser.lists[(14, 1)] = [1500]
+    browser.lists[(2, 0)] = [900]
+    browser.show(MODELS, cat=2, sub=0)
+    browser.show(MODELS, cat=14, sub=1, path=1)
+    for r in range(1, 5):
+        browser.icon(r, None)
+    assert browser.paint().numbers() == ['15']
+
+
+def test_browser_skips_hidden_rows_rows_past_the_list_and_items_without_a_cost(browser):
+    browser.lists[(2, 0)] = [100, 200, 300, 400]        # four models: row 4 is past the list, though its icon is visible
+    browser.icon(1, None)
+    browser.bad_items.add((2, 0, 2))
+    browser.lists[(2, 0)][3] = None                     # the cost function rejects it
+    assert browser.paint().numbers() == ['1']
+
+
+def test_browser_draws_nothing_for_a_list_the_firmware_has_not(browser):
+    browser.show(MODELS, cat=1, sub=0)
+    m = browser.paint()
+    assert m.numbers() == [] and m.fills == [wipe(r) for r in range(5)]
+    assert m.events == ['level', 'count', 'widget lock'] + ['fill'] * 5 + ['widget unlock']
+
+
+@pytest.mark.parametrize('level', [0, 1, 3, 4, 5, 6])
+def test_browser_leaves_other_list_levels_alone(browser, level):
+    """Categories, subcategories and the rest list no models: no call, no lock, nothing drawn."""
+    browser.lists[(2, 0)] = [2345] * 5
+    browser.show(level, cat=2, sub=0)
+    m = browser.paint()
+    assert m.fills == [] and m.events == []
+
+
+@pytest.mark.parametrize('level', [1, 4])
+def test_browser_wipes_the_labels_once_on_leaving_the_model_list(browser, level):
+    browser.lists[(2, 0)] = [2345] * 5
+    browser.paint()
+    browser.show(level, cat=2, sub=0)
+    m = browser.paint()
+    assert m.fills == [wipe(r) for r in range(5)] and m.events == ['widget lock'] + ['fill'] * 5 + ['widget unlock']
+    assert browser.paint().events == []
+
+
+def test_browser_takes_the_widget_lock_after_the_level_and_count(browser):
+    """The level getter takes the DSP model lock, which is never held with the widget lock."""
+    browser.lists[(2, 0)] = [2345]
+    ev = browser.paint().events
+    assert ev[:3] == ['level', 'count', 'widget lock'] and ev[-1] == 'widget unlock'
+    assert 'fill' in ev and all(e == 'fill' for e in ev[3:-1])
+
+
 def built(env):
     stock = os.environ.get('HX_STOMP_HXF')
     if not stock:
@@ -292,6 +480,57 @@ def test_build_chains_the_module_after_the_edit_paint():
     assert read(paint, 4) == bytes.fromhex('f0b5 8bb0')  # push {r4-r7,lr}; sub sp,#44: paint's prologue
 
 
+def chained_after(read, lit, stock):
+    """The after handler the build chains on the function pointer at lit."""
+    stub = struct.unpack('<I', read(lit, 4))[0]
+    assert stub & 1 and stub != stock
+    stub &= ~1
+    head = pm.chain_cave(stub, stock & ~1, [], [stub])
+    after = stub + len(head) - 12                # the after handler's bl, before the epilogue
+    assert read(stub, after - stub) == head[:after - stub]
+    return bl_target(after, read(after, 4))
+
+
+@pytest.mark.firmware
+def test_build_chains_the_browser_handler_after_the_browser_paint():
+    read, _ = built({'HX_DSP_METER': '1'})
+    browser = chained_after(read, dsp_meter.BROWSER_PAINT_LIT, dsp_meter.BROWSER_PAINT)
+    assert read(browser, 6) == bytes.fromhex('2de9 f041 82b0')   # push.w {r4-r8,lr}; sub sp,#8: browser's prologue
+    assert read(dsp_meter.NAMES_X, 2) == bytes([NAMES_X, 0x23])   # movs r3, #60
+
+
+@pytest.mark.firmware
+def test_browser_items_are_priced_as_the_model_table_says():
+    """Every model in every browser list, priced by the firmware's own item lookup and cost function run on the stock Entry 0
+    (its model table sorted, as boot sorts it): the cost is the model's, plus the second model's for an amp+cab."""
+    stock = os.environ.get('HX_STOMP_HXF')
+    if not stock:
+        pytest.skip('HX_STOMP_HXF is not set')
+    import m4emu
+    data, _ = pa.load_l6ia_from_any(stock)
+    e0 = pa.get_entry_swapped(data, 0)
+    m = m4emu.M4(b'', 0x28f80000)
+    for _, off, n, dst, _ in pa._parse_e0_segments(e0):
+        if dst >= 0x28000000:
+            m.load(dst, e0[off:off + n])
+    table = struct.unpack('<I', m.read(0x28e01c08, 4))[0]
+    rows = sorted((m.read(table + 12 * i, 12) for i in range(823)), key=lambda r: struct.unpack_from('<I', r)[0])
+    m.write(table, b''.join(rows))
+    cost = {struct.unpack_from('<I', r)[0]: struct.unpack_from('<I', r, 8)[0] for r in rows}
+    out, priced = 0x28f00100, 0
+    for cat in range(19):
+        for sub in range(4):
+            for i in range(struct.unpack('<I', m.read(0x28e3e13c + 4 * (4 * cat + sub), 4))[0]):
+                assert m.call(ITEM, cat, sub, i, out) == 0
+                item = m.u32(out)
+                kind, first, second = struct.unpack('<III', m.read(item, 12))
+                assert m.call(COST, item, out + 4) == 0, (cat, sub, i)
+                pair = (kind & 0xff) >= 0x10 and 0x30005 >> ((kind & 0xff) - 0x10) & 1     # kinds with a second model
+                assert m.u32(out + 4) == cost[first] + (cost[second] if pair else 0), (cat, sub, i)
+                priced += 1
+    assert priced > 400
+
+
 @pytest.mark.firmware
 def test_build_sets_the_dsp_disp_label_and_limits():
     read, _ = built({'HX_DSP_METER': '1'})
@@ -307,6 +546,8 @@ def test_without_the_flag_the_edit_paint_and_dsp_disp_id_stay_stock():
     read, on = built({})
     assert on == ['tuner']
     assert struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0] == dsp_meter.EDIT_PAINT
+    assert struct.unpack('<I', read(dsp_meter.BROWSER_PAINT_LIT, 4))[0] == dsp_meter.BROWSER_PAINT
+    assert read(dsp_meter.NAMES_X, 2) == dsp_meter.NAMES_X_STOCK
     assert not any(read(pm.NAMES_LONG + pm.NAME_LEN * DISP, pm.NAME_LEN))
 
 
