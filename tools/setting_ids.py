@@ -5,11 +5,15 @@ An ID is the setting's place in the firmware's settings store, and the HX Stomp 
 so an ID never moves once a build has used it, and an ID that held another setting before may come with that setting's value.
 A feature claims an ID by putting its setting's '<feature>.<key>' on the ID's line. Two branches claiming the same ID edit the same
 line, so the merge conflicts; tests/test_customos.py fails on a duplicate, on a setting with no ID and on an ID claimed by no setting.
+The empty-label IDs ran out, so an ID in STOCK_LABELS (a stock setting for hardware the HX Stomp lacks) may be claimed too: the build
+checks its stock label and writes the feature's label over it.
 """
 import struct
 import sys
 
 IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stock state, and the settings it held in earlier builds)
+    (23, 'breathing_line.color', 'stock Scribble LCD Select (no scribble strips on the HX Stomp; int limits, default 13), no stock read or write found'),
+    (24, 'breathing_line.motion', 'stock Scribble LCD Contrast (no scribble strips on the HX Stomp; limits 0..100, default 50), no stock read or write found'),
     (29, 'tuner.activate', 'stock limits are not the 0..1 enum; GR Size (0..10) and GR Position (0..3) in early GR images'),
     (63, 'long_press.fs1', 'empty label, no stock read or write found; units hold 100 (its stock limits value), seen on a unit'),
     (74, 'long_press.fs4', 'empty label, no stock read or write found; units hold 1 (its stock limits value); a value set on it survived a power-cycle and a stock boot, seen on a unit; FS2 Hold (0..3) in long-press image 2fe68426'),
@@ -31,11 +35,15 @@ IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stoc
     (115, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
     (116, None, 'avoid for an int setting: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c; given int limits, ID 105 would not change by its knob, seen on a unit'),
     (120, 'long_press.fs5', "empty label, no stock read or write found; units hold 1 (its stock limits value), seen on a unit; BPM Beat (0..4) in bpm-display images up to a72c76a, no longer used"),
+    (121, 'breathing_line.speed', 'stock RF Channel (no wireless on the HX Stomp; int limits, default 14), no stock read or write found; not 32 (Mic In Gain): the store write refuses 32..56'),
     (126, 'bpm.color', 'GR Thickness in the Edge-meter and Own-IDs GR images (0..20)'),
     (128, 'bpm.font', 'GR Direction in the Own-IDs GR image (0..1); BPM Font in an older order in early BPM images'),
     (132, 'long_press.fs3', 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit; stock type-1 (bool) limits, as 78; '
                 'BPM Downbeat (0..10) in bpm-display images up to a72c76a'),
 )
+
+# Stock settings for hardware the HX Stomp lacks, with their label (the long and the short one are the same): claimable, see above.
+STOCK_LABELS = {23: b'Scribble LCD\nSelect', 24: b'Scribble LCD\nContrast', 121: b'RF Channel'}
 
 
 def by_name():

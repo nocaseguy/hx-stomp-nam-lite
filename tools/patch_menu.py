@@ -640,7 +640,14 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None):
         for pid, s in settings:
             if s is None:
                 continue
-            if any(p.read(tab + NAME_LEN * pid, NAME_LEN)):
+            slot, stock = p.read(tab + NAME_LEN * pid, NAME_LEN), setting_ids.STOCK_LABELS.get(pid)
+            if stock is not None:
+                if slot[:len(stock) + 1] != stock + b'\0':
+                    raise SystemExit(f'patch-menu: the label of setting ID {pid} at {tab:#x} is not its stock {stock!r}: the patch '
+                                     'is already applied')
+                p.put(tab + NAME_LEN * pid, s.label + b'\0', f'the label of ID {pid}')
+                continue
+            if any(slot):
                 raise SystemExit(f'patch-menu: the label of setting ID {pid} at {tab:#x} is not empty: a stock setting, or the patch '
                                  'is already applied')
             p.put(tab + NAME_LEN * pid, s.label, f'the label of ID {pid}')

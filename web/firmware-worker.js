@@ -55,6 +55,7 @@ var SOURCES = [
   "tools/setting_ids.py",
   "tools/features/__init__.py",
   "tools/features/bpm.py",
+  "tools/features/breathing_line.py",
   "tools/features/dsp_meter.py",
   "tools/features/long_press.py",
   "tools/features/more_snapshots.py",
