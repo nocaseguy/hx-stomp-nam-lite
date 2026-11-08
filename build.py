@@ -22,7 +22,8 @@ Steps:
   3. tools/patch_amp.py ir-title: the IR name in the block title
   4. tools/patch_amp.py patch: the kernel into the SHARC boot stream
      (HX Stomp only, first: tools/patch_menu.py, the CustomOS features of tools/features; --splash, --splash-fit,
-     --splash-text and --splash-glyph are the splash feature's HX_SPLASH, HX_SPLASH_FIT, HX_SPLASH_TEXT and HX_SPLASH_GLYPHS)
+     --splash-text and --splash-glyph are the splash feature's HX_SPLASH, HX_SPLASH_FIT, HX_SPLASH_TEXT and HX_SPLASH_GLYPHS;
+     with HX_CLICK=1, then tools/patch_click.py: the Metronome block)
   5. tools/l6ia_verify.py: every checksum of the result
   6. tools/hxf.py pack: the .hxf
 """
@@ -106,6 +107,9 @@ def main():
         run(py, "tools/patch_menu.py", base, titled, "--cwd", os.getcwd())
         os.replace(titled, base)
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
+    if os.environ.get("HX_CLICK") and unit == "HX_Stomp":
+        run(py, "tools/patch_click.py", image, titled)
+        os.replace(titled, image)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:
         sys.exit("build.py: the image failed its checksum check")

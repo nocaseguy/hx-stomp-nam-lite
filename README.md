@@ -21,30 +21,28 @@ The built image is `HX_Stomp_v3.80.0_CustomOS.hxf`. NAM A2 Lite is the same amp 
 
 ## Features
 
-Each feature is a module in `tools/features/`. The tuner settings are always built in. The others are off by default, and the build adds them when their switch is set (an environment variable, or a `build.py` option). Switches combine. Every feature here has run on an HX Stomp from RAM. 
+Each feature is a module in `tools/features/`. They are off by default, and the build adds them when their switch is set (an environment variable, or a `build.py` option). Switches combine. Every feature here has run on an HX Stomp from RAM. 
 
 | Feature | Switch | What it does |
 |---|---|---|
-| **Tuner** | always on | Tuner Activation and Lock Tuner Settings (below) |
-| **BPM** | `HX_BPM=1` | The tempo at the top left of the Home screen, and a beat dot that blinks with the TAP footswitch's ring. The dot keeps the beat in Preset and Snapshot footswitch modes too. |
-| **DSP meter** | `HX_DSP_METER=1` | Each block in the Edit view shows its share of the DSP in per cent, and the top right corner shows the blocks' total. In the model browser, each model shows the share it would take, between its icon and its name. |
+| **Tuner** | `HX_TUNER=1` | Tuner Activation and Lock Tuner Settings, on a third page of the tuner's own settings. See [Tuner settings](#tuner-settings). |
+| **BPM** | `HX_BPM=1` | The tempo at the top left of the Home screen, and a beat dot that blinks with the TAP footswitch's ring. See [BPM](#bpm). |
+| **DSP meter** | `HX_DSP_METER=1` | Each block in the Edit view shows its share of the DSP in per cent, and the top right corner shows the blocks' total. In the model browser, each model shows the share it would take. See [DSP meter](#dsp-meter). |
 | **Breathing line** | `HX_BREATHING_LINE=1` | Just for fun: the line across the middle of the Home screen comes alive in the colours, motion and speed you pick (Breathe, Pulse, Sine, Cylon, Comet, Heart, Sparkle). |
 | **Long press** | `HX_LONG_PRESS=1` | In Stomp mode, hold a footswitch for 1 s for a second action: the tuner, FS4 or FS5, or a virtual footswitch FS6–FS10. A tap still toggles the switch's own blocks. See [Long press](#long-press). |
 | **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). |
 | **Boot screen** | `--splash`, `--splash-text` | Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). |
 
 ```sh
-HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
+HX_TUNER=1 HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
 ```
 
 ### Custom settings
 
-The features' settings are in Global Settings, in a seventh section called **CustomOS**, after Displays (press right past Displays). It has no icon in the section strip, so none is lit while you are in it. Each feature that's built in has its own page there.
+The other features' settings are in Global Settings, in a seventh section called **CustomOS**, after Displays (press right past Displays). It has no icon in the section strip, so none is lit while you are in it. Each feature that's built in has its own page there. A build with none of them has no CustomOS section.
 
 | Feature | Setting | Values | What it does |
 |---|---|---|---|
-| Tuner | **Tuner Activation** | **Hold** (default), **Press** | A footswitch assigned TAP/Tunr normally taps the tempo, and holding it opens the tuner. On **Press**, pressing it opens the tuner at once and the tempo is no longer tapped. It follows the assignment, so it works on whichever footswitch has TAP/Tunr. |
-| Tuner | **Lock Tuner Settings** | **Off** (default), **On** | On stops the tuner's settings (Output, Refrnc, Type, Trails, Offsets) from changing: knob turns and the knob presses that reset an item to its default are ignored. Paging between the tuner's settings screens still works. |
 | BPM | **BPM Font** | **41 Lite** (default), 35 Bold, 28 Bold, 28 Lite, 21 Bold, 21 Reg | The tempo's font |
 | BPM | **BPM Color** | **White** (default), Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple | The tempo's and the dot's colour |
 | BPM | **BPM Dot Pos** | **Left** (default), Right, Both | Where the beat dot sits, beside the preset number |
@@ -55,6 +53,37 @@ The features' settings are in Global Settings, in a seventh section called **Cus
 | DSP meter | **DSP Disp** | **Used/All** (default, e.g. `47/75`), Free (`28`), Used% (`63%`) | What the top right corner shows. "All" is 75: the firmware's 90% preset limit less its fixed 15%. |
 
 The HX Stomp keeps a setting's value under its ID, which `tools/setting_ids.py` assigns. If a value another build stored under that ID is out of range, the menu shows the setting's default. The spare IDs ran out with long press, so breathing line uses the IDs of three stock settings for hardware the HX Stomp doesn't have: Scribble LCD Select, Scribble LCD Contrast and RF Channel.
+
+### Tuner settings
+
+With `HX_TUNER=1`, the tuner's own settings get a page of their own, third: page right past Trails, Offsets and String 6. The string pages (Strings 5–3, then 2 and 1) follow it: few players use the per-string offsets, so the page comes before them. Its knobs set them as the stock pages' knobs do: turn to change, press to go back to the default.
+
+| Knob | Values | What it does |
+|---|---|---|
+| **Activate** (Tuner Activation) | **Hold** (default), **Press** | A footswitch assigned TAP/Tunr normally taps the tempo, and holding it opens the tuner. On **Press**, pressing it opens the tuner at once and the tempo is no longer tapped. It follows the assignment, so it works on whichever footswitch has TAP/Tunr. |
+| **Lock** (Lock Tuner Settings) | **Off** (default), **On** | On stops the tuner's other settings (Output, Refrnc, Type, Trails, Offsets) from changing: knob turns and the knob presses that reset an item to its default are ignored. Paging still works, and this page's knobs still turn, so Lock can be turned off where it was turned on. |
+
+Both keep their values (setting IDs 29 and 104) from builds that had them in Global Settings > CustomOS.
+
+### BPM
+
+The Home screen shows the tempo at its top left, and a beat dot beside the preset number that lights with the TAP footswitch's ring, red on a tap.
+
+- **The tempo** is the one the HX Stomp is using, the global or the preset's as Tempo Select says, as a whole number. It shows ` X` after it while the tempo comes from MIDI clock (the tempo screen's Extrnl), and `--` with no tempo.
+- **The dot** keeps the beat in every footswitch mode, and with Tap Tempo LED off too: the ring then stays dark while the dot blinks.
+- **Settings** (Global Settings > CustomOS): BPM Font, BPM Color (the tempo's and the dot's) and BPM Dot Pos (left of the preset number, right of it, or both). See [Custom settings](#custom-settings).
+
+### DSP meter
+
+In the Edit view, each block in the signal-flow row shows its share of the DSP in per cent, in black on the block. The top right corner shows the blocks' total, as **DSP Disp** says (see [Custom settings](#custom-settings)):
+
+- **Used/All** (default), e.g. `47/75`: what the blocks use, out of 75.
+- **Free**, e.g. `28`: what's left.
+- **Used%**, e.g. `63%`: what the blocks use, as a share of the 75.
+
+In the model browser, each model shows the share it would take, in white between its icon and its name.
+
+75 is what blocks may use: the firmware's preset limit of 90%, less the 15% it always keeps. The numbers are the firmware's own fixed cost of each model, the same ones it uses to decide whether a block fits, not a measured load.
 
 ### Long press
 
@@ -75,6 +104,22 @@ With Footswitch Mode on Snapshot, the three footswitches select snapshots 1–3 
 - **Stock firmware and HX Edit:** a preset saved with 4–6 still loads on a stock firmware, as snapshots 1–3, and the stock firmware drops 4–6 if it saves the preset again. HX Edit opens, exports and imports these presets, but its exports (`.hlx`) and backups (`.hxb`) hold snapshots 1–3 only. Snapshots 4–6 live on the HX Stomp.
 - **What else changes:** pressing the lit snapshot footswitch no longer does what Reselect Snapshot says. Next and previous snapshot, MIDI CC 69 and HX Edit's snapshot buttons work within the bank you're in.
 
+### Boot screen (HX Stomp only)
+
+```sh
+python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf --splash my_picture.jpg --splash-text "HXS OS v0.1"
+```
+
+- `--splash` takes any picture macOS can open (PNG, JPEG, HEIC, ...) at any size. The screen is **320x240**; a 320x240 PNG is used exactly as it is, and anything else is converted to it with macOS's `sips`: scaled to cover the screen and cropped at the centre, or with `--splash-fit fit`, scaled to fit inside it on black. Off macOS, give a 320x240 PNG.
+- The loading bar crosses the picture about halfway down, and the text sits on it in the bottom 40 rows, in grey (`0xb1b1b1`), so keep the bottom darkish.
+- `--splash-text` replaces "Firmware 3.80.0" with up to 23 characters: ASCII, and emoji, each of which counts as one, e.g. `--splash-text "HXS OS v0.1 🎸"`.
+- Each emoji becomes a colour glyph of the line's font, 18 px tall, level with the capitals. On macOS it's rendered from Apple Color Emoji; `--splash-glyph 🎸=guitar.png` (repeatable) gives your own picture instead, and off macOS it's required. A line with emoji is drawn white, not grey, as the firmware shows a glyph's own colours only on a white line.
+- The boot screen is a CustomOS feature (`tools/features/splash.py`). The flags set its inputs `HX_SPLASH`, `HX_SPLASH_FIT`, `HX_SPLASH_TEXT` and `HX_SPLASH_GLYPHS`, which work as environment variables too, as the other features' flags do.
+- `python3 tools/splash_topo.py out.png [--seed N]` draws a neon contour-map picture to start from; `python3 tools/patch_splash.py export firmware.hxf out.png` saves the picture an image has now.
+- The bootloader shows its own copy of the stock picture for a moment at power-on, before the firmware starts; that copy is not changed.
+
+This also changes the image store (part 8 of the 15), and with emoji, the font table (part 7).
+
 ## NAM A2 Lite
 
 From upstream, unchanged in this fork. 
@@ -94,7 +139,7 @@ What is here is our own work: the patchers and the offsets they patch, the M4 an
   - HX Stomp: `HX_Stomp_v3.80.0_0x103966115.hxf`, MD5 `a2cd8f4ae56f49415380270ebc484bf1`. Download it from [line6.com](https://line6.com/software/readeula.html?rid=12906); you need to sign in with a free Line 6 (Helix) account to get the download.
   - HX Stomp XL: `HX_Stomp_XL_v3.80.0_0x103966115.hxf`, MD5 `329e3a26d60d3de1988b6785fa833ee1`
 - Python 3.10 or newer with `numpy`: `pip install numpy`. To run a build from RAM from the command line, also `pyusb` and `dfu-util`.
-- For BPM and the DSP meter, Apple's Command Line Tools (`xcode-select --install`): their M4 code is assembled with its clang at build time. For the boot screen, macOS converts pictures (`sips`) and renders emoji (`swift`); elsewhere give a 320x240 PNG and `--splash-glyph` pictures.
+- For every feature but the boot screen, Apple's Command Line Tools (`xcode-select --install`): their M4 code is assembled with its clang at build time. For the boot screen, macOS converts pictures (`sips`) and renders emoji (`swift`); elsewhere give a 320x240 PNG and `--splash-glyph` pictures.
 - **Line 6 Updater** to install, and **HX Edit** to import captures.
 
 ## Build
@@ -111,25 +156,9 @@ This writes `build/HX_Stomp_v3.80.0_CustomOS.hxf` (from the XL's file, `build/HX
 4. Adds the kernel to the DSP's boot code (`patch_amp.py patch`).
 5. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
-The build is deterministic. The default HX Stomp build (no switches) has MD5 `b96a50f9e36d06067519a7ab2096f07b`, pinned in `tests/test_firmware.py`.
+The build is deterministic. The default HX Stomp build (no switches) has MD5 `fd18c1b0fda16c73c0f096d9b9edbdc7`, pinned in `tests/test_firmware.py`.
 
 A default build changes only 4 of the 15 parts of the firmware: the main application, the DSP program, the model list and the DSP graph library (the boot screen also changes the image store and the font table). **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
-
-### Boot screen (HX Stomp only)
-
-```sh
-python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf --splash my_picture.jpg --splash-text "HXS OS v0.1"
-```
-
-- `--splash` takes any picture macOS can open (PNG, JPEG, HEIC, ...) at any size. The screen is **320x240**; a 320x240 PNG is used exactly as it is, and anything else is converted to it with macOS's `sips`: scaled to cover the screen and cropped at the centre, or with `--splash-fit fit`, scaled to fit inside it on black. Off macOS, give a 320x240 PNG.
-- The loading bar crosses the picture about halfway down, and the text sits on it in the bottom 40 rows, in grey (`0xb1b1b1`), so keep the bottom darkish.
-- `--splash-text` replaces "Firmware 3.80.0" with up to 23 characters: ASCII, and emoji, each of which counts as one, e.g. `--splash-text "HXS OS v0.1 🎸"`.
-- Each emoji becomes a colour glyph of the line's font, 18 px tall, level with the capitals. On macOS it's rendered from Apple Color Emoji; `--splash-glyph 🎸=guitar.png` (repeatable) gives your own picture instead, and off macOS it's required. A line with emoji is drawn white, not grey, as the firmware shows a glyph's own colours only on a white line.
-- The boot screen is a CustomOS feature (`tools/features/splash.py`). The flags set its inputs `HX_SPLASH`, `HX_SPLASH_FIT`, `HX_SPLASH_TEXT` and `HX_SPLASH_GLYPHS`, which work as environment variables too, as the other features' flags do.
-- `python3 tools/splash_topo.py out.png [--seed N]` draws a neon contour-map picture to start from; `python3 tools/patch_splash.py export firmware.hxf out.png` saves the picture an image has now.
-- The bootloader shows its own copy of the stock picture for a moment at power-on, before the firmware starts; that copy is not changed.
-
-This also changes the image store (part 8 of the 15), and with emoji, the font table (part 7).
 
 ## Try it first, from RAM
 
@@ -173,7 +202,7 @@ This has been done on a real unit after a modified firmware hung at the splash, 
   - **Setting IDs** are claimed in one place, `tools/setting_ids.py`, and the tests fail on a duplicate.
   - **Writes are checked:** every write goes through `Patch.put`, which fails the build if two features write the same bytes.
   - **Shared hooks:** a place several features need is hooked once, with `p.chain_ptr` (a function pointer), `p.chain_bl` (a call) or `p.chain_entry` (a function's start). Its stub runs each feature's handlers around the stock function.
-  - **Owned hooks:** a place that can't be shared (stack arguments, or a handler that rewrites them) is taken by one feature with `p.own_entry`.
+  - **Owned hooks:** a place that can't be shared (stack arguments, or a handler that rewrites them) is taken by one feature with `p.own_entry` (a function's start) or `p.own_call` (a call, such as a tail call).
   - **Other parts:** the image store and fonts (Entries 7 and 8) are changed through `p.entry(n)`, `add_item` and `p.add_glyph` (`tools/image_store.py`), never by hand.
 - **The DSP.** The audio runs on an Analog Devices SHARC ADSP-21469. Kernels are hand-written SHARC assembly, assembled by `tools/sharc/sasm.py` and simulated by `tools/sharc/ssim.py`, with no vendor toolchain. A custom kernel is hooked to an unused DSP primitive.
 - **NAM captures through the IR slots.** The HX Stomp already stores up to 128 User IRs of 2,048 samples and hands them to the DSP unchanged. `nam2ir.py` packs a capture's weights into those samples, behind a small header the kernel recognises.
@@ -187,7 +216,7 @@ Add what you learn to [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md), with its status (v
 
 Try every change from RAM on a unit before relying on it, and say in the commit what was seen on the unit and what was only checked offline.
 
-A new feature is a module in `tools/features/` with its own tests. `tools/features/tuner.py` is the simplest, and `tools/features/bpm.py` uses every kind of hook. Claim setting IDs in `tools/setting_ids.py` and test M4 code with `tests/m4emu.py` (see [Tests](#tests)). A setting's label takes at most 8 characters before the newline of its `Page\nName` and 9 after it; the HX Stomp shows the part after the newline first.
+A new feature is a module in `tools/features/<name>.py` with its M4 code in `src/m4/<name>.s`, a README section under [Features](#features), and its own `tests/test_<name>.py`. `tools/features/dsp_meter.py` is the simplest, and `tools/features/bpm.py` uses every kind of hook. Prefix the module's entry points with the feature's name. Claim setting IDs in `tools/setting_ids.py`, test M4 code with `tests/m4emu.py`, and build and read the firmware with `tests/firmware.py` (see [Tests](#tests)). A setting's label takes at most 8 characters before the newline of its `Page\nName` and 9 after it; the HX Stomp shows the part after the newline first.
 
 ## Tests
 
@@ -200,7 +229,7 @@ HX_STOMP_HXF=path/to/HX_Stomp_v3.80.0_0x103966115.hxf .venv/bin/pytest   # and t
 
 Upstream's NAM A2 Lite tests (`test_nam_lite`, `test_multi_kernel`, `test_web_parity`, `test_patch_amp`, `test_web_i18n`) carry the `nam` marker and are skipped unless the `-m` expression names `nam` (`tests/conftest.py`). The firmware MD5 test still covers NAM A2 Lite's bytes in every build. GitHub Actions runs `-m "not firmware"` and `-m "nam and not firmware"` on every push and pull request. The firmware tests need your own stock file (`HX_STOMP_HXF`, `HX_STOMP_XL_HXF`) and are skipped without one. They build the whole `.hxf` and compare its MD5 with the one pinned in `tests/test_firmware.py`, so a changed byte anywhere in the firmware fails until the pin is updated on purpose. `web/firmware-worker.js` carries the same pin.
 
-M4 code (the caves `tools/patch_menu.py` writes, and each feature's `.s` module) is tested by running it in [unicorn](https://www.unicorn-engine.org) as a Cortex-M4, with `tests/m4emu.py`: it assembles a module with the generated `customos.inc` and stands in for firmware functions with Python stubs that log their calls. A call fails if it runs code that is neither loaded nor a stub (a missing stub), doesn't return (a loop), or changes SP or r4-r11. Take the `m4emu` fixture rather than importing the module, so a file's other tests still run without unicorn. `tests/test_customos_m4.py` is the example. `m4emu.assemble()` needs Apple's Command Line Tools clang and skips the test without it, so CI (Ubuntu) skips those.
+M4 code (the caves `tools/patch_menu.py` writes, and each feature's `.s` module) is tested by running it in [unicorn](https://www.unicorn-engine.org) as a Cortex-M4, with `tests/m4emu.py`: it assembles a module with the generated `customos.inc` and stands in for firmware functions with Python stubs that log their calls. A call fails if it runs code that is neither loaded nor a stub (a missing stub), doesn't return (a loop), or changes SP or r4-r11. Take the `m4emu` fixture rather than importing the module, so a file's other tests still run without unicorn. `tests/test_customos_m4.py` is the example. `tests/firmware.py` builds Entry 0 from your stock file with the features a test turns on, and reads its code and branches. `m4emu.assemble()` needs Apple's Command Line Tools clang and skips the test without it, so CI (Ubuntu) skips those.
 
 ## Layout
 
@@ -211,7 +240,7 @@ tools/patch_menu.py           CustomOS: the feature engine, the Global Settings 
 tools/features/               the features: tuner.py, bpm.py, breathing_line.py, dsp_meter.py, long_press.py, more_snapshots.py, splash.py
 tools/setting_ids.py          which setting ID each feature's setting uses
 tools/m4asm.py                assembles a feature's src/m4/*.s with Apple's clang
-src/m4/                       the features' M4 code (bpm.s, breathing_line.s, dsp_meter.s, long_press.s, more_snapshots.s)
+src/m4/                       the features' M4 code (tuner.s, bpm.s, breathing_line.s, dsp_meter.s, long_press.s, more_snapshots.s)
 tools/image_store.py          the image store (Entries 7 and 8): images, fonts, items
 tools/patch_splash.py         boot screen pictures; splash_topo.py draws one, splash_emoji.py and emoji_png.swift make emoji glyphs
 tools/patch_amp.py            inspect / add-model / ir-title / patch
@@ -228,7 +257,7 @@ tools/sharc/sasm.py, ssim.py  SHARC assembler and simulator
 src/sharc/nam_a2.asm          reference NAM A2 implementation for the check
 src/ramboot/                  the RAM loader and its eMMC overlay hook (C, Cortex-M4; make -C src/ramboot)
 web/                          the setup page: build, RAM run and converter in the browser
-tests/                        pytest: unit, M4 code in unicorn (m4emu.py), web parity, kernel (slow), firmware (needs a stock .hxf)
+tests/                        pytest: unit, M4 code in unicorn (m4emu.py), web parity, kernel (slow), firmware (firmware.py; needs a stock .hxf)
 ```
 
 ## Licence

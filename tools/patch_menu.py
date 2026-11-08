@@ -386,6 +386,13 @@ class Hook:
         return self
 
 
+class Call:
+    """A call site one feature owns (Patch.own_call)."""
+
+    def __init__(self, owner, what, handler):
+        self.owner, self.what, self.handler = owner, what, handler
+
+
 class Patch:
     """Entry 0 being patched: writes checked for overlap, the code cave, the features' setting IDs, their inputs, the shared and
     owned hooks, and the other entries (p.entry(n))."""
@@ -539,19 +546,31 @@ class Patch:
         can take: one with stack arguments, or one that rewrites them. Returns a Hook: hook.to(handler) (or handler=) puts a b.w
         to the handler at fn, hook.stock is the stock function to branch to; lay out code at p.next() only after this call,
         as hook.stock takes the cave's next bytes. Another feature that owns, chains or writes over it fails the build."""
-        if fn in self.owned:
-            o = self.owned[fn]
-            raise SystemExit(f'patch-menu: {self.owner} ({what}) and {o.owner} ({o.what}) both own {fn:#x}: only one feature '
-                             'can take a hook that cannot be chained')
-        if fn in self.chains:
-            others = ', '.join(dict.fromkeys(self.chains[fn][4]))
-            raise SystemExit(f'patch-menu: {self.owner} owns {fn:#x} ({what}), which {others} chain: it cannot be shared')
+        self._unshared(fn, what)
         if len(stock) < 4 or len(stock) % 2 or cut(stock) is not None:
             raise SystemExit(f'patch-menu: {self.owner} ({what}): give at least the 4 bytes a b.w takes, whole instructions')
         self.expect(fn, stock, f'the start of the function at {fn:#x}')
         self.put(fn, stock, what)       # reserves the bytes the b.w replaces
         hook = self.owned[fn] = Hook(self, fn, stock, self.owner, what)
         return hook.to(handler) if handler is not None else hook
+
+    def own_call(self, site, stock, what, handler):
+        """The bl or b.w at site to stock, sent to handler instead, for this feature alone: for a call no chain can take, such as
+        a tail call (b.w), whose handler returns to the caller's caller. Another feature that owns, chains or writes over it fails."""
+        self._unshared(site, what)
+        branch = thumb_bw if self.read(site, 4) == thumb_bw(site, stock) else bl
+        self.expect(site, branch(site, stock), f'the call at {site:#x}')
+        self.put(site, branch(site, handler), what)
+        self.owned[site] = Call(self.owner, what, handler)
+
+    def _unshared(self, site, what):
+        if site in self.owned:
+            o = self.owned[site]
+            raise SystemExit(f'patch-menu: {self.owner} ({what}) and {o.owner} ({o.what}) both own {site:#x}: only one feature '
+                             'can take a hook that cannot be chained')
+        if site in self.chains:
+            others = ', '.join(dict.fromkeys(self.chains[site][4]))
+            raise SystemExit(f'patch-menu: {self.owner} owns {site:#x} ({what}), which {others} chain: it cannot be shared')
 
     def finish_chains(self):
         for hook in self.owned.values():
@@ -625,14 +644,15 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None):
     on = features.enabled(mods, env)
     values = {features.name(m): features.values(m, env, cwd) for m in on}
     p = Patch(load(0), mods, setting_ids.by_name() if ids is None else ids, load, values)
-    settings = []            # (ID, setting) in page order
+    settings, stored = [], []   # (ID, setting): on CustomOS pages in page order; of every feature
     for m in on:
+        mine = []
         for s in getattr(m, 'SETTINGS', ()):
             check_setting(features.name(m), s)
-            settings.append((p.id(f'{features.name(m)}.{s.key}'), s))
-        settings += [(EMPTY_SLOT, None)] * (-len(settings) % 3)
-    if not settings:
-        settings = [(EMPTY_SLOT, None)] * 3
+            mine.append((p.id(f'{features.name(m)}.{s.key}'), s))
+        stored += mine
+        if getattr(m, 'MENU', True):
+            settings += mine + [(EMPTY_SLOT, None)] * (-len(mine) % 3)
 
     for tab in (NAMES_LONG, NAMES_SHORT):
         if p.read(tab + NAME_LEN * 22, 8) != b'Main LCD':
@@ -654,10 +674,21 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None):
 
     if LIMITS_TAB_LOW + 2 * p.u16(LIMITS_TAB_LOW + 2 * 17) != ENUM01_TARGET:     # ID 18's entry
         raise SystemExit('patch-menu: the limits table is not at its stock address')
-    for pid, s in settings:
-        if s is not None:
-            set_limits(p, pid, s)
+    for pid, s in stored:
+        set_limits(p, pid, s)
+    if settings:        # no feature with a CustomOS page: no CustomOS section
+        add_category(p, settings)
 
+    for m in on:
+        if hasattr(m, 'apply'):
+            p.owner = features.name(m)
+            m.apply(p)
+    p.finish_chains()
+    return p.output(), on
+
+
+def add_category(p, settings):
+    """The CustomOS section of Global Settings: its pages of settings ((ID, setting) in page order, three to a page) and value text."""
     p.expect(TEXT_FN, TEXT_FN_STOCK, 'the value-text function')
     p.expect(NAV_CMP, NAV_CMP_STOCK, 'the category navigation')
     p.expect(NAV_WRAP, NAV_WRAP_STOCK, 'the category navigation')
@@ -683,19 +714,12 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None):
         p.put(site[0], thumb_bw(site[0], p.add(dispatch_cave(p.next(), site, table_va))), f'the category dispatch {name}')
     p.put(TEXT_FN, thumb_bw(TEXT_FN, p.add(text_cave(p.next(), values))), 'the value-text function')
 
-    for m in on:
-        if hasattr(m, 'apply'):
-            p.owner = features.name(m)
-            m.apply(p)
-    p.finish_chains()
-    return p.output(), on
-
 
 def patch_menu(l6ia_bytes, log=print, cwd=None):
     entries, on = menu_entries(lambda n: pa.get_entry_swapped(l6ia_bytes, n), cwd=cwd)
     new_l6ia, _, _ = l6ia.rebuild_archive(l6ia_bytes, entries)
     others = ''.join(f'; Entry {n}' for n in entries if n)
-    log(f'[+] Entry 0: Global Settings > CustomOS ({", ".join(features.name(m) for m in on)}){others}')
+    log(f'[+] Entry 0: features {", ".join(features.name(m) for m in on) or "none"}{others}')
     return new_l6ia
 
 

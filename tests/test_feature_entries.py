@@ -1,5 +1,5 @@
 """Features beyond Entry 0 and on/off flags: p.entry(n) and Entry 8 items (tools/image_store.py), p.add_glyph, inputs that take
-values (features.Input, p.input), and hooks one feature owns (p.own_entry)."""
+values (features.Input, p.input), and hooks one feature owns (p.own_entry, p.own_call)."""
 import hashlib
 import os
 import struct
@@ -16,6 +16,7 @@ import m4asm
 import patch_amp as pa
 import patch_menu as pm
 from features import Input
+from firmware import reader, stock as stock_l6ia, stock_e0
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = 0x28d8fa80
@@ -381,6 +382,55 @@ def test_chain_entry_refuses_short_or_cut_prologues(stock, error):
         p.chain_entry(FN, stock, before=BASE + 0x9000)
 
 
+CALL, CALLEE = BASE + 0x100, BASE + 0x4000
+
+
+@pytest.mark.parametrize('branch', [pm.bl, pm.thumb_bw])
+def test_own_call_sends_a_bl_or_b_w_to_the_handler(branch):
+    p = patch()
+    p.put(CALL, branch(CALL, CALLEE))
+    p.written.clear()
+    p.owner = 'more_snapshots'
+    p.own_call(CALL, CALLEE, 'the select', BASE + 0x9000)
+    assert p.read(CALL, 4) == branch(CALL, BASE + 0x9000)
+    p.finish_chains()
+
+
+def test_own_call_refuses_a_call_of_another_function():
+    p = patch()
+    p.put(CALL, pm.bl(CALL, CALLEE + 2))
+    p.written.clear()
+    with pytest.raises(SystemExit, match='the call at 0x28d8fb80 is not at its stock address'):
+        p.own_call(CALL, CALLEE, 'the select', BASE + 0x9000)
+    assert p.owned == {}
+
+
+def test_an_owned_call_cannot_be_owned_again_chained_or_written():
+    p = patch()
+    p.put(CALL, pm.bl(CALL, CALLEE))
+    p.written.clear()
+    p.owner = 'tuner'
+    p.own_call(CALL, CALLEE, 'the tap', BASE + 0x9000)
+    p.owner = 'bpm'
+    with pytest.raises(SystemExit, match=r'bpm \(its tap\) and tuner \(the tap\) both own 0x28d8fb80'):
+        p.own_call(CALL, CALLEE, 'its tap', BASE + 0x9100)
+    with pytest.raises(SystemExit, match='bpm chains 0x28d8fb80, which tuner owns'):
+        p.chain_bl(CALL, CALLEE, after=BASE + 0x9100)
+    with pytest.raises(SystemExit, match=r'bpm \(a write\) and tuner \(the tap\) both patch 0x28d8fb82'):
+        p.put(CALL + 2, b'\0\0')
+
+
+def test_owning_a_chained_call_fails():
+    p = patch()
+    p.put(CALL, pm.bl(CALL, CALLEE))
+    p.written.clear()
+    p.owner = 'bpm'
+    p.chain_bl(CALL, CALLEE, after=BASE + 0x9100)
+    p.owner = 'tuner'
+    with pytest.raises(SystemExit, match=r'tuner owns 0x28d8fb80 \(the tap\), which bpm chain'):
+        p.own_call(CALL, CALLEE, 'the tap', BASE + 0x9000)
+
+
 def test_an_owned_hook_needs_its_handler():
     p = patch()
     p.put(FN, PROLOGUE)
@@ -462,10 +512,7 @@ EPILOGUE = bytes.fromhex('bde8f04f 02b0 7047')     # pop.w {r4-r11,lr}; add sp,#
 
 @pytest.fixture(scope='module')
 def stock():
-    path = os.environ.get('HX_STOMP_HXF')
-    if not path:
-        pytest.skip('HX_STOMP_HXF is not set')
-    return pa.load_l6ia_from_any(path)[0]
+    return stock_l6ia()
 
 
 def stock_patch(data):
@@ -620,7 +667,7 @@ def test_patch_menu_writes_entries_7_and_8_and_both_owned_sites(stock, tmp_path,
     log = []
     new = pm.patch_menu(stock, log.append, cwd=str(tmp_path))
     assert seen == {'text': 'HXS OS \U0001f3b8', 'pic': str(tmp_path / 'pic.bin')}
-    assert log == ['[+] Entry 0: Global Settings > CustomOS (tuner, demo); Entry 7; Entry 8']
+    assert log == ['[+] Entry 0: features demo; Entry 7; Entry 8']
     path = tmp_path / 'demo.l6ia'
     path.write_bytes(new)
     report = subprocess.run([sys.executable, os.path.join(ROOT, 'tools/l6ia_verify.py'), str(path)], capture_output=True, text=True)
@@ -641,19 +688,12 @@ def test_patch_menu_writes_entries_7_and_8_and_both_owned_sites(stock, tmp_path,
     assert {i for i in changed if not img.offset <= i < img.offset + img.length} == {8, 12, 20}
     assert table + 20 in {i for i in range(0, len(s7), 4) if e7[i:i + 4] != s7[i:i + 4]} <= {table + 12, table + 16, table + 20}
 
-    segs = pa._parse_e0_segments(e0)
-    read = lambda va, n: e0[pa._e0_vaddr_to_foff(segs, va, n):pa._e0_vaddr_to_foff(segs, va, n) + n]
+    read = reader(e0)
     assert read(RENDER_FN, 6) == pm.thumb_bw(RENDER_FN, handlers[RENDER_FN]) + b'\x00\xbf'
     assert read(LED_SEND, 4) == pm.thumb_bw(LED_SEND, handlers[LED_SEND])
-    assert read(LED_SEND + 4, 4) == read_stock(stock, LED_SEND + 4, 4)
+    assert read(LED_SEND + 4, 4) == reader(stock_e0())(LED_SEND + 4, 4)
     stub = struct.unpack('<I', read(HOME_PAINT_LIT, 4))[0]
     assert stub != HOME_PAINT and stub & 1
-
-
-def read_stock(data, va, n):
-    e0 = pa.get_entry_swapped(data, 0)
-    o = pa._e0_vaddr_to_foff(pa._parse_e0_segments(e0), va, n)
-    return e0[o:o + n]
 
 
 CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
@@ -675,7 +715,7 @@ def test_bpm_builds_beside_an_owned_text_renderer(stock):
     load = lambda n: pa.get_entry_swapped(stock, n)
     alone, _ = pm.menu_entries(load, env={'HX_BPM': '1'})
     both, on = pm.menu_entries(load, features.load() + [renderer_owner()], {'HX_BPM': '1'})
-    assert [features.name(m) for m in on] == ['tuner', 'bpm', 'demo'] and sorted(both) == [0]
+    assert [features.name(m) for m in on] == ['bpm', 'demo'] and sorted(both) == [0]
     segs = [pa._parse_e0_segments(e[0]) for e in (alone, both)]
     read = lambda e, sg, va, n: e[0][pa._e0_vaddr_to_foff(sg, va, n):pa._e0_vaddr_to_foff(sg, va, n) + n]
     assert read(both, segs[1], LED_SEND, 4) == read(alone, segs[0], LED_SEND, 4) != LED_STOCK

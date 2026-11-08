@@ -3,8 +3,8 @@
 @ in a text widget of our own on the block title's baseline.
 @ The Edit view's top half (0x281282f8) has eight block slots, image widgets at view+0x4a4+0x24k, hidden when empty.
 @ DSP costs are the firmware's own, in hundredths of a per cent (the preset total adds 1500 and must stay within 9000).
-@ The model browser (0x281299d0) lists five models a page, each with its category's icon: browser centres each model's cost in white between its icon and name.
-@ tools/features/dsp_meter.py chains paint after the Edit view top half's stock paint and browser after the browser's; patch_menu.py assembles this at build time.
+@ The model browser (0x281299d0) lists five models a page, each with its category's icon: dsp_browser centres each model's cost in white between its icon and name.
+@ tools/features/dsp_meter.py chains dsp_paint after the Edit view top half's stock paint and dsp_browser after the browser's; patch_menu.py assembles this at build time.
 .syntax unified
 .thumb
 .include "customos.inc"
@@ -13,7 +13,7 @@
 .equ TOTAL_TOP, 228                 @ the title's baseline (its top 0xea less ink row 22) plus this font's ink row 16
 .equ TOTAL_FONT, 1                  @ hx21_regularFont
 .thumb_func
-paint:                              @ r0 the framebuffer, r1 the Edit view's top half, after its stock paint
+dsp_paint:                          @ r0 the framebuffer, r1 the Edit view's top half, after its stock paint
     push {r4-r7, lr}
     sub sp, #44                     @ 0 the eight slots' DSP costs (-1 for none), 32 the blocks' sum in per cent (-1 for none), 36 DSP Disp
     mov r4, r0
@@ -111,7 +111,7 @@ next:
 .equ LABEL_TOP, 187                 @ the first row's digits, centred on its icon (y 194 down)
 .equ LABEL_SCALE, 2
 .thumb_func
-browser:                            @ r0 the framebuffer, r1 the model browser, after its stock paint
+dsp_browser:                        @ r0 the framebuffer, r1 the model browser, after its stock paint
     push {r4-r8, lr}
     sub sp, #8                      @ 0 the browser level, 4 a model's browser item, then its cost
     mov r4, r0
