@@ -8,10 +8,10 @@ import pytest
 
 import features
 import m4asm
-import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import Setting
+from firmware import reader, stock_e0
 
 MODS = features.load()
 SETTINGS = {f'{features.name(m)}.{s.key}': s for m in MODS for s in getattr(m, 'SETTINGS', ())}
@@ -170,11 +170,7 @@ def test_m4asm_refuses_relocations(tmp_path):
 @pytest.mark.firmware
 def test_a_feature_with_settings_and_a_shared_hook_builds():
     """The tuner plus a feature with a 0..4 and a 0..1 setting on a second page, chaining the Home view's paint function."""
-    stock = os.environ.get('HX_STOMP_HXF')
-    if not stock:
-        pytest.skip('HX_STOMP_HXF is not set')
-    data, _ = pa.load_l6ia_from_any(stock)
-    e0 = pa.get_entry_swapped(data, 0)
+    e0 = stock_e0()
     paint_lit, paint = 0x28d96e28, 0x28dc8d39
 
     def apply(p):
@@ -183,14 +179,9 @@ def test_a_feature_with_settings_and_a_shared_hook_builds():
     demo = fake('demo', SETTINGS=(Setting('pos', b'Demo\nPosition', (b'A', b'B', b'C', b'D', b'E'), default=2),
                                   Setting('dir', b'Demo\nDirection', (b'Normal', b'Reverse'))), apply=apply)
     ids = dict(setting_ids.by_name(), **{'demo.pos': 102, 'demo.dir': 128})
-    new, on = pm.menu_entry0(e0, MODS + [demo], {}, ids)
+    new, on = pm.menu_entry0(e0, MODS + [demo], {'HX_TUNER': '1'}, ids)
     assert [features.name(m) for m in on] == ['tuner', 'demo']
-    segs = pa._parse_e0_segments(new)
-
-    def read(va, n):
-        o = pa._e0_vaddr_to_foff(segs, va, n)
-        return new[o:o + n]
-
+    read = reader(new)
     assert read(pm.NAMES_LONG + pm.NAME_LEN * 102, 13) == b'Demo\nPosition'
     tab, entry = pm.limits_entry(102)
     snippet = tab + 2 * struct.unpack('<H', read(entry, 2))[0]

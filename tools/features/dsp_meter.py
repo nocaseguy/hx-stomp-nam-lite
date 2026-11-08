@@ -15,7 +15,7 @@ NAMES_X_STOCK, NAMES_X_LABELLED = bytes([44, 0x23]), bytes([60, 0x23])     # roo
 
 def apply(p):
     m = p.module('src/m4/dsp_meter.s')
-    p.chain_ptr(EDIT_PAINT_LIT, EDIT_PAINT, after=m['paint'])
-    p.chain_ptr(BROWSER_PAINT_LIT, BROWSER_PAINT, after=m['browser'])
+    p.chain_ptr(EDIT_PAINT_LIT, EDIT_PAINT, after=m['dsp_paint'])
+    p.chain_ptr(BROWSER_PAINT_LIT, BROWSER_PAINT, after=m['dsp_browser'])
     p.expect(NAMES_X, NAMES_X_STOCK, 'the model browser name list\'s x')
     p.put(NAMES_X, NAMES_X_LABELLED, 'the model browser name list\'s x')
