@@ -11,6 +11,7 @@ import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import more_snapshots as ms
+from firmware import branch_target, built
 
 MODS = features.load()
 IDS = setting_ids.by_name()
@@ -492,27 +493,6 @@ def test_a_load_without_a_whole_bank_b_starts_bank_b_anew(mgr, section):
 
 def test_feature_flag():
     assert ms.FLAG == 'HX_MORE_SNAPSHOTS' and not getattr(ms, 'SETTINGS', ())
-
-
-def built(env):
-    stock = os.environ.get('HX_STOMP_HXF')
-    if not stock:
-        pytest.skip('HX_STOMP_HXF is not set')
-    data, _ = pa.load_l6ia_from_any(stock)
-    new, on = pm.menu_entry0(pa.get_entry_swapped(data, 0), env=env)
-    segs = pa._parse_e0_segments(new)
-
-    def read(va, n):
-        o = pa._e0_vaddr_to_foff(segs, va, n)
-        return new[o:o + n]
-
-    return read, [features.name(m) for m in on]
-
-
-def branch_target(at, hw):
-    """The target of a b.w or bl."""
-    h1, h2 = struct.unpack('<2H', hw)
-    return setting_ids.bl_targets((h1, h2 | 0x4000), at)[0]
 
 
 @pytest.mark.firmware

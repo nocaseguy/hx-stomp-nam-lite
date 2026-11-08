@@ -1,15 +1,14 @@
 """tools/features/long_press.py and src/m4/long_press.s: the Hold settings, the event handler run in unicorn against a fake stock
 handler (held-back presses, clicks, holds, the tuner and FS4/FS5, and where the stock behaviour stays), and the firmware it builds."""
-import os
 import struct
 
 import pytest
 
 import features
-import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import long_press
+from firmware import branch_target, built
 
 MODS = features.load()
 IDS = setting_ids.by_name()
@@ -341,32 +340,10 @@ def test_other_ccs_keep_their_numbers(h, cc):
     assert cc_text(h, cc) == f'CC{cc}'
 
 
-def built(env):
-    stock = os.environ.get('HX_STOMP_HXF')
-    if not stock:
-        pytest.skip('HX_STOMP_HXF is not set')
-    data, _ = pa.load_l6ia_from_any(stock)
-    new, on = pm.menu_entry0(pa.get_entry_swapped(data, 0), env=env)
-    segs = pa._parse_e0_segments(new)
-
-    def read(va, n):
-        o = pa._e0_vaddr_to_foff(segs, va, n)
-        return new[o:o + n]
-
-    return read, [features.name(m) for m in on]
-
-
-def branch_target(at, hw):
-    hw1, hw2 = struct.unpack('<2H', hw)
-    s, j1, j2 = (hw1 >> 10) & 1, (hw2 >> 13) & 1, (hw2 >> 11) & 1
-    off = (s << 24) | ((~(j1 ^ s) & 1) << 23) | ((~(j2 ^ s) & 1) << 22) | ((hw1 & 0x3ff) << 12) | ((hw2 & 0x7ff) << 1)
-    return at + 4 + (off - (1 << 25) if s else off)
-
-
 @pytest.mark.firmware
 def test_build_owns_the_handler_and_hands_lp_event_the_stock_handler():
     read, on = built({'HX_LONG_PRESS': '1'})
-    assert on == ['tuner', 'long_press']
+    assert on == ['long_press']
     veneer = branch_target(long_press.HANDLER, read(long_press.HANDLER, 4))
     hw = struct.unpack('<4H', read(veneer, 8))
     imm = lambda a, b: ((a & 0xf) << 12) | (((a >> 10) & 1) << 11) | (((b >> 12) & 7) << 8) | (b & 0xff)
@@ -403,6 +380,6 @@ def test_without_the_flag_the_handler_stays_stock():
 
 
 @pytest.mark.firmware
-def test_builds_alongside_bpm_and_dsp_meter():
-    _, on = built({'HX_LONG_PRESS': '1', 'HX_BPM': '1', 'HX_DSP_METER': '1'})
+def test_builds_alongside_the_tuner_bpm_and_dsp_meter():
+    _, on = built({'HX_LONG_PRESS': '1', 'HX_BPM': '1', 'HX_DSP_METER': '1', 'HX_TUNER': '1'})
     assert on == ['tuner', 'bpm', 'dsp_meter', 'long_press']

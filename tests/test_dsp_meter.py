@@ -11,6 +11,7 @@ import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import dsp_meter
+from firmware import branch_target, built
 
 MODS = features.load()
 IDS = setting_ids.by_name()
@@ -128,7 +129,7 @@ class Meter:
         self.fills.clear()
         self.events.clear()
         self.drawn.clear()
-        self.m.call(CODE + self.sym['paint'], FB, VIEW, 0, 0)
+        self.m.call(CODE + self.sym['dsp_paint'], FB, VIEW, 0, 0)
         return self
 
     def texts(self, colour, rows=None):
@@ -393,7 +394,7 @@ class Browser(Meter):
         self.fills.clear()
         self.events.clear()
         self.items.clear()
-        assert self.m.call(CODE + self.sym['browser'], FB, BROWSER, 0, 0) == 0
+        assert self.m.call(CODE + self.sym['dsp_browser'], FB, BROWSER, 0, 0) == 0
         return self
 
     def texts(self, colour, rows=None):
@@ -495,36 +496,17 @@ def test_browser_takes_the_widget_lock_after_the_level_and_count(browser):
     assert 'fill' in ev and all(e == 'fill' for e in ev[3:-1])
 
 
-def built(env):
-    stock = os.environ.get('HX_STOMP_HXF')
-    if not stock:
-        pytest.skip('HX_STOMP_HXF is not set')
-    data, _ = pa.load_l6ia_from_any(stock)
-    new, on = pm.menu_entry0(pa.get_entry_swapped(data, 0), env=env)
-    segs = pa._parse_e0_segments(new)
-
-    def read(va, n):
-        o = pa._e0_vaddr_to_foff(segs, va, n)
-        return new[o:o + n]
-
-    return read, [features.name(m) for m in on]
-
-
-def bl_target(at, hw):
-    return setting_ids.bl_targets(struct.unpack('<2H', hw), at)[0]
-
-
 @pytest.mark.firmware
 def test_build_chains_the_module_after_the_edit_paint():
     read, on = built({'HX_DSP_METER': '1'})
-    assert on == ['tuner', 'dsp_meter']
+    assert on == ['dsp_meter']
     stub = struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0]
     assert stub & 1 and stub != dsp_meter.EDIT_PAINT
     stub &= ~1
     head = pm.chain_cave(stub, dsp_meter.EDIT_PAINT & ~1, [], [stub])
     after = stub + len(head) - 12                # the after handler's bl, before the epilogue
     assert read(stub, after - stub) == head[:after - stub]
-    paint = bl_target(after, read(after, 4))
+    paint = branch_target(after, read(after, 4))
     assert read(paint, 4) == bytes.fromhex('f0b5 8bb0')  # push {r4-r7,lr}; sub sp,#44: paint's prologue
 
 
@@ -536,7 +518,7 @@ def chained_after(read, lit, stock):
     head = pm.chain_cave(stub, stock & ~1, [], [stub])
     after = stub + len(head) - 12                # the after handler's bl, before the epilogue
     assert read(stub, after - stub) == head[:after - stub]
-    return bl_target(after, read(after, 4))
+    return branch_target(after, read(after, 4))
 
 
 @pytest.mark.firmware
@@ -592,7 +574,7 @@ def test_build_sets_the_dsp_disp_label_and_limits():
 @pytest.mark.firmware
 def test_without_the_flag_the_edit_paint_and_dsp_disp_id_stay_stock():
     read, on = built({})
-    assert on == ['tuner']
+    assert on == []
     assert struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0] == dsp_meter.EDIT_PAINT
     assert struct.unpack('<I', read(dsp_meter.BROWSER_PAINT_LIT, 4))[0] == dsp_meter.BROWSER_PAINT
     assert read(dsp_meter.NAMES_X, 2) == dsp_meter.NAMES_X_STOCK
@@ -603,7 +585,7 @@ def test_without_the_flag_the_edit_paint_and_dsp_disp_id_stay_stock():
 def test_builds_alongside_bpm():
     """Both features on: no overlapping writes, and the Edit paint is still the meter's alone (BPM chains the Home paint)."""
     read, on = built({'HX_DSP_METER': '1', 'HX_BPM': '1'})
-    assert on == ['tuner', 'bpm', 'dsp_meter']
+    assert on == ['bpm', 'dsp_meter']
     stub = struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0] & ~1
     head = pm.chain_cave(stub, dsp_meter.EDIT_PAINT & ~1, [], [stub])
     assert read(stub, len(head) - 12) == head[:-12]
