@@ -275,6 +275,18 @@ Each block in the Edit view shows its DSP cost in whole per cent, and the top ri
 - Deluxe Comp (blob 68 mono, 349 stereo): seven input nodes, op `0xa` float or `0xb` int (Ratio). Slot map {node, state index, slot, 0}; state index = the input's rank in node order, matching Entry 3's state records `{0, 0x80b98, name, type, index}`. Root init records `{path [1, 0], slot, value, kind 1}` give each slot's default.
 - `tools/patch_comp.py` adds GR Position, GR Direction and GR Thickness (int lists, slots 8..10) to both Deluxe Comps. The new input nodes have no edges, so the DSP is unchanged. Entry 3's tail string section grows in place, and the model table and everything after it move down. The blob's map, init records and relocation list are rebuilt after the node tree.
 
+### Tempo sync in a parameter map [verified offline]
+
+- Stock Simple Delay (blob 50) gets its delay time from the tempo inside its parameter map, with no M4 code of its own. Its Time knob comes as three Entry 3 parameters: the float `Time` (slot 1; meta `sync` 1, `coupledIndex` 10, `toggleSelectIndex` 11), the int note list `SyncSelect1` (slot 10, values 1..19 = 1/1 .. 1/64 Triplet, 6 = 1/4; meta `persistent` note) and the bool `TempoSync1` (slot 11). Entry 0's Table 2 row counts them (4, 6, 6): the last two are hidden, as `displayParamCount` 4 says.
+- The map: `TempoSync1` into a node of op `0x2a` (4 state words, data 0, 0) at port 0, `SyncSelect1` at port 2 (port 1 is free on delays); `Time` into a node of op `0x54` (9 state words, data min, max = 0.00035, 8.0) at port 0, the `0x2a` node at port 1; then op `0x2d` (data 0, 0.00035) and a writer to the delay member's pid 1. Edges are `{src, dst, src port, dst port}`. 344 stock `0x2a` nodes all have data (0, 0); `0x54` follows each in the delays with that model's time range.
+- **[hypothesis]**, borne out by the Metronome working on the unit: `0x2a` gives the note's length in seconds at the current tempo while `TempoSync1` is on, and `0x54` takes that or the free `Time`, clamped. `0x2d`'s job is not known (its second word is the clamp's minimum in the delays).
+
+### Metronome (`HX_CLICK=1`, `tools/patch_click.py`, `src/sharc/click.asm`)
+
+- A mono effect, Modulation > Metronome > Metronome (preset ID 181, DSP cost 50; modulation, not delay, so no trails), on a copy of the mono effect host whose member is primitive `0x0128` (registry `0x200050`; NAM has `0x9c75`). Knobs: Time (1/4 by default, synced), Level (dB), Accent (Off, 2..12: a 2 kHz downbeat every n beats), Thru (On passes the input). Its map is Simple Delay's sync chain without the `0x2d` node: the clamp's output is the kernel's pid 5.
+- The kernel counts samples since the last beat (100 ms .. 8 s, from pid 5 x 48000) and plays a 1 kHz sine (2 kHz on a downbeat) at half scale x Level, 6 ms decay. A new Time puts the next beat a new beat after the last. Its 142 instructions sit right under NAM's cold code, above NAM's three slots in Block 3 (`patch_click.pm_base`, from `nam_multi.Layout`); all its state is in its own instance words, DM(20..26) and DM(100..119).
+- Image MD5 `dbe198d87566d373f6fc3a73bdc2f26c` (`HX_CLICK=1 HX_BPM=1 hxbuild --no-check`, RAM run). Result **[verified on unit]** (2026-11-07): works as built, first time.
+
 ## Tools index
 
 | Tool | Purpose |
@@ -301,6 +313,7 @@ Each block in the Edit view shows its DSP cost in whole per cent, and the top ri
 | `tools/features/dsp_meter.py`, `src/m4/dsp_meter.s` | The DSP meter: each block's DSP cost and the blocks' total in the Edit view (`HX_DSP_METER=1`). |
 | `tests/m4emu.py` | Runs an M4 module in unicorn (Cortex-M4 Thumb) against stubbed firmware functions, for tests. |
 | `tools/features/bpm.py`, `src/m4/bpm.s` | The BPM on the Home screen and its beat dot (`HX_BPM=1`); `tests/test_bpm.py` runs its handlers in unicorn. |
+| `tools/patch_click.py`, `src/sharc/click.asm` | The Metronome block (`HX_CLICK=1`): a model with a tempo-synced Time and its DSP kernel; `tests/test_click.py` runs the kernel in ssim. |
 
 Build commands:
 
