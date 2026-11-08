@@ -11,7 +11,7 @@ import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import bpm, tuner
-from firmware import branch_target, reader, stock_e0
+from firmware import assert_virtual, branch_target, reader, stock_e0
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONTS = (5, 4, 2, 3, 0, 1)          # BPM Font's values as font numbers: 41 Lite, 35 Bold, 28 Bold, 28 Lite, 21 Bold, 21 Reg
@@ -27,7 +27,7 @@ def test_settings_values_defaults_and_ids():
     assert all(x.default == 0 for x in s.values()), 'value 0 is the default: an ID never set reads 0'
     assert len(FONTS) == len(s['font'].values) and len(COLOURS) == len(s['color'].values)
     ids = setting_ids.by_name()
-    assert (ids['bpm.font'], ids['bpm.color'], ids['bpm.dot']) == (128, 126, 102)
+    assert (ids['bpm.font'], ids['bpm.color'], ids['bpm.dot']) == (0xce, 0xcf, 0xd0), 'virtual: a unit keeps a value by ID, so never move them'
     assert bpm.FLAG == 'HX_BPM'
 
 
@@ -38,8 +38,8 @@ def build(e0, extra=(), monkeypatch=None):
     seen = {}
     real = pm.Patch.module
 
-    def module(self, path):
-        m = real(self, path)
+    def module(self, path, inc=None):
+        m = real(self, path, inc)
         seen[path] = m
         return m
 
@@ -79,12 +79,8 @@ def test_hooks_chain_the_handlers(monkeypatch):
     # the LED send: a plain b.w to the handler, which runs the send's first two instructions itself
     assert branch_target(bpm.LED_SEND, read(bpm.LED_SEND, 4)) == m['bpm_ledsend']
     assert read(bpm.LED_SEND + 4, 4) == reader(e0)(bpm.LED_SEND + 4, 4)
-    # the settings: labels and limits code (each range is not the stock 0..1)
-    for key, pid, label, top in (('font', 128, b'BPM\nFont', 5), ('color', 126, b'BPM\nColor', 8), ('dot', 102, b'BPM\nDot Pos', 2)):
-        assert read(pm.NAMES_LONG + pm.NAME_LEN * pid, len(label) + 1) == label + b'\0'
-        tab, entry = pm.limits_entry(pid)
-        snippet = tab + 2 * struct.unpack('<H', read(entry, 2))[0]
-        assert read(snippet, 8) == struct.pack('<4H', 0x2302, 0x2200, 0x2100, 0x2400 | top)
+    for s in bpm.SETTINGS:
+        assert_virtual(new, bpm, s)
 
 
 @pytest.mark.firmware

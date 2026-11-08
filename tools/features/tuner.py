@@ -34,7 +34,6 @@ PAINT = 0x28dcca60                                                              
 PAINT_SWITCH, PAINT_SWITCH_STOCK = 0x28dcca8e, bytes.fromhex('032b 68d8')        # cmp r3,#3; bhi end: the paint's switch on the page
 PAINT_TBH, PAINT_END = 0x28dcca92, 0x28dccb64
 STEPS = 0x28dfe2d8                                  # (raw knob delta) -> detents, as the stock turn counts them
-SETTER, SETTER_CONTEXT = 0x28e1f8f4, 0x28e007ec     # (context, ID, record, how), as the view stores its own settings
 SHOW, VALUE_TEXT, POSITION, LABEL = 0x28dc6598, 0x28dc654c, 0x28dc648c, 0x28dc63d0   # (knob, shown / text / 0.0f..1.0f / text)
 KNOB_COLOURS = ((0x28dc6454, 0xffffff), (0x28dc651c, 0x6b6b6b), (0x28dc6534, 0x4d4d4d), (0x28dc6504, 0xb1b1b1),
                 (0x28dc6568, 0xb1b1b1))           # (knob, colour), as the stock paints a knob that can be turned

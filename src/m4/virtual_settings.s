@@ -1,7 +1,8 @@
 @ virtual_settings.s - the Global Settings IDs CustomOS serves itself (tools/setting_ids.py VIRTUAL, 0xcc..0xf9): each value is a bit
 @ field of the main-store record of a dead float ID 105..116, which the stock Globals file saves with the other 136 records.
 @ tools/patch_menu.py owns GET_VALUE, the limits getter, the class function and the long-label function for virt_get, virt_limits,
-@ virt_class and virt_label, and its CustomOS turn and click caves enter virt_turn and virt_click.
+@ virt_class and virt_label, and its CustomOS turn and click caves enter virt_turn and virt_click. Features store through virt_set
+@ (customos.inc's customos_setting_set), as the stock setter refuses these IDs.
 .syntax unified
 .thumb
 .include "virtual.inc"
@@ -196,6 +197,22 @@ virt_click:                         @ the CustomOS click, from its cave: r0 view
     pop {r0-r3}
     ldr r12, =CLICK_STUB
     bx r12
+
+.thumb_func
+virt_set:                           @ (r0 ID, r1 value) -> r0 0, or -3 for an ID that is not a virtual setting: customos_setting_set's store
+    push {r4, lr}
+    mov r4, r1
+    bl find
+    cbz r0, 1f
+    ldrb r1, [r0, #5]
+    cmp r4, r1
+    it ls
+    movls r1, r4                    @ above max: max, where a knob would stop
+    bl store
+    movs r0, #0
+    pop {r4, pc}
+1:  mvn r0, #2
+    pop {r4, pc}
 
 find:                               @ r0 ID -> r0 its table entry, or 0
     adr.w r1, table

@@ -15,14 +15,14 @@ import struct
 import sys
 
 IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stock state, and the settings it held in earlier builds)
-    (29, 'tuner.activate', 'stock limits are not the 0..1 enum; GR Size (0..10) and GR Position (0..3) in early GR images'),
-    (63, 'long_press.fs1', 'empty label, no stock read or write found; units hold 100 (its stock limits value), seen on a unit'),
-    (74, 'long_press.fs4', 'empty label, no stock read or write found; units hold 1 (its stock limits value); a value set on it survived a power-cycle and a stock boot, seen on a unit; FS2 Hold (0..3) in long-press image 2fe68426'),
-    (78, 'long_press.fs2', 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit; stock type-1 (bool) limits: its record keeps type 1, so the menu offers two values until long_press rewrites it as an int at boot'),
-    (101, 'dsp_meter.disp', 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
-    (102, 'bpm.dot', 'GR Position in the Own-IDs GR image (0..4); BPM Position (0..6) in early BPM images; '
+    (29, None, 'tuner.activate until it moved to virtual ID 0xcc; stock limits are not the 0..1 enum; GR Size (0..10) and GR Position (0..3) in early GR images'),
+    (63, None, 'long_press.fs1 until it moved to virtual ID 0xd2; empty label, no stock read or write found; units hold 100 (its stock limits value), seen on a unit'),
+    (74, None, 'long_press.fs4 until it moved to virtual ID 0xd5; empty label, no stock read or write found; units hold 1 (its stock limits value); a value set on it survived a power-cycle and a stock boot, seen on a unit; FS2 Hold (0..3) in long-press image 2fe68426'),
+    (78, None, 'long_press.fs2 until it moved to virtual ID 0xd3; empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit; stock type-1 (bool) limits: its record keeps type 1, so the menu offers two values until long_press rewrites it as an int at boot'),
+    (101, None, 'dsp_meter.disp until it moved to virtual ID 0xd1; empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit'),
+    (102, None, 'bpm.dot until it moved to virtual ID 0xd0; GR Position in the Own-IDs GR image (0..4); BPM Position (0..6) in early BPM images; '
                      'DSP Disp (0..3) in dsp-meter test images'),
-    (104, 'tuner.lock', 'GR Direction in the Edge-meter GR image (0..1)'),
+    (104, None, 'tuner.lock until it moved to virtual ID 0xcd; GR Direction in the Edge-meter GR image (0..1)'),
     (105, None, 'avoid for an int setting, a container of VIRTUAL fields: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c, and refused by the store write (-21); given int limits, ID 105 would not change by its knob, seen on a unit'),
     (106, None, 'avoid for an int setting, a container of VIRTUAL fields: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c, and refused by the store write (-21); given int limits, ID 105 would not change by its knob, seen on a unit'),
     (107, None, 'avoid for an int setting, a container of VIRTUAL fields: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c, and refused by the store write (-21); given int limits, ID 105 would not change by its knob, seen on a unit'),
@@ -35,10 +35,10 @@ IDS = (   # (ID, the '<feature>.<key>' using it or None, what is known: its stoc
     (114, None, 'avoid for an int setting, a container of VIRTUAL fields: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c, and refused by the store write (-21); given int limits, ID 105 would not change by its knob, seen on a unit'),
     (115, None, 'avoid for an int setting, a container of VIRTUAL fields: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c, and refused by the store write (-21); given int limits, ID 105 would not change by its knob, seen on a unit'),
     (116, None, 'avoid for an int setting, a container of VIRTUAL fields: a float (type-3 limits, default 1.0f, which units hold), skipped with the Variax IDs by the bulk loop at 0x28de9e5c, and refused by the store write (-21); given int limits, ID 105 would not change by its knob, seen on a unit'),
-    (120, 'long_press.fs5', "empty label, no stock read or write found; units hold 1 (its stock limits value), seen on a unit; BPM Beat (0..4) in bpm-display images up to a72c76a, no longer used"),
-    (126, 'bpm.color', 'GR Thickness in the Edge-meter and Own-IDs GR images (0..20)'),
-    (128, 'bpm.font', 'GR Direction in the Own-IDs GR image (0..1); BPM Font in an older order in early BPM images'),
-    (132, 'long_press.fs3', 'empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit; stock type-1 (bool) limits, as 78; '
+    (120, None, "long_press.fs5 until it moved to virtual ID 0xd6; empty label, no stock read or write found; units hold 1 (its stock limits value), seen on a unit; BPM Beat (0..4) in bpm-display images up to a72c76a, no longer used"),
+    (126, None, 'bpm.color until it moved to virtual ID 0xcf; GR Thickness in the Edge-meter and Own-IDs GR images (0..20)'),
+    (128, None, 'bpm.font until it moved to virtual ID 0xce; GR Direction in the Own-IDs GR image (0..1); BPM Font in an older order in early BPM images'),
+    (132, None, 'long_press.fs3 until it moved to virtual ID 0xd4; empty label, no stock read or write found; units hold 0 (its stock limits value), seen on a unit; stock type-1 (bool) limits, as 78; '
                 'BPM Downbeat (0..10) in bpm-display images up to a72c76a'),
 )
 
@@ -47,6 +47,18 @@ VIRTUAL_IDS = range(0xcc, 0xfa)     # every stock settings function returns -3 o
 CONTAINERS = range(105, 117)        # the main-store records whose bits hold the virtual settings' values
 
 VIRTUAL = (   # (virtual ID, container ID, first bit, bits, the '<feature>.<key>' using it or None, notes)
+    # a container per feature, bits 0..23 only; a two-value setting takes 2 bits and a longer one 4, so either can grow
+    (0xcc, 105, 0, 2, 'tuner.activate', ''),
+    (0xcd, 105, 2, 2, 'tuner.lock', ''),
+    (0xce, 106, 0, 4, 'bpm.font', ''),
+    (0xcf, 106, 4, 4, 'bpm.color', ''),
+    (0xd0, 106, 8, 4, 'bpm.dot', ''),
+    (0xd1, 107, 0, 4, 'dsp_meter.disp', ''),
+    (0xd2, 108, 0, 4, 'long_press.fs1', ''),
+    (0xd3, 108, 4, 4, 'long_press.fs2', ''),
+    (0xd4, 108, 8, 4, 'long_press.fs3', ''),
+    (0xd5, 108, 12, 4, 'long_press.fs4', ''),
+    (0xd6, 108, 16, 4, 'long_press.fs5', ''),
 )
 
 

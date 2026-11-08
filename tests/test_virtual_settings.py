@@ -267,6 +267,41 @@ def test_a_store_into_an_unset_container_starts_from_every_default(m4emu):
     assert e.container(105) == (2, 2)
 
 
+def test_set_stores_a_field_clamps_to_max_and_refuses_other_ids(m4emu):
+    e = Engine(m4emu)
+    assert e.m.call(e.va('virt_set'), 0xcc, 4) == 0 and e.container(105) == (2, 4), 'from the defaults: Direction stays 0'
+    e.m.call(e.va('virt_set'), 0xcd, 1)
+    assert e.container(105) == (2, 4 | 1 << 3)
+    e.m.call(e.va('virt_set'), 0xcc, 9)                 # above Position's max 4: max
+    assert e.get(0xcc)[1] == (2, 4)
+    assert e.m.call(e.va('virt_set'), 0xd0, 1) == (1 << 32) - 3 and e.m.call(e.va('virt_set'), 74, 1) == (1 << 32) - 3
+
+
+SET_STUB, SETTER_CTX = 0x28e80000, 0x28400000
+
+
+@pytest.mark.parametrize('engine', [True, False])
+def test_customos_setting_set_sends_virtual_ids_to_the_engine_and_others_to_the_stock_setter(m4emu, tmp_path, engine):
+    src = tmp_path / 'set.s'
+    src.write_text('.syntax unified\n.thumb\n.include "customos.inc"\nCUSTOMOS_SETTING_SET\n')
+    code, sym = m4emu.assemble(str(src), MODS, setting_ids.by_name(), SET_STUB if engine else None)
+    m = m4emu.M4(code, CODE)
+    engine_calls, stock_calls = [], []
+    m.stub(SET_STUB, lambda m: (engine_calls.append((m.reg('r0'), m.reg('r1'))), m.reg('r0', 0)))
+    m.stub(pm.SETTER_CONTEXT, lambda m: m.reg('r0', SETTER_CTX))
+    m.stub(pm.SETTER, lambda m: stock_calls.append((m.reg('r0'), m.reg('r1'), struct.unpack('<BxxxI', m.read(m.reg('r2'), 8)),
+                                                    m.reg('r3'))))
+    for pid, value in ((0xcc, 1), (74, 5)):
+        m.call(CODE + sym['customos_setting_set'], pid, value)
+    stock = [(SETTER_CTX, 74, (2, 5), 1)]
+    assert (engine_calls, stock_calls) == (([(0xcc, 1)], stock) if engine else ([], [(SETTER_CTX, 0xcc, (2, 1), 1)] + stock))
+
+
+def test_every_feature_setting_is_virtual():
+    real = {name: pid for name, pid in setting_ids.by_name().items() if pid not in setting_ids.VIRTUAL_IDS}
+    assert real == {}, 'a feature setting takes a virtual ID (tools/setting_ids.py VIRTUAL), not a real one'
+
+
 # stock facts the engine rests on
 
 def stock_m4(m4emu):
@@ -327,6 +362,32 @@ class Built:
     def get(self, pid):
         r0 = self.m.call(pm.GET_VALUE, pid, OUT)
         return r0 - (1 << 32) if r0 >> 31 else r0, struct.unpack('<BxxxI', self.m.read(OUT, 8))
+
+
+ALL = {'HX_TUNER': '1', 'HX_BPM': '1', 'HX_DSP_METER': '1', 'HX_LONG_PRESS': '1', 'HX_MORE_SNAPSHOTS': '1'}
+
+
+@pytest.mark.firmware
+def test_every_feature_built_together_reads_and_stores_its_settings_through_the_engine(m4emu, monkeypatch):
+    seen, real = {}, pm.Patch.module
+
+    def module(self, path, inc=None):
+        seen[path] = real(self, path, inc)
+        return seen[path]
+
+    monkeypatch.setattr(pm.Patch, 'module', module)
+    new, on = pm.menu_entry0(stock_e0(), MODS, ALL)
+    assert {features.name(m) for m in on} >= {'tuner', 'bpm', 'dsp_meter', 'long_press'}
+    b = Built(m4emu, new)
+    for cid in setting_ids.CONTAINERS:
+        b.m.write(record(cid) + 8, struct.pack('<BxxxI', 3, FLOAT_ONE))
+    for vid, cid, bit, bits, name, _ in setting_ids.VIRTUAL:
+        if name:
+            assert b.get(vid) == (0, (2, SETTINGS[name].default)), name
+    knob_set = seen['src/m4/tuner.s']['knob_set']       # the tuner page's store, through customos_setting_set and virt_set
+    b.m.call(knob_set, 1, 1)
+    assert b.get(setting_ids.by_name()['tuner.lock']) == (0, (2, 1)) and b.get(setting_ids.by_name()['tuner.activate']) == (0, (2, 0))
+    assert struct.unpack('<BxxxI', b.m.read(record(105) + 8, 8)) == (2, 1 << 2)
 
 
 @pytest.mark.firmware
