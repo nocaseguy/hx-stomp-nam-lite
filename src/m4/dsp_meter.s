@@ -2,7 +2,7 @@
 @ and the top right corner shows their sum against what blocks may use (90% less the firmware's fixed 15%), as Global Settings > CustomOS > DSP Disp asks.
 @ The Edit view's top half (0x281282f8) has eight block slots, image widgets at view+0x4a4+0x24k, hidden when empty.
 @ DSP costs are the firmware's own, in hundredths of a per cent (the preset total adds 1500 and must stay within 9000).
-@ tools/features/dsp_meter.py chains paint after the Edit view top half's stock paint; patch_menu.py assembles this at build time.
+@ tools/features/dsp_meter.py chains dsp_paint after the Edit view top half's stock paint; patch_menu.py assembles this at build time.
 .syntax unified
 .thumb
 .include "customos.inc"
@@ -12,7 +12,7 @@
 .equ TOTAL_SCALE, 2
 .equ TOTAL_GLYPHS, 6                @ the most a value takes, e.g. 100/90
 .thumb_func
-paint:                              @ r0 the framebuffer, r1 the Edit view's top half, after its stock paint
+dsp_paint:                          @ r0 the framebuffer, r1 the Edit view's top half, after its stock paint
     push {r4-r7, lr}
     sub sp, #44                     @ 0 the eight slots' DSP costs (-1 for none), 32 the blocks' sum in per cent (-1 for none), 36 DSP Disp
     mov r4, r0

@@ -1,15 +1,14 @@
 """tools/features/dsp_meter.py and src/m4/dsp_meter.s: the DSP Disp setting, the module run in unicorn against a fake DSP model and Edit
 view (each block's per cent, the total in each format, rounding and the ends, placement, locks), and the firmware it builds."""
-import os
 import struct
 
 import pytest
 
 import features
-import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import dsp_meter
+from firmware import branch_target, built
 
 MODS = features.load()
 IDS = setting_ids.by_name()
@@ -43,7 +42,7 @@ def test_dsp_disp_setting():
 
 
 class Meter:
-    """The module in unicorn: blocks in slots, the DSP Disp setting, and what paint draws."""
+    """The module in unicorn: blocks in slots, the DSP Disp setting, and what dsp_paint draws."""
 
     def __init__(self, m4emu):
         code, self.sym = m4emu.assemble('src/m4/dsp_meter.s', MODS, IDS)
@@ -99,7 +98,7 @@ class Meter:
     def paint(self):
         self.fills.clear()
         self.events.clear()
-        self.m.call(CODE + self.sym['paint'], FB, VIEW, 0, 0)
+        self.m.call(CODE + self.sym['dsp_paint'], FB, VIEW, 0, 0)
         return self
 
     def texts(self, colour):
@@ -259,36 +258,17 @@ def test_no_dsp_model_draws_nothing_and_takes_no_dsp_lock(meter):
     assert m.events == ['widget lock', 'widget unlock'] and m.fills == []
 
 
-def built(env):
-    stock = os.environ.get('HX_STOMP_HXF')
-    if not stock:
-        pytest.skip('HX_STOMP_HXF is not set')
-    data, _ = pa.load_l6ia_from_any(stock)
-    new, on = pm.menu_entry0(pa.get_entry_swapped(data, 0), env=env)
-    segs = pa._parse_e0_segments(new)
-
-    def read(va, n):
-        o = pa._e0_vaddr_to_foff(segs, va, n)
-        return new[o:o + n]
-
-    return read, [features.name(m) for m in on]
-
-
-def bl_target(at, hw):
-    return setting_ids.bl_targets(struct.unpack('<2H', hw), at)[0]
-
-
 @pytest.mark.firmware
 def test_build_chains_the_module_after_the_edit_paint():
     read, on = built({'HX_DSP_METER': '1'})
-    assert on == ['tuner', 'dsp_meter']
+    assert on == ['dsp_meter']
     stub = struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0]
     assert stub & 1 and stub != dsp_meter.EDIT_PAINT
     stub &= ~1
     head = pm.chain_cave(stub, dsp_meter.EDIT_PAINT & ~1, [], [stub])
     after = stub + len(head) - 12                # the after handler's bl, before the epilogue
     assert read(stub, after - stub) == head[:after - stub]
-    paint = bl_target(after, read(after, 4))
+    paint = branch_target(after, read(after, 4))
     assert read(paint, 4) == bytes.fromhex('f0b5 8bb0')  # push {r4-r7,lr}; sub sp,#44: paint's prologue
 
 
@@ -305,7 +285,7 @@ def test_build_sets_the_dsp_disp_label_and_limits():
 @pytest.mark.firmware
 def test_without_the_flag_the_edit_paint_and_dsp_disp_id_stay_stock():
     read, on = built({})
-    assert on == ['tuner']
+    assert on == []
     assert struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0] == dsp_meter.EDIT_PAINT
     assert not any(read(pm.NAMES_LONG + pm.NAME_LEN * DISP, pm.NAME_LEN))
 
@@ -314,7 +294,7 @@ def test_without_the_flag_the_edit_paint_and_dsp_disp_id_stay_stock():
 def test_builds_alongside_bpm():
     """Both features on: no overlapping writes, and the Edit paint is still the meter's alone (BPM chains the Home paint)."""
     read, on = built({'HX_DSP_METER': '1', 'HX_BPM': '1'})
-    assert on == ['tuner', 'bpm', 'dsp_meter']
+    assert on == ['bpm', 'dsp_meter']
     stub = struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0] & ~1
     head = pm.chain_cave(stub, dsp_meter.EDIT_PAINT & ~1, [], [stub])
     assert read(stub, len(head) - 12) == head[:-12]

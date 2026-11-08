@@ -1,7 +1,6 @@
 """The boot screen: tools/patch_splash.py's pictures offline (layout, PNG, sips conversion), and with HX_STOMP_HXF set,
 tools/features/splash.py through the features engine: the picture, the full-screen switch, the text and the renderer hook (run
 in unicorn on the patched Entry 0)."""
-import os
 import random
 import shutil
 import struct
@@ -16,6 +15,7 @@ import patch_menu as pm
 import patch_splash as ps
 import splash_emoji
 from features import splash
+from firmware import branch_target, reader, stock as stock_l6ia
 
 
 @pytest.mark.parametrize("h", [ps.SPLASH[1], ps.FULL[1]])
@@ -86,10 +86,7 @@ def test_text_must_be_printable():
 
 @pytest.fixture(scope="module")
 def stock():
-    path = os.environ.get("HX_STOMP_HXF")
-    if not path:
-        pytest.skip("HX_STOMP_HXF is not set")
-    return pa.load_l6ia_from_any(path)[0]
+    return stock_l6ia()
 
 
 def build(stock, env, cwd=None):
@@ -98,24 +95,11 @@ def build(stock, env, cwd=None):
     return entries, [features.name(m) for m in on]
 
 
-def e0_at(e0, va, n):
-    o = pa._e0_vaddr_to_foff(pa._parse_e0_segments(e0), va, n)
-    return e0[o:o + n]
-
-
-def bw_target(src, hw):
-    """The destination of the Thumb-2 B.W hw (4 bytes) at src."""
-    h1, h2 = struct.unpack("<2H", hw)
-    s, j1, j2 = (h1 >> 10) & 1, (h2 >> 13) & 1, (h2 >> 11) & 1
-    off = (s << 24) | ((~(j1 ^ s) & 1) << 23) | ((~(j2 ^ s) & 1) << 22) | ((h1 & 0x3ff) << 12) | ((h2 & 0x7ff) << 1)
-    return src + 4 + off - ((1 << 25) if s else 0)
-
-
 @pytest.mark.firmware
 def test_off_without_inputs(stock):
     entries, on = build(stock, {})
     assert "splash" not in on and set(entries) == {0}
-    assert e0_at(entries[0], splash.RENDER_FN, 6) == splash.RENDER_STOCK
+    assert reader(entries[0])(splash.RENDER_FN, 6) == splash.RENDER_STOCK
 
 
 @pytest.mark.firmware
@@ -135,7 +119,7 @@ def test_stock_picture_round_trip(tmp_path, stock):
     entries, on = build(stock, {"HX_SPLASH": "stock.png"}, cwd=tmp_path)
     assert "splash" in on
     assert 8 not in entries                    # the same pixels: the engine leaves an unchanged entry out
-    assert e0_at(entries[0], splash.NAME_SITE, 16) == ps.SPLASH[0].ljust(16, b"\0")
+    assert reader(entries[0])(splash.NAME_SITE, 16) == ps.SPLASH[0].ljust(16, b"\0")
 
 
 @pytest.mark.firmware
@@ -143,7 +127,7 @@ def test_full_screen(tmp_path, stock):
     rows = [[(x % 256, y, 128) for x in range(ps.W)] for y in range(ps.FULL[1])]
     ps.write_png(tmp_path / "full.png", rows)
     entries, _ = build(stock, {"HX_SPLASH": str(tmp_path / "full.png")})
-    assert e0_at(entries[0], splash.NAME_SITE, 16) == ps.FULL[0].ljust(16, b"\0")
+    assert reader(entries[0])(splash.NAME_SITE, 16) == ps.FULL[0].ljust(16, b"\0")
     out = l6ia.rebuild_archive(stock, entries)[0]
     name, px = ps.drawn_image(out)
     assert name == ps.FULL[0] and px == ps.encode(rows)
@@ -158,8 +142,8 @@ def test_text(stock):
     entries, _ = build(stock, {"HX_SPLASH_TEXT": "CustomOS 3.80.0"})
     assert set(entries) == {0}
     e0 = entries[0]
-    assert e0_at(e0, splash.TEXT_SITE, len(splash.TEXT_STOCK)) == b"CustomOS 3.80.0".ljust(len(splash.TEXT_STOCK), b"\0")
-    assert int.from_bytes(e0_at(e0, splash.VERSION_LITERAL, 4), "little") == splash.TEXT_SITE + len("CustomOS 3.80.0")
+    assert reader(e0)(splash.TEXT_SITE, len(splash.TEXT_STOCK)) == b"CustomOS 3.80.0".ljust(len(splash.TEXT_STOCK), b"\0")
+    assert int.from_bytes(reader(e0)(splash.VERSION_LITERAL, 4), "little") == splash.TEXT_SITE + len("CustomOS 3.80.0")
 
 
 @pytest.mark.firmware
@@ -182,13 +166,13 @@ def test_fit_must_be_a_choice(tmp_path, stock):
 @pytest.mark.firmware
 def test_renderer_hook(stock):
     e0 = build(stock, {"HX_SPLASH_TEXT": "HXS OS v0.1"})[0][0]
-    site = e0_at(e0, splash.RENDER_FN, 6)
+    site = reader(e0)(splash.RENDER_FN, 6)
     assert site[4:] == b"\x00\xbf"
-    handler = bw_target(splash.RENDER_FN, site[:4])
-    stock_fn = bw_target(handler + 20, e0_at(e0, handler + 20, 4))        # the handler's closing b.w: to hook.stock
-    assert e0_at(e0, handler, 24) == splash.transparent_text_cave(handler, stock_fn)
-    assert e0_at(e0, stock_fn, 6) == splash.RENDER_STOCK
-    assert bw_target(stock_fn + 6, e0_at(e0, stock_fn + 6, 4)) == splash.RENDER_FN + 6
+    handler = branch_target(splash.RENDER_FN, site[:4])
+    stock_fn = branch_target(handler + 20, reader(e0)(handler + 20, 4))        # the handler's closing b.w: to hook.stock
+    assert reader(e0)(handler, 24) == splash.transparent_text_cave(handler, stock_fn)
+    assert reader(e0)(stock_fn, 6) == splash.RENDER_STOCK
+    assert branch_target(stock_fn + 6, reader(e0)(stock_fn + 6, 4)) == splash.RENDER_FN + 6
 
 
 @pytest.mark.firmware
@@ -222,8 +206,8 @@ def emoji_env(tmp_path, text, emoji):
 def test_emoji_text(tmp_path, stock):
     entries, _ = build(stock, emoji_env(tmp_path, "HXS 🎸 v 🎸🔥", ["🎸", "🔥"]), cwd=tmp_path)
     e0, e7, e8 = entries[0], entries[7], entries[8]
-    assert e0_at(e0, splash.TEXT_SITE, 11) == b"HXS \x01 v \x01\x02\0"          # the repeated emoji shares its slot
-    assert int.from_bytes(e0_at(e0, splash.TEXT_COLOUR_LITERAL, 4), "little") == 0xffffff
+    assert reader(e0)(splash.TEXT_SITE, 11) == b"HXS \x01 v \x01\x02\0"          # the repeated emoji shares its slot
+    assert int.from_bytes(reader(e0)(splash.TEXT_COLOUR_LITERAL, 4), "little") == 0xffffff
     stock7, stock8 = pa.get_entry_swapped(stock, 7), pa.get_entry_swapped(stock, 8)
     n = struct.unpack_from("<I", stock8, 8)[0]
     count, table = image_store.font(e7, splash.FONT_NAME)

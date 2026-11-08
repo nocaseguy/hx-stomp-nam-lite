@@ -11,6 +11,7 @@ import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import bpm, tuner
+from firmware import branch_target, reader, stock_e0
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONTS = (5, 4, 2, 3, 0, 1)          # BPM Font's values as font numbers: 41 Lite, 35 Bold, 28 Bold, 28 Lite, 21 Bold, 21 Reg
@@ -32,16 +33,8 @@ def test_settings_values_defaults_and_ids():
 
 # --- the hooks, on the stock firmware ---
 
-def stock_e0():
-    stock = os.environ.get('HX_STOMP_HXF')
-    if not stock:
-        pytest.skip('HX_STOMP_HXF is not set')
-    data, _ = pa.load_l6ia_from_any(stock)
-    return pa.get_entry_swapped(data, 0)
-
-
 def build(e0, extra=(), monkeypatch=None):
-    """menu_entry0 with the BPM on (and extra features): (new Entry 0, the BPM's Module)."""
+    """menu_entry0 with the tuner and the BPM on (and extra features): (new Entry 0, the BPM's Module)."""
     seen = {}
     real = pm.Patch.module
 
@@ -52,27 +45,9 @@ def build(e0, extra=(), monkeypatch=None):
 
     monkeypatch.setattr(pm.Patch, 'module', module)
     mods = sorted(features.load() + list(extra), key=lambda f: (getattr(f, 'ORDER', 100), features.name(f)))
-    new, on = pm.menu_entry0(e0, mods, {'HX_BPM': '1'})
+    new, on = pm.menu_entry0(e0, mods, {'HX_TUNER': '1', 'HX_BPM': '1'})
     assert 'bpm' in [features.name(m) for m in on]
     return new, seen['src/m4/bpm.s']
-
-
-def reader(e0):
-    segs = pa._parse_e0_segments(e0)
-
-    def read(va, n):
-        o = pa._e0_vaddr_to_foff(segs, va, n)
-        return bytes(e0[o:o + n])
-    return read
-
-
-def bl_target(b, at):
-    return setting_ids.bl_targets(struct.unpack('<2H', b), at)[0]
-
-
-def bw_target(b, at):
-    h1, h2 = struct.unpack('<2H', b)
-    return bl_target(struct.pack('<2H', h1, h2 | 0x5000), at)
 
 
 @pytest.mark.firmware
@@ -87,7 +62,7 @@ def test_hooks_chain_the_handlers(monkeypatch):
         assert read(stub, len(want)) == want
 
     def stub_of_bl(site, original, before=(), after=()):
-        is_stub(bl_target(read(site, 4), site), original, before, after)
+        is_stub(branch_target(site, read(site, 4)), original, before, after)
 
     stub_of_bl(bpm.HOME_CTOR_CALL, bpm.HOME_CTOR, after=[m['bpm_construct']])
     for site in bpm.STORE_WRITE_CALLS:
@@ -97,12 +72,12 @@ def test_hooks_chain_the_handlers(monkeypatch):
         stub_of_bl(site, pm.GET_VALUE, after=[m['bpm_tapled']])
     is_stub(struct.unpack('<I', read(bpm.HOME_PAINT_LIT, 4))[0] - 1, bpm.HOME_PAINT & ~1, [m['bpm_before']], [m['bpm_after']])
     # the tap tempo core: its prologue moved to a trampoline, then a b.w back after it
-    stub = bw_target(read(bpm.TAP_CORE, 4), bpm.TAP_CORE)
+    stub = branch_target(bpm.TAP_CORE, read(bpm.TAP_CORE, 4))
     tramp = stub - 8
     assert read(tramp, 8) == bpm.TAP_CORE_STOCK + pm.thumb_bw(tramp + 4, bpm.TAP_CORE + 4)
     is_stub(stub, tramp, [m['bpm_tap']], [])
     # the LED send: a plain b.w to the handler, which runs the send's first two instructions itself
-    assert bw_target(read(bpm.LED_SEND, 4), bpm.LED_SEND) == m['bpm_ledsend']
+    assert branch_target(bpm.LED_SEND, read(bpm.LED_SEND, 4)) == m['bpm_ledsend']
     assert read(bpm.LED_SEND + 4, 4) == reader(e0)(bpm.LED_SEND + 4, 4)
     # the settings: labels and limits code (each range is not the stock 0..1)
     for key, pid, label, top in (('font', 128, b'BPM\nFont', 5), ('color', 126, b'BPM\nColor', 8), ('dot', 102, b'BPM\nDot Pos', 2)):
@@ -142,7 +117,7 @@ def test_hooks_are_shared_with_other_features(monkeypatch):
     stub = struct.unpack('<I', read(bpm.HOME_PAINT_LIT, 4))[0] - 1
     want = pm.chain_cave(stub, bpm.HOME_PAINT & ~1, [m['bpm_before'], handler['h']], [m['bpm_after'], handler['h']])
     assert read(stub, len(want)) == want
-    assert read(tuner.TAP_SITE, 4) != tuner.TAP_SITE_STOCK, 'the tuner still hooks its call of the tap core'
+    assert read(tuner.TAP_SITE, 4) != pm.thumb_bw(tuner.TAP_SITE, tuner.TAP_CORE), 'the tuner still hooks its call of the tap core'
 
 
 LED = f'{bpm.LED_SEND:#x}'

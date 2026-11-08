@@ -11,4 +11,4 @@ EDIT_PAINT_LIT, EDIT_PAINT = 0x28d96da0, 0x28dc27f9     # the Edit view top half
 
 def apply(p):
     m = p.module('src/m4/dsp_meter.s')
-    p.chain_ptr(EDIT_PAINT_LIT, EDIT_PAINT, after=m['paint'])
+    p.chain_ptr(EDIT_PAINT_LIT, EDIT_PAINT, after=m['dsp_paint'])
