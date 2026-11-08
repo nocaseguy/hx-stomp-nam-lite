@@ -1,6 +1,6 @@
 """tools/features/dsp_meter.py and src/m4/dsp_meter.s: the DSP Disp setting, the module run in unicorn against a fake DSP model and Edit
-view (each block's per cent, the total in each format, rounding and the ends, placement, locks) and a fake model browser (each listed
-model's per cent on its icon), and the firmware it builds."""
+view (each block's per cent, the total in each format and its text widget, rounding and the ends, placement, locks) and a fake model
+browser (each listed model's per cent between its icon and name), and the firmware it builds."""
 import os
 import struct
 
@@ -22,6 +22,8 @@ DSP, NODES, BLOCKS, VIEW, CODE = 0x28500000, 0x28600000, 0x28700000, 0x28800000,
 FB = 0x28d1ce98
 FILL, WIDGET_LOCK, WIDGET_UNLOCK = 0x100017e8, 0x28e24970, 0x28e24ae8
 DSP_LOCK, DSP_UNLOCK = 0x28e07844, 0x28e0785c
+TEXT = {0x28e249d0: 'init', 0x28e24a68: 'pos', 0x28e249e8: 'font', 0x28e24a28: 'colour', 0x28e24ac8: 'anchor',
+        0x28e24bc0: 'text', 0x28e24bc8: 'visible', 0x28e24c90: 'erase', 0x28e24c30: 'draw'}     # the text widget's calls
 CURSOR = 0x67                       # every empty slot's image, which the cursor for placing a block shows
 FONT = {                            # what the glyphs must look like, independent of the module's encoding
     '0': ('###', '#.#', '#.#', '#.#', '###'), '1': ('.#.', '##.', '.#.', '.#.', '###'),
@@ -29,7 +31,6 @@ FONT = {                            # what the glyphs must look like, independen
     '4': ('#.#', '#.#', '###', '..#', '..#'), '5': ('###', '#..', '###', '..#', '###'),
     '6': ('###', '#..', '###', '#.#', '###'), '7': ('###', '..#', '..#', '..#', '..#'),
     '8': ('###', '#.#', '###', '#.#', '###'), '9': ('###', '#.#', '###', '..#', '###'),
-    '/': ('..#', '..#', '.#.', '#..', '#..'), '%': ('#.#', '..#', '.#.', '#..', '#.#'),
 }
 GLYPH = {tuple(rows): ch for ch, rows in FONT.items()}
 WHITE, BLACK = 0xffffff, 0
@@ -50,7 +51,10 @@ class Meter:
         code, self.sym = m4emu.assemble('src/m4/dsp_meter.s', MODS, IDS)
         self.m = m4emu.M4(code, CODE)
         self.fills, self.events, self.setting = [], [], None
+        self.widget, self.drawn = {}, []
         self.m.stub(FILL, self._fill)
+        for fn, name in TEXT.items():
+            self.m.stub(fn, lambda m, name=name: self._text(m, name))
         for fn, name in ((WIDGET_LOCK, 'widget lock'), (WIDGET_UNLOCK, 'widget unlock'), (DSP_LOCK, 'dsp lock'),
                          (DSP_UNLOCK, 'dsp unlock')):
             self.m.stub(fn, lambda m, name=name: self.events.append(name))
@@ -67,6 +71,29 @@ class Meter:
         h, colour, anchor = m.stack_args(3)
         self.fills.append((m.reg('r1'), m.reg('r2'), m.reg('r3'), h, colour & 0xffffff, anchor & 0xff))
         self.events.append('fill')
+
+    def _text(self, m, name):
+        """The widget's state as its setters leave it; draw notes the text shown (None while hidden)."""
+        self.events.append('text ' + name)
+        w = self.widget
+        if name in ('erase', 'draw'):
+            assert m.reg('r0') == m.reg('r1') == FB
+            assert m.reg('r2') == w['at']
+        else:
+            assert w.setdefault('at', m.reg('r0')) == m.reg('r0')
+        if name == 'init':
+            w.update(inits=w.get('inits', 0) + 1, node=m.reg('r1'), visible=1)
+        elif name == 'pos':
+            w['pos'] = (m.reg('r1'), m.reg('r2'))
+        elif name in ('font', 'colour', 'anchor', 'visible'):
+            w[name] = m.reg('r1')
+        elif name == 'text':
+            ptr, size = m.reg('r1'), m.reg('r2')
+            raw = m.read(ptr, size)
+            assert b'\0' in raw, 'the text ends within the length given'
+            w['text'] = raw.split(b'\0')[0].decode()
+        elif name == 'draw':
+            self.drawn.append(w.get('text') if w['visible'] else None)
 
     def _get_value(self, m):
         pid, out = m.reg('r0'), m.reg('r1')
@@ -100,6 +127,7 @@ class Meter:
     def paint(self):
         self.fills.clear()
         self.events.clear()
+        self.drawn.clear()
         self.m.call(CODE + self.sym['paint'], FB, VIEW, 0, 0)
         return self
 
@@ -111,8 +139,7 @@ class Meter:
         return self._texts(colour, lambda y: True)
 
     def _texts(self, colour, within):
-        cells = sorted((x, y, w) for x, y, w, h, c, a in self.fills if c == colour and a == 0 and w == h and w in (1, 2)
-                       and (x, y, w) != (270, 222, 46) and within(y))
+        cells = sorted((x, y, w) for x, y, w, h, c, a in self.fills if c == colour and a == 0 and w == h and w in (1, 2) and within(y))
         runs = []
         for x, y, s in cells:
             if runs and runs[-1][2] == s and x - runs[-1][1] <= 2 * s:
@@ -136,9 +163,8 @@ class Meter:
         return [t[0] for t in self.texts(BLACK)]
 
     def total(self):
-        t = self.texts(WHITE)
-        assert len(t) <= 1
-        return t[0][0] if t else None
+        assert len(self.drawn) == 1
+        return self.drawn[0]
 
 
 @pytest.fixture
@@ -241,29 +267,51 @@ def test_unset_or_out_of_range_setting_shows_the_default(meter, stored):
     assert meter.paint().total() == '23/75'
 
 
-def test_total_is_right_aligned_over_a_cleared_box(meter):
+def test_total_is_a_text_widget_on_the_title_line(meter):
+    """Right-aligned at the corner, in hx21_regularFont and white as the title, on the title's baseline (0xea - 22 = 228 - 16)."""
     blocks(meter, 2345)
     meter.setting = 0
-    m = meter.paint()
-    box = m.fills.index((270, 222, 46, 10, BLACK, 0))
-    first = next(i for i, f in enumerate(m.fills) if f[4] == WHITE)
-    assert box < first
-    (_, left, right, top, bottom, s), = m.texts(WHITE)
-    assert (right, top, bottom, s) == (316, 232, 222, 2)
+    w = meter.paint().widget
+    assert (w['pos'], w['anchor'], w['font'], w['colour'], w['visible']) == ((316, 228), 8, 1, WHITE, 1)
+    assert w['at'] + 0x30 <= w['node'], 'the widget and its node do not overlap'
+    assert meter.texts(WHITE) == [], 'no pixel-drawn total'
+
+
+def test_widget_is_made_once_and_placed_before_its_first_text(meter):
+    blocks(meter, 2345)
+    ev = meter.paint().events
+    assert ev.index('text pos') < ev.index('text text')
+    meter.paint()
+    meter.paint()
+    assert meter.widget['inits'] == 1 and 'text init' not in meter.events
+
+
+def test_every_paint_shows_the_total_then_erases_and_draws_it(meter):
+    """setVisible(1) marks it dirty every paint; the erase follows the new text, so it covers the old text and the new."""
+    blocks(meter, 2345)
+    meter.setting = 0
+    for total in ('23/75', '0/75'):
+        if total == '0/75':
+            meter.block(0, 0)
+        ev = [e for e in meter.paint().events if e.startswith('text')]
+        assert ev[-4:] == ['text text', 'text visible', 'text erase', 'text draw']
+        assert meter.widget['visible'] == 1 and meter.total() == total
 
 
 def test_dsp_lock_is_released_before_the_widget_lock(meter):
     blocks(meter, 2345)
     ev = meter.paint().events
     assert ev[:2] == ['dsp lock', 'dsp unlock'] and ev[2] == 'widget lock' and ev[-1] == 'widget unlock'
-    assert 'fill' in ev and all(e == 'fill' for e in ev[3:-1])
+    assert 'fill' in ev and 'text draw' in ev and all(e == 'fill' or e.startswith('text') for e in ev[3:-1])
 
 
-def test_no_dsp_model_draws_nothing_and_takes_no_dsp_lock(meter):
+def test_no_dsp_model_hides_the_total_and_takes_no_dsp_lock(meter):
     blocks(meter, 2345)
+    meter.paint()
     meter.m.u32(DSP_PTR, 0)
     m = meter.paint()
-    assert m.events == ['widget lock', 'widget unlock'] and m.fills == []
+    assert m.events == ['widget lock', 'text visible', 'text erase', 'text draw', 'widget unlock'] and m.fills == []
+    assert m.widget['visible'] == 0 and m.total() is None
 
 
 # The model browser: its list level, category and subcategory, first row's item, and five row icons, as 0x28dc3424 fills them
