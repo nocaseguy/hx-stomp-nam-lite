@@ -30,6 +30,15 @@ LIMITS_TAIL, LIMITS_TAIL_STOCK = 0x28e1ed36, bytes.fromhex('0372')     # stores 
 TEXT_FN, TEXT_FN_STOCK, TEXT_FN_CONT = 0x28d9775c, bytes.fromhex('30b5 85b0'), 0x28d97760   # (ID, value) -> text; push {r4,r5,lr}; sub sp,#0x14
 STRCPY, VALUE_LEN = 0x28e24c78, 20                               # the function's own copy, and its string stride
 
+# Virtual settings (tools/setting_ids.py VIRTUAL): the settings functions the Global Settings menu calls, for the engine alone
+VIRTUAL_HOOKS = {   # name: (function, its stock first instructions)
+    'get': (GET_VALUE, bytes.fromhex('b0f5bf7f')),           # cmp.w r0,#0x17e
+    'limits': (0x28e20280, bytes.fromhex('cb2808b5')),       # (ID, record) -> the record: cmp r0,#0xcb; push {r3,lr}
+    'class': (0x28e20250, bytes.fromhex('cb2805d9')),        # (ID, out byte): cmp r0,#0xcb; bls
+    'label': (0x28d97634, bytes.fromhex('f0b5bd28')),        # (ID, dst, length) -> the long label: push {r4-r7,lr}; cmp r0,#0xbd
+}
+VIRTUAL_LABEL_LEN = 36           # the menu asks for 0x21 bytes
+
 # CustomOS is category 6; the icon strip stays at six, so no icon is lit there. Each array below has one entry per category.
 NAV_CMP, NAV_CMP_STOCK = 0x28dcf162, bytes.fromhex('052b')       # cmp r3,#5 (last category)
 NAV_WRAP, NAV_WRAP_STOCK = 0x28dcf1a8, bytes.fromhex('0521')     # movs r1,#5 (going left of the first)
@@ -140,9 +149,11 @@ def limits_entry(pid):
     return (LIMITS_TAB_LOW, LIMITS_TAB_LOW + 2 * (pid - 1)) if pid < 0x38 else (LIMITS_TAB_HIGH, LIMITS_TAB_HIGH + 2 * (pid - 0x3f))
 
 
-def dispatch_cave(at, site, table):
-    """cmp reg,#6 -> CustomOS case: page and table into the generic case's registers, then into that case."""
-    _, reg, page, tab, tbb, exit_, stub = site
+def dispatch_cave(at, site, table, stub=None):
+    """cmp reg,#6 -> CustomOS case: page and table into the generic case's registers, then into that case (or stub, which ends there
+    or at the site's exit itself)."""
+    _, reg, page, tab, tbb, exit_, generic = site
+    stub = stub or generic
     a = Asm(at)
     a.h(cmp_imm(reg, 6))
     a.b16('eq', 'mine')
@@ -493,13 +504,15 @@ class Patch:
             raise SystemExit(f'patch-menu: {name} has no ID in tools/setting_ids.py')
         return self.ids[name]
 
-    def module(self, path):
-        """Assembles an M4 .s (relative to the repository) with customos.inc on its include path, into the code cave."""
+    def module(self, path, inc=None):
+        """Assembles an M4 .s (relative to the repository) with customos.inc, and the files of inc ({name: text}), on its include
+        path, into the code cave."""
         import m4asm
         src = os.path.join(ROOT, path)
         with tempfile.TemporaryDirectory() as d:
-            with open(os.path.join(d, 'customos.inc'), 'w') as f:
-                f.write(customos_inc(self.mods, self.ids))
+            for name, text in {'customos.inc': customos_inc(self.mods, self.ids), **(inc or {})}.items():
+                with open(os.path.join(d, name), 'w') as f:
+                    f.write(text)
             code, symbols = m4asm.assemble_module(src, include=(d, os.path.dirname(src)))
         return Module(self.add(code), symbols)
 
@@ -637,13 +650,15 @@ def menu_entry0(e0, mods=None, env=os.environ, ids=None):
     return out[0], on
 
 
-def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None):
+def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None, virtual=None):
     """The entries CustomOS and the enabled features change, {n: bytes} (load(n) gives an entry's stock, swapped), and the
-    features: Entry 0 is edited in place plus code and data appended to its code segment. Paths in inputs are relative to cwd."""
+    features: Entry 0 is edited in place plus code and data appended to its code segment. Paths in inputs are relative to cwd.
+    virtual: virtual ID -> (container, first bit, bits), by default tools/setting_ids.py's."""
     mods = features.load() if mods is None else mods
     on = features.enabled(mods, env)
     values = {features.name(m): features.values(m, env, cwd) for m in on}
     p = Patch(load(0), mods, setting_ids.by_name() if ids is None else ids, load, values)
+    packing = setting_ids.packing() if virtual is None else virtual
     settings, stored = [], []   # (ID, setting): on CustomOS pages in page order; of every feature
     for m in on:
         mine = []
@@ -658,7 +673,7 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None):
         if p.read(tab + NAME_LEN * 22, 8) != b'Main LCD':
             raise SystemExit(f'patch-menu: label array at {tab:#x} is not the stock one')
         for pid, s in settings:
-            if s is None:
+            if s is None or pid in packing:
                 continue
             if any(p.read(tab + NAME_LEN * pid, NAME_LEN)):
                 raise SystemExit(f'patch-menu: the label of setting ID {pid} at {tab:#x} is not empty: a stock setting, or the patch '
@@ -668,9 +683,11 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None):
     if LIMITS_TAB_LOW + 2 * p.u16(LIMITS_TAB_LOW + 2 * 17) != ENUM01_TARGET:     # ID 18's entry
         raise SystemExit('patch-menu: the limits table is not at its stock address')
     for pid, s in stored:
-        set_limits(p, pid, s)
+        if pid not in packing:
+            set_limits(p, pid, s)
+    virt = add_virtual(p, [(pid, s) for pid, s in stored if pid in packing], packing)
     if settings:        # no feature with a CustomOS page: no CustomOS section
-        add_category(p, settings)
+        add_category(p, settings, virt)
 
     for m in on:
         if hasattr(m, 'apply'):
@@ -680,8 +697,49 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None):
     return p.output(), on
 
 
-def add_category(p, settings):
-    """The CustomOS section of Global Settings: its pages of settings ((ID, setting) in page order, three to a page) and value text."""
+def virtual_inc(virt, packing, stocks):
+    """The text of virtual.inc for src/m4/virtual_settings.s: the virtual settings' table and labels, and the stock functions."""
+    lines = ['@ virtual.inc - generated by tools/patch_menu.py from tools/setting_ids.py VIRTUAL',
+             f'.equ VIRT_FIRST, {setting_ids.VIRTUAL_IDS.start:#x}', f'.equ VIRT_LAST, {setting_ids.VIRTUAL_IDS.stop - 1:#x}',
+             f'.equ VIRT_COUNT, {len(virt)}', f'.equ LABEL_LEN, {VIRTUAL_LABEL_LEN}']
+    lines += [f'.equ {name.upper()}_STOCK, {va | 1:#x}' for name, va in stocks.items()]
+    lines.append('.macro VIRT_TABLE')
+    for i, (vid, s) in enumerate(virt):
+        cid, bit, bits = packing[vid]
+        lines += [f'    .hword {vid:#x}', f'    .byte {cid}, {bit}, {bits}, {s.max}, {s.default}, {i}']
+    lines += ['.endm', '.macro VIRT_LABELS']
+    lines += ['    .byte ' + ', '.join(str(b) for b in s.label.ljust(VIRTUAL_LABEL_LEN, b'\0')) for _, s in virt]
+    lines.append('.endm')
+    return '\n'.join(lines) + '\n'
+
+
+def add_virtual(p, virt, packing):
+    """The engine that serves the virtual settings ((ID, setting)), when there are any: the four settings functions the menu calls,
+    owned by CustomOS (an exclusive site no feature may chain or own), sent to src/m4/virtual_settings.s. Returns the module."""
+    if not virt:
+        return None
+    for vid, s in virt:
+        cid, bit, bits = packing[vid]
+        if s.max >= 1 << bits:
+            raise SystemExit(f'patch-menu: virtual setting {vid:#x}: {bits} bits cannot hold its {s.max + 1} values')
+        if len(s.label) >= VIRTUAL_LABEL_LEN:
+            raise SystemExit(f'patch-menu: virtual setting {vid:#x}: its label is longer than {VIRTUAL_LABEL_LEN - 1} bytes')
+    problems = setting_ids.virtual_problems([(vid, *packing[vid], 'x', '') for vid, _ in virt])
+    if problems:
+        raise SystemExit('patch-menu: virtual settings: ' + '; '.join(problems))
+    owner, p.owner = p.owner, 'CustomOS'
+    hooks = {name: p.own_entry(fn, stock, f'the virtual settings ({name})') for name, (fn, stock) in VIRTUAL_HOOKS.items()}
+    m = p.module('src/m4/virtual_settings.s', inc={'virtual.inc': virtual_inc(virt, packing, {
+        name: hooks[name].stock for name in ('get', 'limits', 'label')})})
+    for name in VIRTUAL_HOOKS:
+        hooks[name].to(m[f'virt_{name}'])
+    p.owner = owner
+    return m
+
+
+def add_category(p, settings, virt=None):
+    """The CustomOS section of Global Settings: its pages of settings ((ID, setting) in page order, three to a page) and value text;
+    virt, the virtual settings' module, takes the turn and the click first."""
     p.expect(TEXT_FN, TEXT_FN_STOCK, 'the value-text function')
     p.expect(NAV_CMP, NAV_CMP_STOCK, 'the category navigation')
     p.expect(NAV_WRAP, NAV_WRAP_STOCK, 'the category navigation')
@@ -704,7 +762,8 @@ def add_category(p, settings):
     p.put(NAV_CMP, b'\x06\x2b', 'the category navigation')
     p.put(NAV_WRAP, b'\x06\x21', 'the category navigation')
     for name, site in SITES.items():
-        p.put(site[0], thumb_bw(site[0], p.add(dispatch_cave(p.next(), site, table_va))), f'the category dispatch {name}')
+        stub = virt[f'virt_{name}'] if virt and name in ('turn', 'click') else None
+        p.put(site[0], thumb_bw(site[0], p.add(dispatch_cave(p.next(), site, table_va, stub))), f'the category dispatch {name}')
     p.put(TEXT_FN, thumb_bw(TEXT_FN, p.add(text_cave(p.next(), values))), 'the value-text function')
 
 

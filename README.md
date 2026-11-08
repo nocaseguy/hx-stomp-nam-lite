@@ -212,7 +212,7 @@ Add what you learn to [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md), with its status (v
 
 Try every change from RAM on a unit before relying on it, and say in the commit what was seen on the unit and what was only checked offline.
 
-A new feature is a module in `tools/features/<name>.py` with its M4 code in `src/m4/<name>.s`, a README section under [Features](#features), and its own `tests/test_<name>.py`. `tools/features/dsp_meter.py` is the simplest, and `tools/features/bpm.py` uses every kind of hook. Prefix the module's entry points with the feature's name. Claim setting IDs in `tools/setting_ids.py`, test M4 code with `tests/m4emu.py`, and build and read the firmware with `tests/firmware.py` (see [Tests](#tests)). A setting's label takes at most 8 characters before the newline of its `Page\nName` and 9 after it; the HX Stomp shows the part after the newline first.
+A new feature is a module in `tools/features/<name>.py` with its M4 code in `src/m4/<name>.s`, a README section under [Features](#features), and its own `tests/test_<name>.py`. `tools/features/dsp_meter.py` is the simplest, and `tools/features/bpm.py` uses every kind of hook. Prefix the module's entry points with the feature's name. Claim setting IDs in `tools/setting_ids.py` (a new setting takes a virtual ID and a bit field there, in `VIRTUAL`), test M4 code with `tests/m4emu.py`, and build and read the firmware with `tests/firmware.py` (see [Tests](#tests)). A setting's label takes at most 8 characters before the newline of its `Page\nName` and 9 after it; the HX Stomp shows the part after the newline first.
 
 ## Tests
 
