@@ -2,7 +2,6 @@
 from features import Setting
 
 FLAG = 'HX_BREATHING_LINE'
-# Its IDs held stock settings for hardware the HX Stomp lacks (13, 50 and 14 by default), above each max: units start on the defaults.
 SETTINGS = (
     Setting('color', b'Line\nColor', (b'White', b'Red', b'Green', b'Blue', b'Fire', b'Ice', b'Sunset', b'Ocean', b'Aurora', b'Neon',
                                        b'Rainbow'), default=10),

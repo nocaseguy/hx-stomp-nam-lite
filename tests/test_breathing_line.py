@@ -1,18 +1,16 @@
 """tools/features/breathing_line.py and src/m4/breathing_line.s: the settings and their IDs, the hooks on the firmware, and the
 handlers run in tests/m4emu.py against a model of each Line Motion and Line Color."""
 import math
-import os
 import struct
 
 import pytest
 
 import features
-import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import breathing_line as bl
+from firmware import assert_virtual, reader, stock_e0
 
-STOCK_DEFAULTS = {23: 13, 24: 50, 121: 14}  # the limits code's defaults of Scribble LCD Select, Scribble LCD Contrast, RF Channel
 RATES = [round(2 ** 32 / (ms * 1000)) for ms in (8000, 6000, 4800, 4000, 3200, 2500, 2000, 1500, 1100, 800)]
 
 SCHEMES = [(c, c, c) for c in (0xffffff, 0xff0000, 0x00ff00, 0x0060ff)] + [
@@ -30,62 +28,24 @@ def test_settings_values_defaults_and_ids():
     assert s['motion'].values[s['motion'].default] == b'Breathe'
     assert s['speed'].values == tuple(str(n).encode() for n in range(1, 11)) and s['speed'].values[s['speed'].default] == b'4'
     ids = setting_ids.by_name()
-    assert (ids['breathing_line.color'], ids['breathing_line.motion'], ids['breathing_line.speed']) == (23, 24, 121)
-    for key, pid in (('color', 23), ('motion', 24), ('speed', 121)):
-        assert STOCK_DEFAULTS[pid] > s[key].max, 'a unit that never set the stock setting starts on the default'
-        assert pid in setting_ids.STOCK_LABELS
+    assert (ids['breathing_line.color'], ids['breathing_line.motion'], ids['breathing_line.speed']) == (0xd7, 0xd8, 0xd9)
+    fields = {who: (cid, bit, bits) for _, cid, bit, bits, who, _ in setting_ids.VIRTUAL}
+    assert [fields[f'breathing_line.{k}'] for k in ('color', 'motion', 'speed')] == [(109, 0, 4), (109, 4, 4), (109, 8, 4)]
     assert bl.FLAG == 'HX_BREATHING_LINE'
 
 
 # --- the build, on the stock firmware ---
 
-def stock_e0():
-    stock = os.environ.get('HX_STOMP_HXF')
-    if not stock:
-        pytest.skip('HX_STOMP_HXF is not set')
-    data, _ = pa.load_l6ia_from_any(stock)
-    return pa.get_entry_swapped(data, 0)
-
-
-def reader(e0):
-    segs = pa._parse_e0_segments(e0)
-
-    def read(va, n):
-        o = pa._e0_vaddr_to_foff(segs, va, n)
-        return bytes(e0[o:o + n])
-    return read
-
-
 @pytest.mark.firmware
-def test_the_stock_labels_are_as_listed():
-    read = reader(stock_e0())
-    for pid, label in setting_ids.STOCK_LABELS.items():
-        for tab in (pm.NAMES_LONG, pm.NAMES_SHORT):
-            assert read(tab + pm.NAME_LEN * pid, len(label) + 1) == label + b'\0'
-
-
-@pytest.mark.firmware
-def test_build_replaces_the_stock_labels_and_hooks_the_paint_and_the_tick():
+def test_build_serves_the_settings_virtually_and_hooks_the_paint_and_the_tick():
     e0 = stock_e0()
     new, on = pm.menu_entry0(e0, None, {'HX_BREATHING_LINE': '1'})
     assert 'breathing_line' in [features.name(m) for m in on]
-    read, stock = reader(new), reader(e0)
     for s in bl.SETTINGS:
-        pid = setting_ids.by_name()[f'breathing_line.{s.key}']
-        for tab in (pm.NAMES_LONG, pm.NAMES_SHORT):
-            assert read(tab + pm.NAME_LEN * pid, len(s.label) + 1) == s.label + b'\0'
-        tab, entry = pm.limits_entry(pid)
-        snippet = tab + 2 * struct.unpack('<H', read(entry, 2))[0]
-        assert read(snippet, 8) == struct.pack('<4H', 0x2302, 0x2200 | s.default, 0x2100, 0x2400 | s.max)
+        assert_virtual(new, bl, s)
+    read, stock = reader(new), reader(e0)
     assert read(bl.HOME_PAINT_LIT, 4) != stock(bl.HOME_PAINT_LIT, 4)
     assert read(bl.LED_TICK_CALL, 4) != stock(bl.LED_TICK_CALL, 4)
-
-
-@pytest.mark.firmware
-def test_a_claimed_stock_id_whose_label_is_not_stock_fails():
-    new, _ = pm.menu_entry0(stock_e0(), [bl], {'HX_BREATHING_LINE': '1'})
-    with pytest.raises(SystemExit, match='label of setting ID 23 .* is not its stock'):
-        pm.menu_entry0(new, [bl], {'HX_BREATHING_LINE': '1'})
 
 
 # --- the handlers, run in unicorn: a model of each first ---
@@ -177,7 +137,7 @@ def colour(scheme, strip, t16, lvl):
 MOD = 0x28e60000
 SEGMENTS, NODES = 0x2812a594, 0x2812b000
 REDRAW, GET_VALUE, CLOCK, LOCK, UNLOCK, FILL = 0x28db8508, 0x28e1f844, 0x28da6458, 0x28e24970, 0x28e24ae8, 0x100017e8
-IDS = {'color': 23, 'motion': 24, 'speed': 121}
+IDS = {'color': 0xd7, 'motion': 0xd8, 'speed': 0xd9}
 _code = {}
 
 
@@ -325,7 +285,7 @@ def test_paint_survives_the_clock_wrapping(line):
 
 
 def test_paint_uses_the_defaults_for_values_above_max(line):
-    fills = line.paint(color=13, motion=50, speed=14)                   # the stock values a unit holds
+    fills = line.paint(color=15, motion=12, speed=14)                   # what a 4-bit field holds above each max
     t16 = line.data(4) >> 16
     assert line.data(0) == 1 and len(fills) == 80
     assert fills[5][5] == colour(len(SCHEMES), 5, t16, level(3, 5, t16))

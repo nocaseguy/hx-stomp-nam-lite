@@ -120,50 +120,6 @@ replay:                             @ r0 a footswitch code: its press, then its 
     add sp, #8
     pop {r7, pc}
 
-.thumb_func
-lp_boot:                            @ after the Home constructor at boot: on the first boot, every Hold setting gets its default as an int (type 2)
-    push {r4, r5, lr}               @ the stock records of these IDs hold in-range values (and some type 1, which the menu shows as two values),
-    sub sp, #20                     @ so a record that is not yet an int marks the first boot. 0 GET_VALUE's out, 8 the record {type, -, -, -, value}
-    movs r4, #0
-boot_check:
-    adr r3, hold_ids
-    ldrh.w r0, [r3, r4, lsl #1]
-    mov r1, sp
-    ldr r3, =0x28e1f845
-    blx r3
-    cmp r0, #0
-    blt boot_first
-    ldrb r0, [sp]
-    cmp r0, #2
-    bne boot_first
-    adds r4, #1
-    cmp r4, #SWITCHES
-    bne boot_check
-    b boot_out
-boot_first:
-    movs r4, #0
-boot_next:
-    adr r3, hold_ids
-    ldrh.w r5, [r3, r4, lsl #1]
-    movs r0, #2
-    str r0, [sp, #8]
-    adr r3, hold_defaults
-    ldrb r0, [r3, r4]
-    str r0, [sp, #12]
-    ldr r3, =0x28e007ed             @ the setter's context, as the stock footswitch-mode writes take it
-    blx r3
-    mov r1, r5
-    add r2, sp, #8
-    movs r3, #6
-    ldr.w r12, =0x28e1f8f5          @ the setter (context, ID, record, how): stores the record's type and value
-    blx r12
-    adds r4, #1
-    cmp r4, #SWITCHES
-    bne boot_next
-boot_out:
-    add sp, #20
-    pop {r4, r5, pc}
-
 toggle_cc:                          @ r0 virtual footswitch 0..4: its blocks on MIDI CC 20 + r0 go to the opposite of the first one's state
     push {r4-r8, lr}
     sub sp, #8                      @ 0 the bypass the getter writes
