@@ -28,7 +28,7 @@ Each feature is a module in `tools/features/`. They are off by default, and the 
 | **Tuner** | `HX_TUNER=1` | Tuner Activation and Lock Tuner Settings, on a third page of the tuner's own settings. See [Tuner settings](#tuner-settings). |
 | **BPM** | `HX_BPM=1` | The tempo at the top left of the Home screen, and a beat dot that blinks with the TAP footswitch's ring. See [BPM](#bpm). |
 | **DSP meter** | `HX_DSP_METER=1` | Each block in the Edit view shows its share of the DSP in per cent, and the top right corner shows the blocks' total. In the model browser, each model shows the share it would take. See [DSP meter](#dsp-meter). |
-| **Breathing line** | `HX_BREATHING_LINE=1` | Just for fun: the line across the middle of the Home screen comes alive in the colours, motion and speed you pick (Breathe, Pulse, Sine, Cylon, Comet, Heart, Sparkle). |
+| **Breathing line** | `HX_BREATHING_LINE=1` | Just for fun: the line across the middle of the Home screen comes alive in the colours, motion and speed you pick (Breathe, Pulse, Sine, Cylon, Comet, Heart, Sparkle). See [Breathing line](#breathing-line). |
 | **Long press** | `HX_LONG_PRESS=1` | In Stomp mode, hold a footswitch for 1 s for a second action: the tuner, FS4 or FS5, or a virtual footswitch FS6–FS10. A tap still toggles the switch's own blocks. See [Long press](#long-press). |
 | **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). |
 | **Boot screen** | `--splash`, `--splash-text` | Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). |
@@ -84,6 +84,14 @@ In the Edit view, each block in the signal-flow row shows its share of the DSP i
 In the model browser, each model shows the share it would take, in white between its icon and its name.
 
 75 is what blocks may use: the firmware's preset limit of 90%, less the 15% it always keeps. The numbers are the firmware's own fixed cost of each model, the same ones it uses to decide whether a block fits, not a measured load.
+
+### Breathing line
+
+Just for fun: the line across the middle of the Home screen, between the signal flow and the knobs, comes alive in the colours, motion and speed you pick. It starts on Rainbow, breathing once every 4 s.
+
+- **Where it shows:** on the Home screen only. Other screens stay stock, and the line stops animating while you're on them.
+- **The selected part of the line** is still thicker, as on the stock line, and **Off** gives the stock line back.
+- **Settings** (Global Settings > CustomOS): Line Color, Line Motion and Line Speed. See [Custom settings](#custom-settings).
 
 ### Long press
 
