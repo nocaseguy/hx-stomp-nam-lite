@@ -364,7 +364,7 @@ class Built:
         return r0 - (1 << 32) if r0 >> 31 else r0, struct.unpack('<BxxxI', self.m.read(OUT, 8))
 
 
-ALL = {'HX_TUNER': '1', 'HX_BPM': '1', 'HX_DSP_METER': '1', 'HX_LONG_PRESS': '1', 'HX_MORE_SNAPSHOTS': '1'}
+ALL = {'HX_TUNER': '1', 'HX_BPM': '1', 'HX_DSP_METER': '1', 'HX_LONG_PRESS': '1', 'HX_MORE_SNAPSHOTS': '1', 'HX_BREATHING_LINE': '1'}
 
 
 @pytest.mark.firmware
@@ -377,7 +377,7 @@ def test_every_feature_built_together_reads_and_stores_its_settings_through_the_
 
     monkeypatch.setattr(pm.Patch, 'module', module)
     new, on = pm.menu_entry0(stock_e0(), MODS, ALL)
-    assert {features.name(m) for m in on} >= {'tuner', 'bpm', 'dsp_meter', 'long_press'}
+    assert {features.name(m) for m in on} >= {'tuner', 'bpm', 'dsp_meter', 'long_press', 'breathing_line'}
     b = Built(m4emu, new)
     for cid in setting_ids.CONTAINERS:
         b.m.write(record(cid) + 8, struct.pack('<BxxxI', 3, FLOAT_ONE))
