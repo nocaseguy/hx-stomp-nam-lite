@@ -54,7 +54,8 @@ bpm_tick:                           @ after the LED task's 1 ms sleep: the dot l
     push {r4, lr}
     adr.w r4, bpm_data
     ldr r0, [r4]
-    cbz r0, bpm_ticked
+    cmp r0, #0
+    beq bpm_ticked
     ldr r0, [r4, #8]
     movw r1, #1500
     cmp r0, r1
@@ -77,6 +78,28 @@ bpm_findtap:
     adds r2, #1
     cmp r2, #3
     bne bpm_findtap
+    ldr r0, [r4, #16]               @ no TAP footswitch (Preset, Snapshot modes): the stock beat stops, so the dot keeps it itself
+    cbz r0, bpm_ticked
+    ldr r3, =0x28da6459             @ the µs clock the stock beat runs on
+    blx r3
+    ldr r2, [r4, #16]
+    ldr r1, [r4, #12]
+    subs r1, r0, r1
+    movw r3, #1000
+    udiv r1, r1, r3
+    cmp r1, r2
+    bhi bpm_restart
+    cmp.w r1, r2, lsr #1            @ the stock's test: over half a period, in whole ms
+    bls bpm_ticked
+    mul r2, r2, r3
+    ldr r1, [r4, #12]
+    add.w r1, r1, r2, lsr #1
+    str r1, [r4, #12]
+    ldrb r0, [r4, #4]
+    eor r0, r0, #1
+    b bpm_turn
+bpm_restart:                        @ over a beat since the last turn (none seen since boot, or the tempo fell): the beat starts now
+    str r0, [r4, #12]
     b bpm_ticked
 bpm_tapring:
     adr.w r1, bpm_rings
@@ -84,6 +107,10 @@ bpm_tapring:
     ldrb r1, [r4, #4]
     cmp r0, r1
     beq bpm_ticked
+    ldr r1, =0x281cd074             @ the stock beat's last turn (µs): the dot carries on from it once no footswitch is TAP
+    ldr r1, [r1]
+    str r1, [r4, #12]
+bpm_turn:
     strb r0, [r4, #4]
     movs r0, #0
     strb r0, [r4, #5]               @ a tap's red lasts until the ring's next turn
@@ -315,10 +342,18 @@ bpm_format:                         @ r0 a font -> bpm_text holds the tempo, or 
     adr.w r4, bpm_text
     movs r6, #0
     strb r6, [r4]
+    adr.w r3, bpm_data
+    str r6, [r3, #16]
     ubfx r2, r0, #23, #8
     subs r2, #127
     cmp r2, #9
     bhi bpm_none                    @ not 1..1023: no tempo (unsigned, so negative exponents too)
+    vmov s15, r0
+    ldr r1, =0x476a6000             @ 60000.0f: the period in whole ms, as the stock works it out (0x28dd0af6)
+    vmov s14, r1
+    vdiv.f32 s15, s14, s15
+    vcvt.u32.f32 s15, s15
+    vstr s15, [r3, #16]
     ubfx r1, r0, #0, #23
     orr r1, r1, #0x800000
     movs r3, #10
@@ -402,8 +437,8 @@ bpm_dotshape:                       @ x, y below the dots' top, w, h, BPM Dot Po
     .byte 222, 8, 28, 14, 2, 0
     .byte 221, 11, 30, 8, 2, 0
 .balign 4
-bpm_data:                           @ 0 the Home view has painted, 4 the dot is lit, 5 a tap made it red, 6 Tap Tempo LED is on, 8 ms since the first paint
-    .word 0, 0x00010000, 0
+bpm_data:                           @ 0 painted, 4 dot lit, 5 tapped red, 6 Tap Tempo LED on, 8 ms since first paint, 12 last turn (µs), 16 period (ms)
+    .word 0, 0x00010000, 0, 0, 0
 bpm_rings:                          @ each footswitch ring lit, as last sent
     .space 4
 bpm_text:

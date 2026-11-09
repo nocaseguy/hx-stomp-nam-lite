@@ -260,8 +260,9 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 # ---- the whole GR build, pinned as tests/test_firmware.py pins the default one
 
 GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
-    'HX_GR': '7062017a42931abcd059b5141493d602',
-    'HX_GR HX_FRAMEPROBE': '05837d5cc9685044711e7cf6c1fee4fd',
+    'HX_GR': 'cbb16963bbcf873676a061ec1820022d',
+    'HX_GR HX_FRAMEPROBE': 'a4852ff2dfad8ca8ad66078af5fe12de',
+    'HX_GR HX_CLICK': '15e9e3498ee7ac89a0ee966f2a911da0',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
@@ -275,11 +276,12 @@ def test_gr_build(tmp_path, flags):
     if not stock:
         pytest.skip('HX_STOMP_HXF is not set')
     out = tmp_path / 'gr.hxf'
-    env = {k: v for k, v in os.environ.items() if k not in ('HX_GR', 'HX_FRAMEPROBE')} | {f: '1' for f in flags.split()}
+    env = {k: v for k, v in os.environ.items() if k not in ('HX_GR', 'HX_FRAMEPROBE', 'HX_CLICK')} | {f: '1' for f in flags.split()}
     r = subprocess.run([sys.executable, str(ROOT / 'build.py'), stock, '-o', str(out), '--no-check'],
                        capture_output=True, text=True, cwd=ROOT, env=env)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert 'ALL OK' in r.stdout and 'CustomOS (tuner, gr)' in r.stdout
+    assert 'ALL OK' in r.stdout and 'Entry 0: features gr\n' in r.stdout
+    assert r.stdout.count(': Mtr Position, Mtr Direction, Mtr Thickness on slots') == len(pc.COMP_MODELS)
     assert hashlib.md5(out.read_bytes()).hexdigest() == GR_BUILT_MD5[flags]
 
 

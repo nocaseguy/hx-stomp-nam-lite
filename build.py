@@ -2,6 +2,7 @@
 """Build HX Stomp (or HX Stomp XL) firmware 3.80.0 with NAM A2 Lite, from your own copy of the stock firmware.
 
 usage: python3 build.py <HX_Stomp_v3.80.0_0x103966115.hxf | HX_Stomp_XL_v3.80.0_0x103966115.hxf> [-o out.hxf] [--no-check]
+                        [--splash picture [--splash-fit fill|fit]] [--splash-text "text" [--splash-glyph EMOJI=picture ...]]
 
 The input is Line 6's own firmware file for your unit, version 3.80.0
 (Line 6 Updater keeps a copy; see README.md). Nothing of it is in this
@@ -20,6 +21,9 @@ Steps:
      block with its own SDRAM block
   3. tools/patch_amp.py ir-title: the IR name in the block title
   4. tools/patch_amp.py patch: the kernel into the SHARC boot stream
+     (HX Stomp only, first: tools/patch_menu.py, the CustomOS features of tools/features; --splash, --splash-fit,
+     --splash-text and --splash-glyph are the splash feature's HX_SPLASH, HX_SPLASH_FIT, HX_SPLASH_TEXT and HX_SPLASH_GLYPHS;
+     with HX_CLICK=1, then tools/patch_click.py: the Metronome block)
   5. tools/l6ia_verify.py: every checksum of the result
   6. tools/hxf.py pack: the .hxf
 """
@@ -69,6 +73,20 @@ def main():
                  "The patch is made for those files only.")
     unit = STOCK_MD5[md5]
     print(f"stock firmware: {unit.replace('_', ' ')} 3.80.0")
+    splash = os.path.abspath(argv[argv.index("--splash") + 1]) if "--splash" in argv else None
+    splash_text = argv[argv.index("--splash-text") + 1] if "--splash-text" in argv else None
+    splash_fit = argv[argv.index("--splash-fit") + 1] if "--splash-fit" in argv else "fill"
+    if (splash or splash_text) and unit != "HX_Stomp":
+        sys.exit("build.py: --splash and --splash-text are for the HX Stomp only")
+    if splash:
+        os.environ.update(HX_SPLASH=splash, HX_SPLASH_FIT=splash_fit)
+    if splash_text:
+        os.environ["HX_SPLASH_TEXT"] = splash_text
+    glyphs = [argv[i + 1].split("=", 1) for i, a in enumerate(argv) if a == "--splash-glyph"]
+    if any(len(g) != 2 for g in glyphs):
+        sys.exit("build.py: --splash-glyph takes EMOJI=picture")
+    if glyphs:
+        os.environ["HX_SPLASH_GLYPHS"] = ",".join(f"{e}={os.path.abspath(path)}" for e, path in glyphs)
     out = os.path.abspath(argv[argv.index("-o") + 1]) if "-o" in argv else \
         os.path.join(HERE, "build", f"{unit}_v3.80.0_CustomOS.hxf")
     build = os.path.join(HERE, "build")
@@ -91,12 +109,16 @@ def main():
     if unit == "HX_Stomp":
         run(py, "tools/patch_menu.py", base, titled, "--cwd", os.getcwd())
         os.replace(titled, base)
-        if os.environ.get("HX_GR"):
-            run(py, "tools/patch_comp.py", base, titled)
-            os.replace(titled, base)
     wrap = ["--wrap-prim", "0x271a:0x8d9c9", "--wrap-prim", "0x2719:0x8d342",
                                   "--wrap-prim", "0x2710:0x8d342"] if os.environ.get("HX_FRAMEPROBE") else []
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm, *wrap)
+    if os.environ.get("HX_CLICK") and unit == "HX_Stomp":
+        run(py, "tools/patch_click.py", image, titled)
+        os.replace(titled, image)
+    if os.environ.get("HX_GR") and unit == "HX_Stomp":
+        # last: every step that adds a model rebuilds the Entry 3 and 4 tails the knobs live in
+        run(py, "tools/patch_comp.py", image, titled)
+        os.replace(titled, image)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:
         sys.exit("build.py: the image failed its checksum check")

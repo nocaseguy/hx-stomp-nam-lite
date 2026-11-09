@@ -18,8 +18,7 @@ LED_TICK_CALL, LED_SLEEP = 0x28db7f44, 0x28e24c58                    # the LED t
 # The two reads of Tap Tempo LED (26) that decide whether the stock blinks the tap LED: the dot needs the blink either way.
 TAP_LED_ID, TAP_LED_READS = 26, (0x28d9c116, 0x28dd0ae2)
 TAP_CORE, TAP_CORE_STOCK = 0x28d9bfa8, bytes.fromhex('10b5 86b0')   # push {r4,lr}; sub sp,#0x18
-# The LED send (LED, colour): its second instruction loads a literal, so chain_entry cannot move it, and the hook changes the
-# colour argument, which a chain's handlers cannot: bpm_ledsend runs the two instructions itself.
+# The LED send (LED, colour): owned, as the hook rewrites the colour; its prologue loads a literal, so bpm_ledsend runs it itself.
 LED_SEND, LED_SEND_STOCK, LED_SEND_LIT, LED_SEND_LIT_VALUE = 0x28d98f74, bytes.fromhex('00b5 234b'), 0x28d99004, 0x281c90a4
 
 
@@ -34,7 +33,6 @@ def apply(p):
         p.expect(site - 2, bytes([TAP_LED_ID, 0x20]), 'a read of Tap Tempo LED')
         p.chain_bl(site, pm.GET_VALUE, after=m['bpm_tapled'])
     p.chain_entry(TAP_CORE, TAP_CORE_STOCK, before=m['bpm_tap'])
-    p.expect(LED_SEND, LED_SEND_STOCK, 'the LED send')
-    if p.u32(LED_SEND_LIT) != LED_SEND_LIT_VALUE:
+    if p.u32(LED_SEND_LIT) != LED_SEND_LIT_VALUE:      # own_entry checks only the prologue; bpm_ledsend repeats its literal load
         raise SystemExit('patch-menu: the LED send does not load its stock literal')
-    p.put(LED_SEND, pm.thumb_bw(LED_SEND, m['bpm_ledsend']), 'the LED send')
+    p.own_entry(LED_SEND, LED_SEND_STOCK, 'the LED send', m['bpm_ledsend'])

@@ -7,18 +7,23 @@ A feature module may have:
   ORDER      its turn among the features (default 100): the order of their CustomOS pages and of their handlers on a shared hook
   CONFLICTS  names of features it cannot be built with
   SETTINGS   Setting()s on its own CustomOS pages, three to a page; each takes the ID tools/setting_ids.py gives '<feature>.<key>'
+             (a virtual ID, which the engine serves from a bit field: see tools/setting_ids.py VIRTUAL)
+  MENU       False when it shows its SETTINGS itself: they keep their IDs, limits and customos.inc lines but get no CustomOS page,
+             and Global Settings has no CustomOS section when no feature built in has a page there (default True)
   apply(p)   its code and hooks, through tools/patch_menu.py's Patch: p.put() (a write no other feature may overlap), p.expect(),
              p.add() (bytes into the code cave), p.module() (an M4 .s assembled at build time), p.chain_ptr(), p.chain_bl() and
-             p.chain_entry() (handlers on a hook other features may share), p.own_entry() (a function start for this feature
-             alone, for a handler no chain can take), p.id('<feature>.<key>'), p.input('<VAR>'), p.entry(n) (Entry n by
-             offset: read(), expect(), expect_md5(), and put(), checked for overlap as p.put() is; Entry 8 also add_item()) and
-             p.add_glyph() (a glyph in an empty slot of an Entry 7 font); tools/image_store.py reads Entries 7 and 8.
+             p.chain_entry() (handlers on a hook other features may share), p.own_entry() and p.own_call() (a function start or
+             a call for this feature alone, for a handler no chain can take), p.id('<feature>.<key>'), p.input('<VAR>'),
+             p.entry(n) (Entry n by offset: read(), expect(), expect_md5(), and put(), checked for overlap as p.put() is; Entry 8
+             also add_item()) and p.add_glyph() (a glyph in an empty slot of an Entry 7 font); tools/image_store.py reads Entries 7
+             and 8.
              The web build imports every feature file, so a module imports only what Pyodide has at its top, and runs a
              tool such as sips only inside apply(p).
 
 An M4 .s file gets `.include "customos.inc"`, generated at build time: SETTING_<FEATURE>_<KEY> (the ID), ..._MAX and ..._DEFAULT for
-every setting, and the macro CUSTOMOS_SETTING_GET, a function customos_setting_get (r0 ID, r1 max, r2 default -> r0 the value, the
-default when it is unset or above max: a unit may hold a value stored by another build).
+every setting, the macro CUSTOMOS_SETTING_GET, a function customos_setting_get (r0 ID, r1 max, r2 default -> r0 the value, the
+default when it is unset or above max: a unit may hold a value stored by another build), and the macro CUSTOMOS_SETTING_SET, a function
+customos_setting_set (r0 ID, r1 value) for a feature that stores a setting itself: the stock setter refuses virtual IDs.
 """
 import importlib
 import os

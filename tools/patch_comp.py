@@ -7,7 +7,7 @@ Each model in COMP_MODELS gets three more parameters after its own, in the three
            handing it to the compressor core as pid 100, 101, 102, which the DSP wrapper's control function keeps;
            and for each core an init record, pid 103, saying whether its output overwrites its first input or its second.
   Entry 0: the model's row in the UI Model Info Table counts the new parameters.
-Run it after every step that adds models (add-model, add-fx-model): those rebuild Entry 3's and Entry 4's tails
+Run it after every step that adds models (add-model, add-fx-model, patch_click.py): those rebuild Entry 3's and Entry 4's tails
 from the models they added and would drop what this writes there.
 """
 import argparse
