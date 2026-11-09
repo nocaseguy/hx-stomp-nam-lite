@@ -16,8 +16,6 @@
 .equ PAINT_TBH, 0x28dcca93
 .equ PAINT_END, 0x28dccb65
 .equ STEPS, 0x28dfe2d9              @ (raw knob delta) -> detents
-.equ SETTER_CONTEXT, 0x28e007ed
-.equ SETTER, 0x28e1f8f5             @ (context, ID, record {type, -, -, -, value}, how)
 .equ SHOW, 0x28dc6599               @ (knob, shown)
 .equ VALUE_TEXT, 0x28dc654d         @ (knob, text)
 .equ POSITION, 0x28dc648d           @ (knob, 0.0f..1.0f)
@@ -253,22 +251,9 @@ knob_get:                           @ r0 knob 0..1 -> r0 its setting's value
     b customos_setting_get
 
 knob_set:                           @ r0 knob 0..1, r1 its setting's new value, stored as an int
-    push {r4, lr}
-    sub sp, #8
     adr r3, knobs
-    ldrh.w r4, [r3, r0, lsl #2]
-    movs r2, #2
-    str r2, [sp]
-    str r1, [sp, #4]
-    ldr r3, =SETTER_CONTEXT
-    blx r3
-    mov r1, r4
-    mov r2, sp
-    movs r3, #1
-    ldr.w r12, =SETTER
-    blx r12
-    add sp, #8
-    pop {r4, pc}
+    ldrh.w r0, [r3, r0, lsl #2]
+    b customos_setting_set
 
 .ltorg
 .balign 4
@@ -301,3 +286,4 @@ values:                             @ per knob, 32 bytes: its two values, 16 byt
     .balign 16, 0
 
 CUSTOMOS_SETTING_GET
+CUSTOMOS_SETTING_SET
