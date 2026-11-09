@@ -106,8 +106,106 @@ light:
     adds r5, #1
     cmp r5, #10
     bne light
-lit:                                @ slot j counts left to right or top to bottom; it shows light j, or 9 - j in Reverse
+lit:                                @ the paint lays the lights out (layout): a setter on this thread could race it and lose its mark
+    ldr r0, [sp, #12]
+    orr.w r5, r5, r0, lsl #8        @ the layout: lights lit, Position, Direction, Thickness, and bit 31 for ours shown
+    ldr r0, [sp, #16]
+    orr.w r5, r5, r0, lsl #16
+    ldr r0, [sp, #8]
+    orr.w r5, r5, r0, lsl #24
+    orr r5, r5, #0x80000000
+    b post
+
+stock:
+    movs r0, #0
+    str r0, [r4, #20]               @ ours are hidden
+    movs r5, #0                     @ the layout: the stock divider
+post:
+    ldr r0, [r4, #40]
+    cmp r0, r5
+    beq repaint
+    str r5, [r4, #40]
+    movs r0, #1
+    str r0, [r4, #16]
+    b repaint
+
+
+stockdiv:                           @ the stock divider: four 80 px segments, the selected one white and 2 px, the others grey and 1 px; leaves r7 want
+    push {r4-r6, lr}
+    adr.w r0, data
+    ldr r5, [r0, #44]               @ the selected segment, as layout read it
     adr.w r7, want
+    movs r0, #0x77
+    str r0, [r7, #8]
+    movs r0, #80
+    str r0, [r7, #12]
+    movs r6, #0
+segment:
+    cmp r6, r5
+    ite eq
+    moveq r0, #2
+    movne r0, #1
+    str r0, [r7, #16]
+    cmp r6, r5
+    ite eq
+    mvneq r0, #0xff000000
+    ldrne r0, =0x666666
+    str r0, [r7, #0]
+    movs r0, #80
+    mul r0, r6, r0
+    str r0, [r7, #4]
+    mov r0, r6
+    bl widget
+    bl apply
+    adds r6, #1
+    cmp r6, #4
+    bne segment
+    pop {r4-r6, pc}
+
+repaint:
+    ldr r0, [r4, #16]               @ the setters only mark the canvas: ask the UI to repaint, at most every 16 frames
+    cbz r0, leave
+    ldr r0, [r4, #28]
+    lsls r0, r0, #28
+    bne leave
+    movs r0, #0
+    str r0, [r4, #16]
+    movs r1, #1
+    ldr r3, =0x28db8509             @ the redraw request the layout code ends with: (0, 1)
+    blx r3
+leave:
+    add sp, #20
+    pop {r0-r7, pc}
+
+layout:                             @ from the paint, under the widget lock: the lights as the frame last set data + 40
+    push {r4-r7, lr}
+    sub sp, #20
+    adr.w r4, data
+    movs r0, #0x15                  @ the setting the stock layout selects a divider segment by, read before the lock
+    mov r1, sp
+    ldr r3, =0x28e1f845
+    blx r3
+    ldr r0, [sp, #4]
+    str r0, [r4, #44]
+    ldr r3, =0x28e24971             @ the widget lock, as the stock paint takes it
+    blx r3
+    ldr r5, [r4, #40]
+    cmp r5, #0
+    bne shown
+    bl stockdiv
+    movs r0, #0
+    movs r1, #46
+    bl park
+    b laid
+shown:
+    ubfx r0, r5, #8, #8
+    str r0, [sp, #12]               @ Position
+    ubfx r0, r5, #16, #8
+    str r0, [sp, #16]               @ Direction
+    ubfx r0, r5, #24, #7
+    str r0, [sp, #8]                @ Thickness
+    uxtb r5, r5                     @ the lights lit
+    adr.w r7, want                  @ slot j counts left to right or top to bottom; it shows light j, or 9 - j in Reverse
     ldr r0, [sp, #12]
     cmp r0, #0
     it ne
@@ -189,7 +287,7 @@ fit:
     bne edgepark
     movs r1, #40
     bl park
-    b repaint
+    b laid
 edgepark:
     subs r0, #1
     movs r1, #10
@@ -202,68 +300,12 @@ edgepark:
     mla r0, r0, r1, r1
     movs r1, #46
     bl park
-    b repaint
-
-stock:
-    movs r0, #0
-    str r0, [r4, #20]               @ ours are hidden
-    bl stockdiv
-    movs r0, #0
-    movs r1, #46
-    bl park
-    b repaint
-
-stockdiv:                           @ the stock divider: four 80 px segments, the selected one white and 2 px, the others grey and 1 px; leaves r7 want
-    push {r4-r6, lr}
-    sub sp, #8
-    movs r0, #0x15                  @ the setting the stock layout selects a segment by
-    mov r1, sp
-    ldr r3, =0x28e1f845
+    b laid
+laid:
+    ldr r3, =0x28e24ae9             @ the widget unlock
     blx r3
-    ldr r5, [sp, #4]
-    adr.w r7, want
-    movs r0, #0x77
-    str r0, [r7, #8]
-    movs r0, #80
-    str r0, [r7, #12]
-    movs r6, #0
-segment:
-    cmp r6, r5
-    ite eq
-    moveq r0, #2
-    movne r0, #1
-    str r0, [r7, #16]
-    cmp r6, r5
-    ite eq
-    mvneq r0, #0xff000000
-    ldrne r0, =0x666666
-    str r0, [r7, #0]
-    movs r0, #80
-    mul r0, r6, r0
-    str r0, [r7, #4]
-    mov r0, r6
-    bl widget
-    bl apply
-    adds r6, #1
-    cmp r6, #4
-    bne segment
-    add sp, #8
-    pop {r4-r6, pc}
-
-repaint:
-    ldr r0, [r4, #16]               @ the setters only mark the canvas: ask the UI to repaint, at most every 16 frames
-    cbz r0, leave
-    ldr r0, [r4, #28]
-    lsls r0, r0, #28
-    bne leave
-    movs r0, #0
-    str r0, [r4, #16]
-    movs r1, #1
-    ldr r3, =0x28db8509             @ the redraw request the layout code ends with: (0, 1)
-    blx r3
-leave:
     add sp, #20
-    pop {r0-r7, pc}
+    pop {r4-r7, pc}
 
 apply:                              @ r0 a widget: colour, place and size as `want` says, calling a setter only for a change
     push {r4-r6, lr}
@@ -387,6 +429,7 @@ erase:                              @ r0 the framebuffer, r1 the Home view: like
     ldr r3, =0x28dc87cd             @ the Home view's divider and footswitch label layout, as the stock code calls it: (home, 0)
     blx r3
 laidout:
+    bl layout
     add.w r0, r5, #0x538
     ldrb r7, [r0, #0x15]            @ ours are shown while the stock divider is and the meter is on
     adr.w r0, data
@@ -493,7 +536,8 @@ lights:                             @ a compressor pedal's GR lights, 1 2 3 4 6 
 colours:                            @ lights 1..10
     .word 0x00ff00, 0x66ff00, 0xb3ff00, 0xffff00, 0xffd000, 0xffa500, 0xff7f00, 0xff5500, 0xff2a00, 0xff0000
 data:                               @ 0 shown reduction (Q16), 4 frames since the compressor, 8 marker, 12 latch, 16 repaint,
-    .space 40                       @ 20 ours shown, 24 the last window seen, 28 frames, 32 the block's knobs (word 218), 36 relayout at frame
+    .space 48                       @ 20 ours shown, 24 the last window seen, 28 frames, 32 the block's knobs (word 218), 36 relayout at frame, 40 layout,
+                                    @ 44 the selected divider segment
 want:                               @ colour, x, y, w, h
     .space 20
 widgets:                            @ ten slots for each edge, Top, Left, Bottom, Right, then Middle's slots 4..9

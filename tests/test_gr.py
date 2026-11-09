@@ -321,9 +321,9 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 # ---- the whole GR build, pinned as tests/test_firmware.py pins the default one
 
 GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
-    'HX_GR': 'ac3b1adbf26991682c296b642a9d3d7a',
-    'HX_GR HX_FRAMEPROBE': 'e29e5b77815ad5780d24af735a128512',
-    'HX_GR HX_CLICK': '41ae933945980aef000173fe5624b22d',    # patch_click.py adds a model, which would drop knobs written before it
+    'HX_GR': '658513cbe5a8d8aae518835931864aa4',
+    'HX_GR HX_FRAMEPROBE': '2954c849762e01c52a0bc9b45fa962ee',
+    'HX_GR HX_CLICK': 'afaa6b0889ef8c036534d42a22818bbb',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
@@ -423,6 +423,7 @@ class Meter:
         self.m.write(FRAME_VA, struct.pack('<256I', *w))
         self.m.log.clear()
         self.call('frame', 0, FRAME_VA)
+        self.call('layout')                             # the paint that the frame's redraw request brings
 
     def colours(self, pos):
         """The colours of the ten lights, left to right, of Top (1) or Middle (0, the divider's four segments then ours)."""
@@ -502,6 +503,25 @@ def test_m4_setters_only_on_a_change(m4emu):
     assert m.setters() == []
     m.frame(1.0, 10 ** (-8.5 / 20), window=3, pos=1)
     assert m.setters() == [SET_COLOR]
+
+
+@pytest.mark.parametrize('pos', range(5))
+def test_m4_widgets_change_only_in_the_paint_under_the_widget_lock(m4emu, pos):
+    """The frame runs on the DSP stream's thread: it only records the layout, and the paint applies it inside one lock and unlock."""
+    m = Meter(m4emu)
+    widget_calls = (LOCK, UNLOCK) + SETTERS
+    for window, b in ((1, 10 ** (-8.5 / 20)), (2, 10 ** (-20 / 20)), (3, 1.0)):
+        m.frame(1.0, b, window=window, pos=pos)
+        seq = [at for at, _ in m.m.log if at in widget_calls]
+        assert seq[0] == LOCK and seq[-1] == UNLOCK and seq.count(LOCK) == seq.count(UNLOCK) == 1
+        assert [at for at, _ in m.m.log if at in (GET_VALUE, LOCK)] == [GET_VALUE, LOCK], 'the setting is read outside the lock'
+    m.m.log.clear()
+    w = [0] * 256
+    w[200], w[218], w[216], w[217], w[250] = 0xf00d600d, rot16(0x6B000000 | pos << 16 | 20), swapped(1.0), swapped(0.1), 9
+    m.m.write(FRAME_VA, struct.pack('<256I', *w))
+    m.call('frame', 0, FRAME_VA)
+    assert not [at for at, _ in m.m.log if at in widget_calls], 'the frame calls no setter and takes no lock'
+    assert m.word('data', 4) == 1 or m.m.calls(REDRAW), 'a changed layout asks for a repaint'
 
 
 def test_m4_off_without_knobs_or_at_thickness_0(m4emu):
