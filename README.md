@@ -28,6 +28,7 @@ Each feature is a module in `tools/features/`. They are off by default, and the 
 | **Tuner** | `HX_TUNER=1` | Tuner Activation and Lock Tuner Settings, on a third page of the tuner's own settings. See [Tuner settings](#tuner-settings). |
 | **BPM** | `HX_BPM=1` | The tempo at the top left of the Home screen, and a beat dot that blinks with the TAP footswitch's ring. See [BPM](#bpm). |
 | **DSP meter** | `HX_DSP_METER=1` | Each block in the Edit view shows its share of the DSP in per cent, and the top right corner shows the blocks' total. In the model browser, each model shows the share it would take. See [DSP meter](#dsp-meter). |
+| **Breathing line** | `HX_BREATHING_LINE=1` | Just for fun: the line across the middle of the Home screen comes alive in the colours, motion and speed you pick (Breathe, Pulse, Sine, Cylon, Comet, Heart, Sparkle). |
 | **Long press** | `HX_LONG_PRESS=1` | In Stomp mode, hold a footswitch for 1 s for a second action: the tuner, FS4 or FS5, or a virtual footswitch FS6–FS10. A tap still toggles the switch's own blocks. See [Long press](#long-press). |
 | **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). |
 | **Boot screen** | `--splash`, `--splash-text` | Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). |
@@ -46,6 +47,9 @@ The other features' settings are in Global Settings, in a seventh section called
 | BPM | **BPM Color** | **White** (default), Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple | The tempo's and the dot's colour |
 | BPM | **BPM Dot Pos** | **Left** (default), Right, Both | Where the beat dot sits, beside the preset number |
 | Long press | **FS1 Hold** … **FS5 Hold** | Off, Tuner, FS4, FS5, FS6 … FS10 (defaults FS6 … FS10) | What holding that footswitch for 1 s does. FS4 and FS5 are external switches. |
+| Breathing line | **Line Color** | White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, **Rainbow** (default) | The line's colours. The gradients flow along the line: Fire is red, orange and yellow; Ice blue, cyan and white; Sunset purple, pink and orange; Ocean deep blue, blue and aqua; Aurora green, sky blue and violet; Neon magenta, indigo and cyan; Rainbow every hue. Where the motion dims the line, the colours dim with it. |
+| Breathing line | **Line Motion** | Off, Steady, Pulse, **Breathe** (default), Sine, Cylon, Comet, Heart, Sparkle | How it moves. Breathe slowly fades the whole line in and out. Pulse sends a ring from the middle out to both ends. Sine runs waves along the line. Cylon sweeps a light from end to end and back, slowing at the ends, with a trail behind it. Comet shoots a light across with a long tail. Heart beats lub-dub from the middle. Sparkle twinkles at random. Steady holds the full colour. Off gives back the stock line. |
+| Breathing line | **Line Speed** | 1 … 10 (default **4**) | One cycle takes 8 s at 1, 4 s at 4, 0.8 s at 10. |
 | DSP meter | **DSP Disp** | **Used/All** (default, e.g. `47/75`), Free (`28`), Used% (`63%`) | What the top right corner shows. "All" is 75: the firmware's 90% preset limit less its fixed 15%. |
 
 Every feature's settings are virtual settings: CustomOS serves their IDs itself and keeps their values in spare records of the Global Settings store, which the HX Stomp saves with the rest. `tools/setting_ids.py` assigns each its ID and place. A setting no build has stored yet, or whose stored value is out of range, shows its default. Builds before virtual settings kept these settings on real IDs, so the first virtual build starts them on their defaults.
@@ -233,10 +237,10 @@ M4 code (the caves `tools/patch_menu.py` writes, and each feature's `.s` module)
 build.py                      one-step build from the stock .hxf
 FIRMWARE_NOTES.md             what is known about the 3.80.0 firmware
 tools/patch_menu.py           CustomOS: the feature engine, the Global Settings section and its caves (HX Stomp)
-tools/features/               the features: tuner.py, bpm.py, dsp_meter.py, long_press.py, more_snapshots.py, splash.py
+tools/features/               the features: tuner.py, bpm.py, breathing_line.py, dsp_meter.py, long_press.py, more_snapshots.py, splash.py
 tools/setting_ids.py          which setting ID each feature's setting uses
 tools/m4asm.py                assembles a feature's src/m4/*.s with Apple's clang
-src/m4/                       the features' M4 code (tuner.s, bpm.s, dsp_meter.s, long_press.s, more_snapshots.s)
+src/m4/                       the features' M4 code (tuner.s, bpm.s, breathing_line.s, dsp_meter.s, long_press.s, more_snapshots.s)
 tools/image_store.py          the image store (Entries 7 and 8): images, fonts, items
 tools/patch_splash.py         boot screen pictures; splash_topo.py draws one, splash_emoji.py and emoji_png.swift make emoji glyphs
 tools/patch_amp.py            inspect / add-model / ir-title / patch
