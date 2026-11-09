@@ -48,7 +48,7 @@ The other features' settings are in Global Settings, in a seventh section called
 | Long press | **FS1 Hold** … **FS5 Hold** | Off, Tuner, FS4, FS5, FS6 … FS10 (defaults FS6 … FS10) | What holding that footswitch for 1 s does. FS4 and FS5 are external switches. |
 | DSP meter | **DSP Disp** | **Used/All** (default, e.g. `47/75`), Free (`28`), Used% (`63%`) | What the top right corner shows. "All" is 75: the firmware's 90% preset limit less its fixed 15%. |
 
-The HX Stomp keeps a setting's value under its ID, which `tools/setting_ids.py` assigns. If a value another build stored under that ID is out of range, the menu shows the setting's default.
+Every feature's settings are virtual settings: CustomOS serves their IDs itself and keeps their values in spare records of the Global Settings store, which the HX Stomp saves with the rest. `tools/setting_ids.py` assigns each its ID and place. A setting no build has stored yet, or whose stored value is out of range, shows its default. Builds before virtual settings kept these settings on real IDs, so the first virtual build starts them on their defaults.
 
 ### Tuner settings
 
@@ -212,7 +212,7 @@ Add what you learn to [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md), with its status (v
 
 Try every change from RAM on a unit before relying on it, and say in the commit what was seen on the unit and what was only checked offline.
 
-A new feature is a module in `tools/features/<name>.py` with its M4 code in `src/m4/<name>.s`, a README section under [Features](#features), and its own `tests/test_<name>.py`. `tools/features/dsp_meter.py` is the simplest, and `tools/features/bpm.py` uses every kind of hook. Prefix the module's entry points with the feature's name. Claim setting IDs in `tools/setting_ids.py`, test M4 code with `tests/m4emu.py`, and build and read the firmware with `tests/firmware.py` (see [Tests](#tests)). A setting's label takes at most 8 characters before the newline of its `Page\nName` and 9 after it; the HX Stomp shows the part after the newline first.
+A new feature is a module in `tools/features/<name>.py` with its M4 code in `src/m4/<name>.s`, a README section under [Features](#features), and its own `tests/test_<name>.py`. `tools/features/dsp_meter.py` is the simplest, and `tools/features/bpm.py` uses every kind of hook. Prefix the module's entry points with the feature's name. Claim setting IDs in `tools/setting_ids.py` (a new setting takes a virtual ID and a bit field there, in `VIRTUAL`), test M4 code with `tests/m4emu.py`, and build and read the firmware with `tests/firmware.py` (see [Tests](#tests)). A setting's label takes at most 8 characters before the newline of its `Page\nName` and 9 after it; the HX Stomp shows the part after the newline first.
 
 ## Tests
 

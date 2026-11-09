@@ -8,12 +8,13 @@ import features
 import patch_menu as pm
 import setting_ids
 from features import tuner
-from firmware import built
+from firmware import assert_virtual, built, built_e0, reader
 
 MODS = features.load()
 IDS = setting_ids.by_name()
 ACTIVATE, LOCK = IDS['tuner.activate'], IDS['tuner.lock']
-CODE, VIEW, EVENT, TRAMP, CTX = 0x28e60000, 0x28500000, 0x28510000, 0x28e70000, 0x28400000
+CODE, VIEW, EVENT, TRAMP = 0x28e60000, 0x28500000, 0x28510000, 0x28e70000
+VIRT_SET = 0x28e80000        # the virtual settings engine's store, as customos_setting_set calls it
 COLOURS = [fn for fn, _ in tuner.KNOB_COLOURS]
 FLOAT_ONE = 0x3f800000
 
@@ -24,16 +25,15 @@ def cstr(m, va):
 
 
 class Page:
-    """tuner.s in unicorn: settings {ID: value} behind GET_VALUE and the setter, the view at VIEW on page `page`."""
+    """tuner.s in unicorn: settings {ID: value} behind GET_VALUE and the engine's store, the view at VIEW on page `page`."""
 
     def __init__(self, m4emu, page=tuner.PAGE):
-        code, sym = m4emu.assemble('src/m4/tuner.s', MODS, IDS)
+        code, sym = m4emu.assemble('src/m4/tuner.s', MODS, IDS, VIRT_SET)
         self.at = {k: CODE + v for k, v in sym.items()}
         self.m = m = m4emu.M4(code, CODE)
         self.settings, self.written, self.steps, self.guard = {}, [], 0, 0
         m.stub(pm.GET_VALUE, self._get)
-        m.stub(tuner.SETTER_CONTEXT, lambda m: m.reg('r0', CTX))
-        m.stub(tuner.SETTER, self._set)
+        m.stub(VIRT_SET, self._set)
         m.stub(tuner.STEPS, lambda m: m.reg('r0', self.steps))
         m.stub(tuner.GUARD, lambda m: m.reg('r0', self.guard))
         for fn in (tuner.REQUEST_TUNER, tuner.TAP_CORE):
@@ -59,11 +59,11 @@ class Page:
             m.reg('r0', -1)
 
     def _set(self, m):
-        assert m.reg('r0') == CTX and m.reg('r3') == 1
-        record = m.reg('r2')
-        pid, kind, value = m.reg('r1'), m.read(record, 1)[0], m.u32(record + 4)
-        self.written.append((pid, kind, value))
+        pid, value = m.reg('r0'), m.reg('r1')
+        assert pid in (ACTIVATE, LOCK), 'only virtual IDs reach the engine'
+        self.written.append((pid, 2, value))
         self.settings[pid] = value
+        m.reg('r0', 0)
 
     def page(self, n):
         self.m.u8(VIEW + 0x74, n)
@@ -257,13 +257,13 @@ def test_paint_switch_sends_page_4_to_its_paint(m4emu, page, to):
 
 @pytest.mark.firmware
 def test_firmware_has_five_tuner_pages_and_no_customos_section_of_its_own():
-    read, on = built({'HX_TUNER': '1'})
-    assert on == ['tuner']
+    e0 = built_e0({'HX_TUNER': '1'})
+    read = reader(e0)
     assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK and read(pm.TEXT_FN, 4) == pm.TEXT_FN_STOCK, 'no CustomOS section'
-    for pid in (ACTIVATE, LOCK):
-        assert read(pm.NAMES_LONG + pm.NAME_LEN * pid, pm.NAME_LEN) == bytes(pm.NAME_LEN)
-        tab, entry = pm.limits_entry(pid)
-        assert tab + 2 * struct.unpack('<H', read(entry, 2))[0] == pm.ENUM01_TARGET
+    for s in tuner.SETTINGS:
+        assert_virtual(e0, tuner, s)
+    for pid in (29, 104):
+        assert read(pm.NAMES_LONG + pm.NAME_LEN * pid, pm.NAME_LEN) == bytes(pm.NAME_LEN), 'its old real IDs are left alone'
     assert read(tuner.NEXT_PAGE, 2) == b'\x03\x2b' and read(tuner.PAGE_DOTS, 2) == b'\x05\x20'
     assert all(read(site, 2) == b'\x04\x2b' for site in tuner.PAGE_CLAMPS)
     for site in (tuner.PAINT_SWITCH, tuner.TURN_FN, tuner.TAP_SITE, *tuner.RESET_SITES, tuner.NEXT_READ, tuner.PREV_READ,
@@ -288,5 +288,4 @@ def test_customos_holds_only_the_other_features_settings():
     assert read(pm.NAV_CMP, 2) == b'\x06\x2b'
     pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
     assert struct.unpack('<I', read(pages + 4 * 6, 4))[0] == 1, "BPM's three settings: one page"
-    assert read(pm.NAMES_LONG + pm.NAME_LEN * IDS['bpm.font'], 8) == b'BPM\nFont'
-    assert read(pm.NAMES_LONG + pm.NAME_LEN * ACTIVATE, pm.NAME_LEN) == bytes(pm.NAME_LEN)
+    assert read(pm.VIRTUAL_HOOKS['label'][0], 4) != pm.VIRTUAL_HOOKS['label'][1], 'the engine labels BPM\'s virtual settings'

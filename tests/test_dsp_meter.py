@@ -11,7 +11,7 @@ import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import dsp_meter
-from firmware import branch_target, built
+from firmware import assert_virtual, branch_target, built, built_e0, reader
 
 MODS = features.load()
 IDS = setting_ids.by_name()
@@ -41,7 +41,7 @@ def test_dsp_disp_setting():
     s, = dsp_meter.SETTINGS
     assert (s.key, s.label, s.values, s.default, s.max) == ('disp', b'DSP\nDisp', (b'Used/All', b'Free', b'Used%'), 0, 2)
     assert all(len(v) <= 8 and b'\n' not in v for v in s.values), 'a value shows 8 characters, on one line [verified on unit]'
-    assert DISP == 101, 'a unit keeps a setting\'s value by ID: never move it once a build has used it'
+    assert DISP == 0xd1, 'a unit keeps a setting\'s value by ID: never move it once a build has used it'
     assert dsp_meter.FLAG == 'HX_DSP_METER'
 
 
@@ -562,13 +562,10 @@ def test_browser_items_are_priced_as_the_model_table_says():
 
 
 @pytest.mark.firmware
-def test_build_sets_the_dsp_disp_label_and_limits():
-    read, _ = built({'HX_DSP_METER': '1'})
-    for tab in (pm.NAMES_LONG, pm.NAMES_SHORT):
-        assert read(tab + pm.NAME_LEN * DISP, 9) == b'DSP\nDisp\0'
-    tab, entry = pm.limits_entry(DISP)
-    snippet = tab + 2 * struct.unpack('<H', read(entry, 2))[0]
-    assert read(snippet, 8) == struct.pack('<4H', 0x2302, 0x2200, 0x2100, 0x2402)   # type 2, default 0, min 0, max 2
+def test_build_serves_dsp_disp_as_a_virtual_setting():
+    e0 = built_e0({'HX_DSP_METER': '1'})
+    assert_virtual(e0, dsp_meter, dsp_meter.SETTINGS[0])
+    assert not any(reader(e0)(pm.NAMES_LONG + pm.NAME_LEN * 101, pm.NAME_LEN)), 'its old real ID is left alone'
 
 
 @pytest.mark.firmware
@@ -578,7 +575,8 @@ def test_without_the_flag_the_edit_paint_and_dsp_disp_id_stay_stock():
     assert struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0] == dsp_meter.EDIT_PAINT
     assert struct.unpack('<I', read(dsp_meter.BROWSER_PAINT_LIT, 4))[0] == dsp_meter.BROWSER_PAINT
     assert read(dsp_meter.NAMES_X, 2) == dsp_meter.NAMES_X_STOCK
-    assert not any(read(pm.NAMES_LONG + pm.NAME_LEN * DISP, pm.NAME_LEN))
+    fn, stock = pm.VIRTUAL_HOOKS['get']
+    assert read(fn, len(stock)) == stock
 
 
 @pytest.mark.firmware
