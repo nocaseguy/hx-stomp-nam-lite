@@ -19,7 +19,7 @@
 .equ SCAN_B,  0x100000
 .equ SCAN_C,  0x200000
 .equ SCAN_D,  0x330000
-.equ ORIG,    0x8d9c9                  // the stock process code of primitive 0x271a (Deluxe Comp)
+.equ ORIG,    0x8d9c9                  // the stock process code of primitive 0x271a (Deluxe Comp, Rochester Comp)
 .equ ORIG_2719, 0x8d342                 // and of 0x2719 (LA Studio Comp) and 0x2710 (Kinky and Ampeg Opto Comps), which share it
 .equ SLICE,   256                       // words looked at per call
 .equ ORIG_CTRL_271A, 0x6100bd          // the stock control functions (compiled C, VISA code in DDR2)
@@ -42,7 +42,7 @@ FP_WN:    .space 1
 FP_WC:    .space 1                      // windows so far
 FP_LOG:   .space 53                     // what goes to words 200..252
 FP_LIST:  .space 96                     // candidate addresses + 1
-FP_KIND:  .space 1                      // the core being run: 0 Deluxe Comp (0x271a), 1 LA Studio Comp (0x2719), 2 Kinky or Ampeg Opto Comp (0x2710)
+FP_KIND:  .space 1                      // the core being run: 0 Deluxe or Rochester Comp (0x271a), 1 LA Studio Comp (0x2719), 2 Kinky or Ampeg Opto Comp (0x2710)
 FP_R0:    .space 1
 FP_I8:    .space 1                      // I8 as called: the core's pm words
 ORI_TAB:  .space 16                     // the state (I0) of each core whose output is its first input I1; both inputs change in the call [verified on unit]

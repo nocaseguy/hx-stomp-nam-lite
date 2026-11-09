@@ -277,6 +277,28 @@ def test_opto_cores_are_0x2710_and_write_over_their_first_input(model, n):
     nodes = [pmw[pmw[0] + 10 * k:pmw[0] + 10 * k + 10] for k in range(pmw[18])]
     assert [first for _, first in pc.core_paths(b, pmw, nodes, b0, 0x2710)] == [1] * n
 
+
+@pytest.mark.firmware
+@pytest.mark.parametrize('model, slots', (('HD2_CompressorRochesterCompMono', [12]),
+                                          ('HD2_CompressorRochesterCompStereo', [29, 22])))
+def test_rochester_cores_are_the_deluxe_core_its_knobs_drive(model, slots):
+    """The Rochester Comp runs 0x271a with no node-tree override, and Threshold, Ratio, Attack, Release and Knee reach each
+    core as pids 1, 2, 3, 4 and 8, as on the Deluxe Comp, whose state the meter reads."""
+    data = stock_l6ia()
+    e3, e4 = pa.get_entry_swapped(data, 3), pa.get_entry_swapped(data, 4)
+    m = pa.find_model(pa.parse_entry3_full(e3), model)
+    w4 = struct.unpack(f'<{len(e4) // 4}I', e4)
+    b, b0 = pa.entry4_blob.blob(w4, m['blob_index']), pa.entry4_blob.blob(w4, 0)
+    assert all(t == 0xffffffff for _, t, _, _ in list(pa.entry4_blob.nodes(b))[1:])
+    pmw = b[b[6]:b[6] + b[7]]
+    nodes = [pmw[pmw[0] + 10 * k:pmw[0] + 10 * k + 10] for k in range(pmw[18])]
+    cores = pc.core_paths(b, pmw, nodes, b0, 0x271a)
+    assert [b[path + 1] for path, _ in cores] == slots
+    for path, _ in cores:
+        pids = {pmw[nd[0] + 1] for nd in nodes if nd[3] == 1 and pmw[nd[0]] == path}
+        assert pids == {1, 2, 3, 4, 8}
+
+
 @pytest.mark.firmware
 def test_comp_patch_refuses_a_second_run(comp_patched):
     _, new = comp_patched
@@ -287,9 +309,9 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 # ---- the whole GR build, pinned as tests/test_firmware.py pins the default one
 
 GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
-    'HX_GR': 'efa74f11617259795fa24c214d3329f7',
-    'HX_GR HX_FRAMEPROBE': 'c161314152c69bf1976e0aa62a14de0e',
-    'HX_GR HX_CLICK': '40d403befa395dfa609825560d580c39',    # patch_click.py adds a model, which would drop knobs written before it
+    'HX_GR': 'c76fb826dd5864e6ca9a71f33ecba250',
+    'HX_GR HX_FRAMEPROBE': '11927154ae09afe3005fa719f28e2bcf',
+    'HX_GR HX_CLICK': '0ab742f1890af21e54b2a3280e7c14a6',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
