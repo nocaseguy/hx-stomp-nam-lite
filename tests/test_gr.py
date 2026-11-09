@@ -183,6 +183,17 @@ def test_probe_opto_meter_takes_la_attack_without_one():
     assert u2f(s.rd(FRAME + 252)) == pytest.approx(att ** 512, rel=1e-2)
 
 
+
+def test_probe_red_squeeze_meter_takes_la_times_without_any():
+    """No Red Squeeze knob reaches its core: Attack and Release stay the LA Studio Comp's 10 ms and 500 ms."""
+    s, sym = probe()
+    knobs(s, sym, 'CTRL_2710', 0x96000, 0, 0, 20)
+    for _ in range(64):
+        block(s, sym, 'ENTRY_2710', 0x96000, 0.5)
+    att, rel = u2f(s.rd(sym('LA_ATT'))), u2f(s.rd(sym('LA_REL')))
+    assert u2f(s.rd(FRAME + 251)) == pytest.approx(rel ** 1024, rel=1e-3)
+    assert u2f(s.rd(FRAME + 252)) == pytest.approx(att ** 512, rel=1e-2)
+
 # ---- --wrap-prim
 
 def registry(entries):
@@ -265,9 +276,10 @@ def test_kinky_core_is_0x2710_in_the_node_tree():
 
 
 @pytest.mark.firmware
-@pytest.mark.parametrize('model, n', (('HD2_CompressorOptoCompMono', 1), ('HD2_CompressorOptoCompStereo', 2)))
-def test_opto_cores_are_0x2710_and_write_over_their_first_input(model, n):
-    """The Ampeg Opto Comp's node tree runs 0x2710 on (audio, sidechain), its output over the audio, before the Blend mixer."""
+@pytest.mark.parametrize('model, n', (('HD2_CompressorOptoCompMono', 1), ('HD2_CompressorOptoCompStereo', 2),
+                                      ('HD2_CompressorRedSqueezeMono', 1), ('HD2_CompressorRedSqueezeStereo', 2)))
+def test_0x2710_cores_write_over_their_first_input(model, n):
+    """The Opto's and Red Squeeze's node trees run 0x2710 on (audio, sidechain), its output over the audio, before the dry mix."""
     data = stock_l6ia()
     e3, e4 = pa.get_entry_swapped(data, 3), pa.get_entry_swapped(data, 4)
     m = pa.find_model(pa.parse_entry3_full(e3), model)
@@ -275,7 +287,7 @@ def test_opto_cores_are_0x2710_and_write_over_their_first_input(model, n):
     b, b0 = pa.entry4_blob.blob(w4, m['blob_index']), pa.entry4_blob.blob(w4, 0)
     pmw = b[b[6]:b[6] + b[7]]
     nodes = [pmw[pmw[0] + 10 * k:pmw[0] + 10 * k + 10] for k in range(pmw[18])]
-    assert [first for _, first in pc.core_paths(b, pmw, nodes, b0, 0x2710)] == [1] * n
+    assert [(first, path is None) for path, first, _ in pc.core_paths(b, pmw, nodes, b0, 0x2710)] == [(1, 'RedSqueeze' in model)] * n
 
 
 @pytest.mark.firmware
@@ -293,8 +305,8 @@ def test_rochester_cores_are_the_deluxe_core_its_knobs_drive(model, slots):
     pmw = b[b[6]:b[6] + b[7]]
     nodes = [pmw[pmw[0] + 10 * k:pmw[0] + 10 * k + 10] for k in range(pmw[18])]
     cores = pc.core_paths(b, pmw, nodes, b0, 0x271a)
-    assert [b[path + 1] for path, _ in cores] == slots
-    for path, _ in cores:
+    assert [b[path + 1] for path, _, _ in cores] == slots
+    for path, _, _ in cores:
         pids = {pmw[nd[0] + 1] for nd in nodes if nd[3] == 1 and pmw[nd[0]] == path}
         assert pids == {1, 2, 3, 4, 8}
 
@@ -309,9 +321,9 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 # ---- the whole GR build, pinned as tests/test_firmware.py pins the default one
 
 GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
-    'HX_GR': 'c76fb826dd5864e6ca9a71f33ecba250',
-    'HX_GR HX_FRAMEPROBE': '11927154ae09afe3005fa719f28e2bcf',
-    'HX_GR HX_CLICK': '0ab742f1890af21e54b2a3280e7c14a6',    # patch_click.py adds a model, which would drop knobs written before it
+    'HX_GR': 'ac3b1adbf26991682c296b642a9d3d7a',
+    'HX_GR HX_FRAMEPROBE': 'e29e5b77815ad5780d24af735a128512',
+    'HX_GR HX_CLICK': '41ae933945980aef000173fe5624b22d',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
@@ -362,6 +374,7 @@ def test_gr_feature_chains_its_three_hooks():
 
 MODULE, FRAME_VA = 0x28e60000, 0x28e80000                # where the module and a frame sit in the emulator's SDRAM
 SET_COLOR, SET_POS, SET_SIZE, GET_VALUE, REDRAW = 0x28e24b98, 0x28e24af0, 0x28e24b28, 0x28e1f844, 0x28db8508
+LOCK, UNLOCK = 0x28e24970, 0x28e24ae8
 SETTERS = (SET_COLOR, SET_POS, SET_SIZE)
 DIVIDER = 0x2812a594
 OCT = 256 / (20 * math.log10(2))                         # 1/256 octaves per dB
@@ -387,6 +400,8 @@ class Meter:
         m.stub(SET_SIZE, lambda m: m.write(m.reg('r0') + 12, struct.pack('<2I', m.reg('r1'), m.reg('r2'))))
         m.stub(GET_VALUE, lambda m: (m.u32(m.reg('r1') + 4, 0), m.reg('r0', 0)))
         m.stub(REDRAW)
+        m.stub(LOCK)
+        m.stub(UNLOCK)
 
     def call(self, sym, *args):
         """(r0, r2) after the module's function sym."""

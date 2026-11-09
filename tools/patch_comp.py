@@ -22,6 +22,7 @@ COMP_MODELS = (   # (model, its compressor core's primitive: src/sharc/frame_pro
     ('HD2_CompressorKinkyCompMono', 0x2710), ('HD2_CompressorKinkyCompStereo', 0x2710),
     ('HD2_CompressorOptoCompMono', 0x2710), ('HD2_CompressorOptoCompStereo', 0x2710),
     ('HD2_CompressorRochesterCompMono', 0x271a), ('HD2_CompressorRochesterCompStereo', 0x271a),
+    ('HD2_CompressorRedSqueezeMono', 0x2710), ('HD2_CompressorRedSqueezeStereo', 0x2710),
 )
 GR_KNOBS = (   # (name, displayName, displayNameShort, value labels, default): integer lists, as Ratio
     ('GRPosition', 'Mtr Position', 'Mtr Pos', ('Middle', 'Top', 'Left', 'Bottom', 'Right'), 0),
@@ -165,9 +166,10 @@ def pmap_sizes(pm):
 
 
 def core_paths(b, pm, nodes, b0, prim):
-    """(path word, output-is-first-input) of each member running primitive `prim`, the compressor cores, by the path
-    words of the writers to them; the first is the GR knobs' target. The blob's node tree may override a member's
-    primitive (the Kinky Comp's core is 0x2710 there, 0x2719 in the composite) [verified on unit]."""
+    """(path word, output-is-first-input, member slot) of each member running primitive `prim`, the compressor cores,
+    by the path words of the writers to them, then by slot those no writer reaches (path None: the Red Squeeze's knobs
+    don't reach its core); the first is the GR knobs' target. The blob's node tree may override a member's primitive
+    (the Kinky Comp's core is 0x2710 there, 0x2719 in the composite) [verified on unit]."""
     members = pa.entry4_blob.parse_composite(b0, pa.entry4_blob.top_type(b))['members']
     types = [m['type_id'] for m in members]
     for slot, t, _, _ in list(pa.entry4_blob.nodes(b))[1:]:
@@ -178,9 +180,10 @@ def core_paths(b, pm, nodes, b0, prim):
         path = pm[nd[0]] if nd[3] == 1 else None
         if path is not None and b[path] == 1 and types[b[path + 1] - 1] == prim:
             m = members[b[path + 1] - 1]
-            out.setdefault(b[path + 1], (path, int(b0[m['out_off']] == b0[m['in_off']])))
-    if len(out) != types.count(prim):
-        raise SystemExit(f'{types.count(prim)} members run primitive {prim:#x}, {len(out)} have a writer')
+            out.setdefault(b[path + 1], (path, int(b0[m['out_off']] == b0[m['in_off']]), b[path + 1]))
+    for k, (t, m) in enumerate(zip(types, members)):
+        if t == prim:
+            out.setdefault(k + 1, (None, int(b0[m['out_off']] == b0[m['in_off']]), k + 1))
     return list(out.values())
 
 
@@ -205,7 +208,14 @@ def blob_add_knobs(b, first_slot, b0, prim):
     root = root.pop()
     c, nC = pm[4], pm[20]
     ct = [pm[c + 4 * k: c + 4 * k + 4] for k in range(nC)]
-    cores = core_paths(b, pm, nodes, b0, prim)
+    cores = []
+    for p, first_in, slot in core_paths(b, pm, nodes, b0, prim):
+        if p is None:                               # a top-level member's path {1, slot}, in the parameter map's data
+            p = po + len(pm)
+            pm += [1, slot]
+        cores.append((p, first_in))
+    if not cores:
+        raise SystemExit(f'no member runs primitive {prim:#x}')
     path = cores[0][0]
     n = len(GR_KNOBS)
     data = len(pm)                                  # the writers' data {path, pid, 1}, after the old tables
