@@ -170,6 +170,19 @@ def test_probe_kinky_meter_uses_its_attack_and_release():
     assert u2f(s.rd(FRAME + 252)) == pytest.approx(att ** 512, rel=1e-2)
 
 
+
+def test_probe_opto_meter_takes_la_attack_without_one():
+    """The Ampeg Opto Comp's knobs send its core only Release (pid 3): Attack stays the LA Studio Comp's 10 ms."""
+    s, sym = probe()
+    knobs(s, sym, 'CTRL_2710', 0x96000, 0, 0, 20)
+    ctrl(s, sym, 'CTRL_2710', 0x96000, 3, f2u(100.0))
+    for _ in range(64):
+        block(s, sym, 'ENTRY_2710', 0x96000, 0.5)
+    att, rel = u2f(s.rd(sym('LA_ATT'))), 1 - 2 * math.pi / 48 / 100
+    assert u2f(s.rd(FRAME + 251)) == pytest.approx(rel ** 1024, rel=1e-3)
+    assert u2f(s.rd(FRAME + 252)) == pytest.approx(att ** 512, rel=1e-2)
+
+
 # ---- --wrap-prim
 
 def registry(entries):
@@ -250,6 +263,20 @@ def test_kinky_core_is_0x2710_in_the_node_tree():
     assert pc.core_paths(b, pmw, nodes, b0, 0x2719) == []
 
 
+
+@pytest.mark.firmware
+@pytest.mark.parametrize('model, n', (('HD2_CompressorOptoCompMono', 1), ('HD2_CompressorOptoCompStereo', 2)))
+def test_opto_cores_are_0x2710_and_write_over_their_first_input(model, n):
+    """The Ampeg Opto Comp's node tree runs 0x2710 on (audio, sidechain), its output over the audio, before the Blend mixer."""
+    data = stock_l6ia()
+    e3, e4 = pa.get_entry_swapped(data, 3), pa.get_entry_swapped(data, 4)
+    m = pa.find_model(pa.parse_entry3_full(e3), model)
+    w4 = struct.unpack(f'<{len(e4) // 4}I', e4)
+    b, b0 = pa.entry4_blob.blob(w4, m['blob_index']), pa.entry4_blob.blob(w4, 0)
+    pmw = b[b[6]:b[6] + b[7]]
+    nodes = [pmw[pmw[0] + 10 * k:pmw[0] + 10 * k + 10] for k in range(pmw[18])]
+    assert [first for _, first in pc.core_paths(b, pmw, nodes, b0, 0x2710)] == [1] * n
+
 @pytest.mark.firmware
 def test_comp_patch_refuses_a_second_run(comp_patched):
     _, new = comp_patched
@@ -260,9 +287,9 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 # ---- the whole GR build, pinned as tests/test_firmware.py pins the default one
 
 GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
-    'HX_GR': 'cbb16963bbcf873676a061ec1820022d',
-    'HX_GR HX_FRAMEPROBE': 'a4852ff2dfad8ca8ad66078af5fe12de',
-    'HX_GR HX_CLICK': '15e9e3498ee7ac89a0ee966f2a911da0',    # patch_click.py adds a model, which would drop knobs written before it
+    'HX_GR': 'efa74f11617259795fa24c214d3329f7',
+    'HX_GR HX_FRAMEPROBE': 'c161314152c69bf1976e0aa62a14de0e',
+    'HX_GR HX_CLICK': '40d403befa395dfa609825560d580c39',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
