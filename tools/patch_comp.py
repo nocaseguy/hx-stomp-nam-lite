@@ -21,6 +21,7 @@ COMP_MODELS = (   # (model, its compressor core's primitive: src/sharc/frame_pro
     ('HD2_CompressorLAStudioCompMono', 0x2719), ('HD2_CompressorLAStudioCompStereo', 0x2719),
     ('HD2_CompressorKinkyCompMono', 0x2710), ('HD2_CompressorKinkyCompStereo', 0x2710),
     ('HD2_CompressorOptoCompMono', 0x2710), ('HD2_CompressorOptoCompStereo', 0x2710),
+    ('HD2_CompressorRochesterCompMono', 0x271a), ('HD2_CompressorRochesterCompStereo', 0x271a),
 )
 GR_KNOBS = (   # (name, displayName, displayNameShort, value labels, default): integer lists, as Ratio
     ('GRPosition', 'Mtr Position', 'Mtr Pos', ('Middle', 'Top', 'Left', 'Bottom', 'Right'), 0),
