@@ -59,6 +59,9 @@ VIRTUAL = (   # (virtual ID, container ID, first bit, bits, the '<feature>.<key>
     (0xd4, 108, 8, 4, 'long_press.fs3', ''),
     (0xd5, 108, 12, 4, 'long_press.fs4', ''),
     (0xd6, 108, 16, 4, 'long_press.fs5', ''),
+    (0xd7, 109, 0, 4, 'breathing_line.color', ''),
+    (0xd8, 109, 4, 4, 'breathing_line.motion', ''),
+    (0xd9, 109, 8, 4, 'breathing_line.speed', ''),
 )
 
 
