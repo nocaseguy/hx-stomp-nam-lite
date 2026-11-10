@@ -465,6 +465,10 @@ class Patch:
     def owned(self):
         return self.__dict__.setdefault('_owned', {})
 
+    @property
+    def modules(self):              # path: Module, so a feature can read the symbols of one built before it (ORDER)
+        return self.__dict__.setdefault('_modules', {})
+
     def off(self, va, n):
         return pa._e0_vaddr_to_foff(self.segs, va, n)
 
@@ -548,7 +552,8 @@ class Patch:
                 with open(os.path.join(d, name), 'w') as f:
                     f.write(text)
             code, symbols = m4asm.assemble_module(src, include=(d, os.path.dirname(src)))
-        return Module(self.add(code), symbols)
+        self.modules[path] = Module(self.add(code), symbols)
+        return self.modules[path]
 
     def _not_owned(self, site):
         if site in self.owned:
