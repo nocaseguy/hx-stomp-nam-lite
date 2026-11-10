@@ -5,6 +5,7 @@
 .syntax unified
 .thumb
 .include "customos.inc"
+.include "gr.inc"                   @ GR_SHOWN: the gain-reduction meter's shown word, or 0 in a build without it
 .equ SEGMENTS, 0x2812a594           @ the stock divider: four 80 px rectangle widgets, 0x1c apart
 .equ STRIP, 4                       @ px
 .equ STRIPS, 80
@@ -57,6 +58,14 @@ bl_paint:                           @ after the Home paint (framebuffer): the st
     movs r2, #SETTING_BREATHING_LINE_MOTION_DEFAULT
     bl customos_setting_get
     movs r6, r0
+.if GR_SHOWN
+    ldr r1, =GR_SHOWN               @ a compressor's meter shows: the line holds still, as at Line Motion Off
+    ldr r1, [r1]
+    cmp r1, #0
+    it ne
+    movne r6, #0
+    cmp r6, #0
+.endif
     bne bl_animate
     ldr r5, [r9]
     cmp r5, #1

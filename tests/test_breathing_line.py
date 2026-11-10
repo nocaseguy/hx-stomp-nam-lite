@@ -8,7 +8,7 @@ import pytest
 import features
 import patch_menu as pm
 import setting_ids
-from features import breathing_line as bl
+from features import breathing_line as bl, gr
 from firmware import assert_virtual, reader, stock_e0
 
 RATES = [round(2 ** 32 / (ms * 1000)) for ms in (8000, 6000, 4800, 4000, 3200, 2500, 2000, 1500, 1100, 800)]
@@ -46,6 +46,23 @@ def test_build_serves_the_settings_virtually_and_hooks_the_paint_and_the_tick():
     read, stock = reader(new), reader(e0)
     assert read(bl.HOME_PAINT_LIT, 4) != stock(bl.HOME_PAINT_LIT, 4)
     assert read(bl.LED_TICK_CALL, 4) != stock(bl.LED_TICK_CALL, 4)
+
+
+@pytest.mark.firmware
+def test_a_build_with_the_gr_meter_hands_the_line_its_shown_word(monkeypatch):
+    """GR is built first (ORDER), so the line gets the address of the word that says its meter shows; without GR, 0."""
+    assert gr.ORDER < getattr(bl, 'ORDER', 100)
+    seen, real = {}, pm.Patch.module
+
+    def module(self, path, inc=None):
+        seen[path] = (real(self, path, inc), inc)
+        return seen[path][0]
+    monkeypatch.setattr(pm.Patch, 'module', module)
+    pm.menu_entry0(stock_e0(), None, {'HX_BREATHING_LINE': '1', 'HX_GR': '1'})
+    assert seen['src/m4/breathing_line.s'][1] == {'gr.inc': f'.equ GR_SHOWN, {seen[gr.MODULE][0]["data"] + gr.SHOWN:#x}\n'}
+    seen.clear()
+    pm.menu_entry0(stock_e0(), None, {'HX_BREATHING_LINE': '1'})
+    assert seen['src/m4/breathing_line.s'][1] == {'gr.inc': '.equ GR_SHOWN, 0x0\n'}
 
 
 # --- the handlers, run in unicorn: a model of each first ---
@@ -187,8 +204,20 @@ class Line:
 @pytest.fixture
 def line(m4emu):
     if 'line' not in _code:
-        _code['line'] = m4emu.assemble('src/m4/breathing_line.s', features.load(), setting_ids.by_name())
+        _code['line'] = m4emu.assemble('src/m4/breathing_line.s', features.load(), setting_ids.by_name(),
+                                       inc={'gr.inc': '.equ GR_SHOWN, 0\n'})
     return Line(m4emu, *_code['line'])
+
+
+GR_SHOWN = 0x28e7f000               # the GR meter's shown word, in a build with both
+
+
+@pytest.fixture
+def line_gr(m4emu):
+    if 'line_gr' not in _code:
+        _code['line_gr'] = m4emu.assemble('src/m4/breathing_line.s', features.load(), setting_ids.by_name(),
+                                          inc={'gr.inc': f'.equ GR_SHOWN, {GR_SHOWN:#x}\n'})
+    return Line(m4emu, *_code['line_gr'])
 
 
 PHASES = (0, 1, 0x1234, 0x3fff, 0x4000, 0x7fff, 0x8000, 0x8001, 0xa000, 0xbfff, 0xc000, 0xfeff, 0xffff)
@@ -312,6 +341,19 @@ def test_off_draws_nothing_and_hands_the_line_back_to_the_stock_segments(line):
         line.segment(k)
     assert line.paint(motion=0) == [] and line.data(0) == 0
     assert not any(line.dirty(k) for k in range(4))
+
+
+def test_line_holds_still_while_a_gr_meter_shows(line_gr):
+    """User decision: the line yields to a compressor's meter, as at Line Motion Off, and runs again once the meter is off."""
+    line_gr.m.u32(GR_SHOWN, 0)
+    assert len(line_gr.paint(motion=3)) == 80 and line_gr.data(0) == 1
+    line_gr.m.u32(GR_SHOWN, 1)
+    assert line_gr.paint(motion=3) == []
+    assert all(line_gr.dirty(k) for k in range(4)) and line_gr.data(0) == 2, 'the stock segments back, for the meter'
+    assert line_gr.paint(motion=3) == [] and line_gr.data(0) == 0
+    assert ticks(line_gr, 100) == 0, 'no repaints while it holds'
+    line_gr.m.u32(GR_SHOWN, 0)
+    assert len(line_gr.paint(motion=3)) == 80 and line_gr.data(0) == 1
 
 
 def ticks(line, n):

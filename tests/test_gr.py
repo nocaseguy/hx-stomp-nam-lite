@@ -524,6 +524,20 @@ def test_m4_widgets_change_only_in_the_paint_under_the_widget_lock(m4emu, pos):
     assert m.word('data', 4) == 1 or m.m.calls(REDRAW), 'a changed layout asks for a repaint'
 
 
+def test_m4_shown_word_says_whether_the_meter_shows(m4emu):
+    """The breathing line reads data + gr.SHOWN (tools/features/breathing_line.py): nonzero while the meter shows."""
+    import features.gr as gr
+    m = Meter(m4emu)
+    m.frame(1.0, 0.5, window=1, pos=1)
+    assert m.word('data', gr.SHOWN // 4) == 1
+    m.frame(1.0, 0.5, window=2, pos=1, thk=0)
+    assert m.word('data', gr.SHOWN // 4) == 0
+    m.frame(1.0, 0.5, window=3, pos=0)
+    assert m.word('data', gr.SHOWN // 4) == 1
+    m.frame(1.0, 0.5, window=4, knobs=False)
+    assert m.word('data', gr.SHOWN // 4) == 0
+
+
 def test_m4_off_without_knobs_or_at_thickness_0(m4emu):
     m = Meter(m4emu)
     m.frame(1.0, 0.1, window=1, pos=1, thk=0)
