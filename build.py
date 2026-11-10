@@ -97,7 +97,10 @@ def main():
     image = os.path.join(build, "nam_lite.l6ia")
     py = sys.executable
 
-    run(py, KERNEL, "-o", asm, *([] if "--no-check" in argv else ["--check"]))
+    if os.environ.get("HX_FRAMEPROBE"):
+        asm = os.path.join(HERE, "src", "sharc", "frame_probe.asm")
+    else:
+        run(py, KERNEL, "-o", asm, *([] if "--no-check" in argv else ["--check"]))
     run(py, "tools/patch_amp.py", "add-model", stock, base, *MODEL)
     run(py, "tools/patch_amp.py", "add-fx-model", base, titled, *FX_MODEL)
     os.replace(titled, base)
@@ -106,9 +109,15 @@ def main():
     if unit == "HX_Stomp":
         run(py, "tools/patch_menu.py", base, titled, "--cwd", os.getcwd())
         os.replace(titled, base)
-    run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
+    wrap = ["--wrap-prim", "0x271a:0x8d9c9", "--wrap-prim", "0x2719:0x8d342",
+                                  "--wrap-prim", "0x2710:0x8d342"] if os.environ.get("HX_FRAMEPROBE") else []
+    run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm, *wrap)
     if os.environ.get("HX_CLICK") and unit == "HX_Stomp":
         run(py, "tools/patch_click.py", image, titled)
+        os.replace(titled, image)
+    if os.environ.get("HX_GR") and unit == "HX_Stomp":
+        # last: every step that adds a model rebuilds the Entry 3 and 4 tails the knobs live in
+        run(py, "tools/patch_comp.py", image, titled)
         os.replace(titled, image)
     report = run(py, "tools/l6ia_verify.py", image)
     if "ALL OK" not in report:

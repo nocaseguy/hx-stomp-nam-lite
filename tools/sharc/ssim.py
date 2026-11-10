@@ -554,6 +554,10 @@ class Sim:
             elif op == 0xA5: self.u[n] = ftz(f2b(fx))
             elif op == 0xBD: self.setF(n, fx * exp2f(max(-127, min(127, s32(ry)))))
             elif op == 0xC1: self.setR(n, ((rx >> 23) & 0xFF) - 127)
+            elif op == 0xAD:                                  # MANT: the fraction with its hidden bit, from bit 31
+                res = 0 if (rx >> 23) & 0xFF == 0 else (0x80000000 | (rx & 0x7FFFFF) << 8)
+                self.u[n] = res
+                self.az, self.an = res == 0, False
             elif op == 0xC4:
                 if RECIPS_HW:
                     self.u[n] = recips_hw(rx)
@@ -587,6 +591,9 @@ class Sim:
                 prod = self.R(x) * self.R(y)
                 self.mrf[0], self.mrf[1], self.mrf[2] = prod & M32, (prod >> 32) & M32, 0
             elif op == 0x70: self.u[n] = (s32(self.R(x)) * s32(self.R(y))) & M32
+            elif op in (0x78, 0x79):                          # Rn = Rx * Ry (SSF), (SSFR): the product's top 32 bits as 1.31
+                prod = s32(self.R(x)) * s32(self.R(y)) << 1
+                self.u[n] = ((prod + (1 << 31 if op & 1 else 0)) >> 32) & M32
             elif op == 0xB4:                                  # MRF = MRF + Rx * Ry (SSI): 80 bits
                 acc = (sx(self.mrf[2] & 0xFFFF, 16) << 64) | (self.mrf[1] << 32) | self.mrf[0]
                 acc += s32(self.R(x)) * s32(self.R(y))

@@ -14,6 +14,7 @@ A feature module may have:
              p.add() (bytes into the code cave), p.module() (an M4 .s assembled at build time), p.chain_ptr(), p.chain_bl() and
              p.chain_entry() (handlers on a hook other features may share), p.own_entry() and p.own_call() (a function start or
              a call for this feature alone, for a handler no chain can take), p.id('<feature>.<key>'), p.input('<VAR>'),
+             p.modules (each module assembled so far, by path: a feature reads one built before it, by ORDER),
              p.entry(n) (Entry n by offset: read(), expect(), expect_md5(), and put(), checked for overlap as p.put() is; Entry 8
              also add_item()) and p.add_glyph() (a glyph in an empty slot of an Entry 7 font); tools/image_store.py reads Entries 7
              and 8.

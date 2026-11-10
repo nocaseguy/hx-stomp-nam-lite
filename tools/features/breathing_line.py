@@ -1,5 +1,5 @@
 """Breathing line: the Home screen's divider animated in Line Motion's pattern, Line Color's colours and at Line Speed (src/m4/breathing_line.s)."""
-from features import Setting
+from features import Setting, gr
 
 FLAG = 'HX_BREATHING_LINE'
 SETTINGS = (
@@ -15,6 +15,8 @@ LED_TICK_CALL, LED_SLEEP = 0x28db7f44, 0x28e24c58                    # the LED t
 
 
 def apply(p):
-    m = p.module('src/m4/breathing_line.s')
+    meter = p.modules.get(gr.MODULE)    # the line holds still while a compressor's gain-reduction meter shows (user decision)
+    shown = meter['data'] + gr.SHOWN if meter else 0
+    m = p.module('src/m4/breathing_line.s', inc={'gr.inc': f'.equ GR_SHOWN, {shown:#x}\n'})
     p.chain_ptr(HOME_PAINT_LIT, HOME_PAINT, after=m['bl_paint'])
     p.chain_bl(LED_TICK_CALL, LED_SLEEP, after=m['bl_tick'])

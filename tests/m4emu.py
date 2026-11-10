@@ -24,14 +24,16 @@ BX_LR = struct.pack('<H', 0x4770)
 CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
 
 
-def assemble(path, mods, ids, virt_set=None):
+def assemble(path, mods, ids, virt_set=None, inc=None):
     """(code, symbols) of a module, with the customos.inc patch_menu.py would generate (virt_set: the virtual settings engine's store
-    it would name, a stub's address in a test); skips the test without clang."""
+    it would name, a stub's address in a test) and the files of inc ({name: text}), as Patch.module takes them; skips the test
+    without clang."""
     if not os.path.exists(m4asm.CLANG):
         pytest.skip('no Command Line Tools clang')
     with tempfile.TemporaryDirectory() as d:
-        with open(os.path.join(d, 'customos.inc'), 'w') as f:
-            f.write(pm.customos_inc(mods, ids, virt_set))
+        for name, text in {'customos.inc': pm.customos_inc(mods, ids, virt_set), **(inc or {})}.items():
+            with open(os.path.join(d, name), 'w') as f:
+                f.write(text)
         return m4asm.assemble_module(os.path.join(pm.ROOT, path), include=(d, os.path.dirname(os.path.join(pm.ROOT, path))))
 
 

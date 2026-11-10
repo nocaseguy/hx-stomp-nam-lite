@@ -1,0 +1,733 @@
+// frame_probe.asm - a wrapper around the Deluxe Comp's core (primitive 0x271a) that calls the stock
+// process code, then looks for the DSP's outgoing SPI frames in memory and writes into their
+// unused tail what it saw: the registers the stock code was called with and samples of the
+// buffers they point to (a test image only).
+//
+// A frame is 256 words: FACEF00D first, D00FECAF last. Once per block it scans a slice
+// of internal and external memory for the first word (and its halfword-swapped form),
+// keeps the addresses whose word 255 is the matching last word, and writes into words
+// 200..202 of each: 600DF00D, a tag, the call count. The M4's receive hook then shows
+// whether those words arrive.
+
+.equ MAGIC1,  0xFACEF00D
+.equ MAGIC2,  0xF00DFACE
+.equ TRAIL1,  0xD00FECAF
+.equ TRAIL2,  0xECAFD00F
+.equ PEYEN,   0x200000
+.equ BDCST9,  0x400000
+.equ SCAN_A,  0x80000                   // internal RAM, then the DDR2 the heaps use
+.equ SCAN_B,  0x100000
+.equ SCAN_C,  0x200000
+.equ SCAN_D,  0x330000
+.equ ORIG,    0x8d9c9                  // the stock process code of primitive 0x271a (Deluxe Comp, Rochester Comp)
+.equ ORIG_2719, 0x8d342                 // and of 0x2719 (LA Studio Comp) and 0x2710 (Kinky Comp, Ampeg Opto Comp, Red Squeeze), which share it
+.equ SLICE,   256                       // words looked at per call
+.equ ORIG_CTRL_271A, 0x6100bd          // the stock control functions (compiled C, VISA code in DDR2)
+.equ ORIG_CTRL_2719, 0x60cc71
+.equ ORIG_CTRL_2710, 0x60cf8e
+.equ ORI_N,   16
+.equ KK_N,    16
+.equ GR_PID,  100                       // patch_comp.py's GR Position, Direction and Thickness writers: pids 100..102, past every core's own
+.equ GR_TAG,  0x6B000000
+.equ WINDOW,  64                        // blocks per window peak: longer than a cycle of a low E; 1024 samples, as the Release power assumes
+
+.section dm 0xe4850
+FP_SAVE:  .space 24
+FP_CUR:   .space 1                      // the next address to look at (0: not started)
+FP_CALLS: .space 1
+FP_N:     .space 1                      // candidates
+FP_WA:    .space 1                      // the window peaks so far: A before, B after
+FP_WB:    .space 1
+FP_WN:    .space 1
+FP_WC:    .space 1                      // windows so far
+FP_LOG:   .space 53                     // what goes to words 200..252
+FP_LIST:  .space 96                     // candidate addresses + 1
+FP_KIND:  .space 1                      // the core being run: 0 Deluxe or Rochester Comp (0x271a), 1 LA Studio Comp (0x2719), 2 Kinky Comp, Ampeg Opto Comp or Red Squeeze (0x2710)
+FP_R0:    .space 1
+FP_I8:    .space 1                      // I8 as called: the core's pm words
+ORI_TAB:  .space 16                     // the state (I0) of each core whose output is its first input I1; both inputs change in the call [verified on unit]
+LA_ATT:   .word 0x3F7CABBA                // the meter's fixed Attack and Release for the LA Studio Comp (10 ms, 500 ms), as per-sample coefficients
+LA_REL:   .word 0x3F7FEED8
+GR_PACK:  .space 1
+GR_CORE:  .space 1                      // the state (I0) of the core the meter shows: the last whose Mtr Thk was set above 0
+GR_MISS:  .space 1                      // other cores' calls since it last ran: past 64 it is gone (another preset)
+KN_TAB:   .space 65                     // per core: its state, then its Mtr Pos, Dir and Thk; then the next entry to replace
+KK_TAB:   .space 65                     // per 0x2710 core: its state, its Attack and Release as the meter's coefficients, 0; then the next
+FC_R3:    .space 1
+FS_BASE:  .space 1
+
+.section pm 0x0c4ef8
+CUSTOM_AMP_ENTRY:
+ENTRY_271A:
+    DM(FP_R0) = R0;
+    R0 = 0;
+    JUMP fp_entry;
+ENTRY_2719:
+    DM(FP_R0) = R0;
+    R0 = 1;
+    JUMP fp_entry;
+ENTRY_2710:
+    DM(FP_R0) = R0;
+    R0 = 2;
+fp_entry:
+    DM(FP_KIND) = R0;
+    R0 = DM(FP_R0);
+    DM(FP_I8) = I8;
+    DM(FP_LOG + 3) = I1;                // as called
+    DM(FP_LOG + 4) = I2;
+    DM(FP_LOG + 5) = I3;
+    DM(FP_LOG + 6) = I0;
+    DM(FP_SAVE + 0) = MODE1;
+    BIT CLR MODE1 PEYEN | BDCST9;
+    NOP;
+    DM(FP_SAVE + 1) = R0;
+    DM(FP_SAVE + 2) = R1;
+    DM(FP_SAVE + 9) = I4;
+    I4 = DM(FP_LOG + 3);                // the largest sample of each 16 words they point to, before
+    CALL fp_max;
+    DM(FP_LOG + 7) = R1;
+    I4 = DM(FP_LOG + 4);
+    CALL fp_max;
+    DM(FP_LOG + 8) = R1;
+    I4 = DM(FP_LOG + 5);
+    CALL fp_max;
+    DM(FP_LOG + 9) = R1;
+    R0 = DM(FP_KIND);
+    R0 = PASS R0;
+    R0 = DM(FP_SAVE + 1);
+    R1 = DM(FP_SAVE + 2);
+    I4 = DM(FP_SAVE + 9);
+    MODE1 = DM(FP_SAVE + 0);
+    NOP;
+    IF NE JUMP fp_la;
+    CALL ORIG;
+    JUMP fp_ran;
+fp_la:
+    CALL ORIG_2719;
+fp_ran:
+    DM(FP_SAVE + 0) = MODE1;
+    BIT CLR MODE1 PEYEN | BDCST9;
+    NOP;
+    DM(FP_SAVE + 1) = R0;
+    DM(FP_SAVE + 2) = R1;
+    DM(FP_SAVE + 3) = R2;
+    DM(FP_SAVE + 4) = R3;
+    DM(FP_SAVE + 5) = R4;
+    DM(FP_SAVE + 6) = R5;
+    DM(FP_SAVE + 7) = R6;
+    DM(FP_SAVE + 8) = R7;
+    DM(FP_SAVE + 9) = I4;
+    DM(FP_SAVE + 10) = I5;
+    DM(FP_SAVE + 11) = L4;
+    DM(FP_SAVE + 12) = L5;
+    DM(FP_SAVE + 15) = I6;
+    DM(FP_SAVE + 16) = L6;
+    L4 = 0; L5 = 0; L6 = 0;
+
+    R0 = DM(FP_LOG + 6);                // only the metered core is measured: other compressors, the Busy One amps and the Sweep Echo run these cores too
+    R1 = DM(GR_CORE);
+    COMP(R0, R1);
+    IF EQ JUMP fp_mine;
+    R0 = DM(GR_MISS);
+    R1 = 65;
+    COMP(R0, R1);
+    IF GE JUMP fp_pack;
+    R0 = R0 + 1;
+    DM(GR_MISS) = R0;
+    JUMP fp_pack;
+fp_mine:
+    R0 = 0;
+    DM(GR_MISS) = R0;
+
+    I4 = DM(FP_LOG + 3);                // and after
+    CALL fp_max;
+    DM(FP_LOG + 10) = R1;
+    I4 = DM(FP_LOG + 4);
+    CALL fp_max;
+    DM(FP_LOG + 11) = R1;
+    R0 = DM(0, I4);
+    DM(FP_LOG + 13) = R0;
+    I4 = DM(FP_LOG + 5);
+    CALL fp_max;
+    DM(FP_LOG + 12) = R1;
+    R0 = DM(0, I4);
+    DM(FP_LOG + 14) = R0;
+    R0 = DM(1, I4);
+    DM(FP_LOG + 15) = R0;
+    R0 = DM(FP_LOG + 6);                // the output is I2, or I1 for a core in ORI_TAB (patch_comp.py's pid GR_PID + 3)
+    I4 = ORI_TAB;
+    R2 = ORI_N;
+fp_ori:
+    R1 = DM(I4, 1);
+    COMP(R0, R1);
+    IF EQ JUMP fp_out1;
+    R2 = R2 - 1;
+    IF NE JUMP fp_ori;
+    JUMP fp_outb;
+fp_out1:
+    R0 = DM(FP_LOG + 10);
+    DM(FP_LOG + 11) = R0;
+fp_outb:
+    R0 = DM(FP_KIND);
+    R0 = PASS R0;
+    IF NE JUMP fp_peaks;
+    I4 = DM(FP_I8);                     // the Deluxe core's gain, PM(1, I8) [verified offline]: as A = 1 / gain, B = 1, its reduction even on a pick's attack
+    F1 = DM(1, I4);
+    F1 = ABS F1;
+    R0 = 0x358637BD;                    // 1e-6: -120 dB
+    F1 = MAX(F0, F1);
+    F0 = RECIPS F1;
+    DM(FP_LOG + 7) = R0;
+    R0 = 0x3F800000;
+    DM(FP_LOG + 11) = R0;
+fp_peaks:
+
+    R0 = DM(FP_LOG + 7);                // window peaks: per-block peaks of input and output are taken at
+    R1 = DM(FP_WA);                     // different points of the waveform when the core delays its output
+    F1 = MAX(F0, F1);
+    DM(FP_WA) = R1;
+    R0 = DM(FP_LOG + 11);
+    R1 = DM(FP_WB);
+    F1 = MAX(F0, F1);
+    DM(FP_WB) = R1;
+    R0 = DM(FP_WN);
+    R0 = R0 + 1;
+    R1 = WINDOW;
+    COMP(R0, R1);
+    IF LT JUMP fp_wkeep;
+    R1 = DM(FP_WA);
+    DM(FP_LOG + 16) = R1;
+    R1 = DM(FP_WB);
+    DM(FP_LOG + 17) = R1;
+    R1 = DM(FP_WC);                     // a new window, for the M4 to tell apart from repeated frames
+    R1 = R1 + 1;
+    DM(FP_WC) = R1;
+    DM(FP_LOG + 50) = R1;
+    R2 = 2;                             // the comp's Release, a per-sample coefficient: to the power of a window's 1024 samples
+    CALL fp_coef;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    DM(FP_LOG + 51) = R1;
+    R2 = 1;                             // the comp's Attack: to the power of half a window, the meter's rise twice its time constant
+    CALL fp_coef;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    F1 = F1 * F1;
+    DM(FP_LOG + 52) = R1;
+    R0 = 0;
+    DM(FP_WA) = R0;
+    DM(FP_WB) = R0;
+fp_wkeep:
+    DM(FP_WN) = R0;
+
+    I4 = DM(FP_LOG + 6);                // the core's state: 16 words at I0, then 16 at I3, as called
+    I5 = FP_LOG + 18;
+    LCNTR = 16, DO fp_s0 UNTIL LCE;
+      R0 = DM(I4, 1);
+fp_s0: DM(I5, 1) = R0;
+    I4 = DM(FP_LOG + 5);
+    LCNTR = 16, DO fp_s1 UNTIL LCE;
+      R0 = DM(I4, 1);
+fp_s1: DM(I5, 1) = R0;
+
+fp_pack:
+    R0 = DM(GR_CORE);                   // GR_TAG, Position, Direction, Thickness in bytes 3..0; 0 with no metered core
+    R0 = PASS R0;
+    IF EQ JUMP fp_bad;
+    R1 = DM(GR_MISS);
+    R2 = 64;
+    COMP(R1, R2);
+    IF GT JUMP fp_bad;
+    I4 = KN_TAB;
+    R2 = 16;
+fp_kn:
+    R1 = DM(0, I4);
+    COMP(R0, R1);
+    IF EQ JUMP fp_knf;
+    MODIFY(I4, 4);
+    R2 = R2 - 1;
+    IF NE JUMP fp_kn;
+    JUMP fp_bad;
+fp_knf:
+    R0 = 0;
+    R1 = DM(1, I4);
+    R2 = 4;
+    CALL gr_inrange;
+    R1 = DM(2, I4);
+    R2 = 1;
+    CALL gr_inrange;
+    R1 = DM(3, I4);
+    R2 = 20;
+    CALL gr_inrange;
+    R0 = PASS R0;
+    IF NE JUMP fp_bad;
+    R0 = DM(1, I4);
+    R0 = LSHIFT R0 BY 16;
+    R1 = DM(2, I4);
+    R1 = LSHIFT R1 BY 8;
+    R0 = R0 OR R1;
+    R1 = DM(3, I4);
+    R0 = R0 OR R1;
+    R1 = GR_TAG;
+    R0 = R0 OR R1;
+    JUMP fp_nok;
+fp_bad:
+    R0 = 0;
+fp_nok:
+    DM(GR_PACK) = R0;
+
+    R7 = DM(FP_CALLS);
+    R7 = R7 + 1;
+    DM(FP_CALLS) = R7;
+
+    // ---- look at the next slice
+    R1 = DM(FP_CUR);
+    R1 = PASS R1;
+    IF NE JUMP fp_have;
+    R1 = SCAN_A;
+fp_have:
+    R2 = SCAN_D;
+    COMP(R1, R2);
+    IF GE JUMP fp_write;                // all looked at
+    I4 = R1;
+    I5 = FP_LIST;
+    R0 = DM(FP_N);
+    R6 = I5;
+    R6 = R6 + R0;
+    I5 = R6;                            // the end of the candidates so far
+    R3 = MAGIC1;
+    R4 = MAGIC2;
+    LCNTR = SLICE, DO fp_scan UNTIL LCE;
+      R5 = DM(I4, 1);
+      R2 = I4;
+      COMP(R5, R3);
+      IF EQ DM(I5, 1) = R2;
+      COMP(R5, R4);
+fp_scan: IF EQ DM(I5, 1) = R2;
+    R6 = I5;
+    R2 = FP_LIST;
+    R6 = R6 - R2;
+    R2 = 90;                            // the list is full: stop adding
+    COMP(R6, R2);
+    IF LE JUMP fp_nf;
+    R6 = 90;
+fp_nf:
+    DM(FP_N) = R6;
+    R1 = I4;
+    R2 = SCAN_B;
+    COMP(R1, R2);
+    IF NE JUMP fp_cstore;
+    R1 = SCAN_C;                        // internal RAM done: on to the DDR2
+fp_cstore:
+    DM(FP_CUR) = R1;
+
+    // ---- the test pattern into every candidate whose word 255 closes the frame
+fp_write:
+    R0 = DM(FP_N);
+    R0 = PASS R0;
+    IF EQ JUMP fp_out;
+    I5 = FP_LIST;
+    R5 = 0;                             // the candidate's number
+    LCNTR = R0, DO fp_wr UNTIL LCE;
+      R1 = DM(I5, 1);
+      R1 = R1 - 1;
+      I4 = R1;
+      R2 = DM(I4, 0);
+      R3 = MAGIC1;
+      COMP(R2, R3);
+      IF EQ JUMP fp_f1;
+      R3 = MAGIC2;
+      COMP(R2, R3);
+      IF NE JUMP fp_skip;
+      R3 = TRAIL2;
+      R6 = 0xF00D600D;
+      JUMP fp_chk;
+fp_f1:
+      R3 = TRAIL1;
+      R6 = 0x600DF00D;
+fp_chk:
+      R2 = DM(255, I4);
+      COMP(R2, R3);
+      IF NE JUMP fp_skip;
+      DM(200, I4) = R6;
+      R2 = DM(FP_N);
+      R2 = LSHIFT R2 BY 8;
+      R2 = R2 OR R5;
+      R3 = 0xC0DE0000;
+      R2 = R2 OR R3;
+      DM(201, I4) = R2;
+      DM(202, I4) = R7;
+      R2 = DM(FP_LOG + 3);
+      DM(203, I4) = R2;
+      R2 = DM(FP_LOG + 4);
+      DM(204, I4) = R2;
+      R2 = DM(FP_LOG + 5);
+      DM(205, I4) = R2;
+      R2 = DM(FP_LOG + 6);
+      DM(206, I4) = R2;
+      R2 = DM(FP_LOG + 7);
+      DM(207, I4) = R2;
+      R2 = DM(FP_LOG + 8);
+      DM(208, I4) = R2;
+      R2 = DM(FP_LOG + 9);
+      DM(209, I4) = R2;
+      R2 = DM(FP_LOG + 10);
+      DM(210, I4) = R2;
+      R2 = DM(FP_LOG + 11);
+      DM(211, I4) = R2;
+      R2 = DM(FP_LOG + 12);
+      DM(212, I4) = R2;
+      R2 = DM(FP_LOG + 13);
+      DM(213, I4) = R2;
+      R2 = DM(FP_LOG + 14);
+      DM(214, I4) = R2;
+      R2 = DM(FP_LOG + 15);
+      DM(215, I4) = R2;
+      R2 = DM(FP_LOG + 16);
+      DM(216, I4) = R2;
+      R2 = DM(FP_LOG + 17);
+      DM(217, I4) = R2;
+      R2 = DM(GR_PACK);                 // in 218, the state copy's: a tag in word 253 never reached the M4
+      DM(218, I4) = R2;
+      R2 = DM(FP_LOG + 19);
+      DM(219, I4) = R2;
+      R2 = DM(FP_LOG + 20);
+      DM(220, I4) = R2;
+      R2 = DM(FP_LOG + 21);
+      DM(221, I4) = R2;
+      R2 = DM(FP_LOG + 22);
+      DM(222, I4) = R2;
+      R2 = DM(FP_LOG + 23);
+      DM(223, I4) = R2;
+      R2 = DM(FP_LOG + 24);
+      DM(224, I4) = R2;
+      R2 = DM(FP_LOG + 25);
+      DM(225, I4) = R2;
+      R2 = DM(FP_LOG + 26);
+      DM(226, I4) = R2;
+      R2 = DM(FP_LOG + 27);
+      DM(227, I4) = R2;
+      R2 = DM(FP_LOG + 28);
+      DM(228, I4) = R2;
+      R2 = DM(FP_LOG + 29);
+      DM(229, I4) = R2;
+      R2 = DM(FP_LOG + 30);
+      DM(230, I4) = R2;
+      R2 = DM(FP_LOG + 31);
+      DM(231, I4) = R2;
+      R2 = DM(FP_LOG + 32);
+      DM(232, I4) = R2;
+      R2 = DM(FP_LOG + 33);
+      DM(233, I4) = R2;
+      R2 = DM(FP_LOG + 34);
+      DM(234, I4) = R2;
+      R2 = DM(FP_LOG + 35);
+      DM(235, I4) = R2;
+      R2 = DM(FP_LOG + 36);
+      DM(236, I4) = R2;
+      R2 = DM(FP_LOG + 37);
+      DM(237, I4) = R2;
+      R2 = DM(FP_LOG + 38);
+      DM(238, I4) = R2;
+      R2 = DM(FP_LOG + 39);
+      DM(239, I4) = R2;
+      R2 = DM(FP_LOG + 40);
+      DM(240, I4) = R2;
+      R2 = DM(FP_LOG + 41);
+      DM(241, I4) = R2;
+      R2 = DM(FP_LOG + 42);
+      DM(242, I4) = R2;
+      R2 = DM(FP_LOG + 43);
+      DM(243, I4) = R2;
+      R2 = DM(FP_LOG + 44);
+      DM(244, I4) = R2;
+      R2 = DM(FP_LOG + 45);
+      DM(245, I4) = R2;
+      R2 = DM(FP_LOG + 46);
+      DM(246, I4) = R2;
+      R2 = DM(FP_LOG + 47);
+      DM(247, I4) = R2;
+      R2 = DM(FP_LOG + 48);
+      DM(248, I4) = R2;
+      R2 = DM(FP_LOG + 49);
+      DM(249, I4) = R2;
+      R2 = DM(FP_LOG + 50);
+      DM(250, I4) = R2;
+      R2 = DM(FP_LOG + 51);
+      DM(251, I4) = R2;
+      R2 = DM(FP_LOG + 52);
+      DM(252, I4) = R2;
+fp_skip:
+fp_wr: R5 = R5 + 1;
+
+fp_out:
+    R0 = DM(FP_SAVE + 1);
+    R1 = DM(FP_SAVE + 2);
+    R2 = DM(FP_SAVE + 3);
+    R3 = DM(FP_SAVE + 4);
+    R4 = DM(FP_SAVE + 5);
+    R5 = DM(FP_SAVE + 6);
+    R6 = DM(FP_SAVE + 7);
+    R7 = DM(FP_SAVE + 8);
+    I4 = DM(FP_SAVE + 9);
+    I5 = DM(FP_SAVE + 10);
+    L4 = DM(FP_SAVE + 11);
+    L5 = DM(FP_SAVE + 12);
+    I6 = DM(FP_SAVE + 15);
+    L6 = DM(FP_SAVE + 16);
+    MODE1 = DM(FP_SAVE + 0);
+    NOP;
+    RTS (LR);
+
+gr_inrange:                             // R0 = 1 unless 0 <= R1 <= R2
+    R1 = PASS R1;
+    IF LT JUMP gr_bad;
+    COMP(R1, R2);
+    IF LE RTS;
+gr_bad:
+    R0 = 1;
+    RTS;
+
+fp_coef:                                // R1 = the core's coefficient R2 (1 Attack, 2 Release): the Deluxe's state, the Kinky's KK_TAB entry, else LA_ATT/LA_REL
+    R1 = FP_LOG + 19;
+    R0 = DM(FP_KIND);
+    R0 = PASS R0;
+    IF EQ JUMP fp_cget;
+    R1 = LA_ATT - 1;
+    R3 = 1;
+    COMP(R0, R3);
+    IF EQ JUMP fp_cget;
+    R0 = DM(FP_LOG + 6);
+    I4 = KK_TAB;
+    R3 = KK_N;
+fp_ck:
+    R1 = DM(0, I4);
+    COMP(R0, R1);
+    IF EQ JUMP fp_cfound;
+    MODIFY(I4, 4);
+    R3 = R3 - 1;
+    IF NE JUMP fp_ck;
+    JUMP fp_cla;
+fp_cfound:
+    R1 = I4;
+    R1 = R1 + R2;
+    I4 = R1;
+    R1 = DM(0, I4);
+    R1 = PASS R1;
+    IF NE RTS;
+fp_cla:
+    R1 = LA_ATT - 1;
+fp_cget:
+    R1 = R1 + R2;
+    I4 = R1;
+    R1 = DM(0, I4);
+    RTS;
+
+fp_max:                                 // R1 = the largest |sample| of the 16 words at I4
+    R1 = 0;
+    LCNTR = 16, DO fp_mx UNTIL LCE;
+      F0 = DM(I4, 1);
+      F0 = ABS F0;
+fp_mx: F1 = MAX(F0, F1);
+    RTS;
+
+// The cores' control functions, called as (pid R4, pointer to the value R8, the core's state R12) [verified on unit]:
+// pids GR_PID.. are the GR knobs, kept here for the frame; any other goes to the stock function untouched.
+CTRL_271A:
+    R2 = R4;
+    R1 = GR_PID;
+    COMP(R2, R1);
+    IF LT JUMP ORIG_CTRL_271A;
+    R1 = GR_PID + 3;
+    COMP(R2, R1);
+    IF GT JUMP ORIG_CTRL_271A;
+    JUMP fc_take;
+CTRL_2719:
+    R2 = R4;
+    R1 = GR_PID;
+    COMP(R2, R1);
+    IF LT JUMP ORIG_CTRL_2719;
+    R1 = GR_PID + 3;
+    COMP(R2, R1);
+    IF GT JUMP ORIG_CTRL_2719;
+    JUMP fc_take;
+CTRL_2710:
+    R2 = R4;
+    R1 = 2;
+    COMP(R2, R1);
+    IF EQ JUMP fc_kk;
+    R1 = 3;
+    COMP(R2, R1);
+    IF EQ JUMP fc_kk;
+    R1 = GR_PID;
+    COMP(R2, R1);
+    IF LT JUMP ORIG_CTRL_2710;
+    R1 = GR_PID + 3;
+    COMP(R2, R1);
+    IF GT JUMP ORIG_CTRL_2710;
+fc_take:
+    I4 = R8;
+    R1 = DM(0, I4);
+    R2 = 0x1000;
+    COMP(R1, R2);
+    IF LT JUMP fc_int;                  // an integer as the input node has it, else a float
+    R1 = FIX F1;
+fc_int:
+    R2 = GR_PID + 3;
+    COMP(R4, R2);
+    IF EQ JUMP fc_ori;
+    DM(FC_R3) = R3;
+    I4 = R12;
+    R0 = DM(0, I4);
+    I4 = KN_TAB;
+    CALL fc_slot;
+    R2 = GR_PID - 1;
+    R2 = R4 - R2;
+    M4 = R2;
+    DM(M4, I4) = R1;
+    R2 = GR_PID + 2;
+    COMP(R4, R2);
+    IF NE JUMP fc_kn1;
+    R1 = PASS R1;
+    IF EQ JUMP fc_koff;
+    DM(GR_CORE) = R0;
+    JUMP fc_kn1;
+fc_koff:                                // the metered core's Mtr Thk to 0: the meter goes to another core with one above 0, if any
+    R2 = DM(GR_CORE);
+    COMP(R2, R0);
+    IF NE JUMP fc_kn1;
+    I4 = KN_TAB;
+    R3 = 16;
+fc_ka:
+    R2 = DM(3, I4);
+    R2 = PASS R2;
+    IF NE JUMP fc_kb;
+    MODIFY(I4, 4);
+    R3 = R3 - 1;
+    IF NE JUMP fc_ka;
+    JUMP fc_kn1;
+fc_kb:
+    R2 = DM(0, I4);
+    DM(GR_CORE) = R2;
+fc_kn1:
+    R3 = DM(FC_R3);
+fc_ret:
+    I12 = DM(M7, I6);
+    JUMP (M14, I12) (DB);
+    NOP;
+    RFRAME;
+
+fc_ori:                                 // pid GR_PID + 3: 1 puts this core's state (R12's first word) in ORI_TAB, 0 takes it out
+    R0 = R1;
+    I4 = R12;
+    R1 = DM(0, I4);
+    I4 = ORI_TAB;
+    R2 = ORI_N;
+fc_o1:
+    R4 = DM(0, I4);
+    COMP(R4, R1);
+    IF NE JUMP fc_o2;
+    R4 = 0;
+    DM(0, I4) = R4;
+fc_o2:
+    MODIFY(I4, 1);
+    R2 = R2 - 1;
+    IF NE JUMP fc_o1;
+    R0 = PASS R0;
+    IF EQ JUMP fc_ret;
+    I4 = ORI_TAB;
+    R2 = ORI_N;
+fc_o3:
+    R4 = DM(0, I4);
+    R4 = PASS R4;
+    IF EQ JUMP fc_o4;
+    MODIFY(I4, 1);
+    R2 = R2 - 1;
+    IF NE JUMP fc_o3;
+    JUMP fc_ret;
+fc_o4:
+    DM(0, I4) = R1;
+    JUMP fc_ret;
+
+fc_kk:                                  // the Kinky Comp's Attack (pid 2) and Release (3) in ms, kept for the meter as 1 - 2pi/(48 t), then passed on
+    DM(FC_R3) = R3;
+    I4 = R8;
+    F0 = DM(0, I4);
+    R2 = 0x3F800000;
+    COMP(F0, F2);
+    IF GE JUMP fc_k0;
+    F0 = PASS F2;                       // at least 1 ms, where the coefficient's first-order form still holds
+fc_k0:
+    F1 = RECIPS F0;
+    F3 = F0 * F1;
+    F3 = F2 - F3;
+    F3 = F1 * F3;
+    F1 = F1 + F3;
+    F3 = F0 * F1;
+    F3 = F2 - F3;
+    F3 = F1 * F3;
+    F1 = F1 + F3;
+    R3 = 0x3E060A92;                    // 2pi/48
+    F1 = F1 * F3;
+    F1 = F2 - F1;
+    I4 = R12;
+    R0 = DM(0, I4);
+    I4 = KK_TAB;
+    CALL fc_slot;
+fc_kset:
+    R2 = 1;
+    R2 = R4 - R2;
+    M4 = R2;
+    DM(M4, I4) = R1;
+    R3 = DM(FC_R3);
+    JUMP ORIG_CTRL_2710;
+
+fc_slot:                                // I4 = the entry of state R0 in the 16 x 4-word table at I4, taken and zeroed if new; uses R2, R3
+    DM(FS_BASE) = I4;
+    R3 = 16;
+fs_1:
+    R2 = DM(0, I4);
+    COMP(R2, R0);
+    IF EQ RTS;
+    MODIFY(I4, 4);
+    R3 = R3 - 1;
+    IF NE JUMP fs_1;
+    I4 = DM(FS_BASE);
+    R3 = 16;
+fs_2:
+    R2 = DM(0, I4);
+    R2 = PASS R2;
+    IF EQ JUMP fs_new;
+    MODIFY(I4, 4);
+    R3 = R3 - 1;
+    IF NE JUMP fs_2;
+    I4 = DM(FS_BASE);                   // full: replace entries in turn
+    R2 = DM(64, I4);
+    R3 = R2 + 1;
+    R3 = BCLR R3 BY 4;
+    DM(64, I4) = R3;
+    R2 = LSHIFT R2 BY 2;
+    R3 = DM(FS_BASE);
+    R2 = R2 + R3;
+    I4 = R2;
+fs_new:
+    R2 = 0;
+    DM(1, I4) = R2;
+    DM(2, I4) = R2;
+    DM(3, I4) = R2;
+    DM(0, I4) = R0;
+    RTS;
