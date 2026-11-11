@@ -441,7 +441,12 @@ def cmd_patch(args):
         if chosen is None:
             raise SystemExit('All 24 unused SHARC primitive slots in Entry 2 are already hooked')
         prim_id, prim_addr = chosen
-        ldr_words += pack_init_l32(prim_addr, [prim_id, 0x611e90, 0x0, 0x611ef4, 0x611ddd, entry_addr, 0x91, 0x0d])
+        record = [prim_id, 0x611e90, 0x0, 0x611ef4, 0x611ddd]
+        import effects
+        if effects.is_effects(l6ia_bytes):               # the HX Effects: its own primitive table
+            prim_addr, record = effects.kernel_hook(e2_raw)
+            prim_id = record[0]
+        ldr_words += pack_init_l32(prim_addr, record + [entry_addr, 0x91, 0x0d])
         print(f"[+] Entry 2: hooked unused primitive {prim_id:#06x} @ {prim_addr:#x} -> kernel {entry_addr:#x} (dm=145, pm=13)")
 
     replaced = {2: l6ia.swap32(inject_sharc_ldr_blocks(e2_raw, ldr_words))}
@@ -1138,9 +1143,10 @@ def nam_params(e3, info):
     return out
 
 
-def nam_host_member(b0, comp_id, sdram_words=0):
+def nam_host_member(b0, comp_id, sdram_words=0, dm_words=0x91, pm_words=0x0d):
     """Make member 1 of composite `comp_id` (a clone of NAM_HOST_COMPOSITE) the
-    primitive 0x9c75 (dm 145, pm 13, SDRAM sdram_words), keeping its ports (1 in, 1 out)."""
+    primitive 0x9c75 (dm dm_words, pm pm_words, SDRAM sdram_words), keeping its ports (1 in, 1 out).
+    dm_words: its I0 block (word 13; the Amp harness allows up to 0x596)."""
     ct = b0[0x10]
     hdr = b0[ct + 7 * (comp_id - 0x600000): ct + 7 * (comp_id - 0x600000) + 7]
     assert hdr[2] == 3, f'{comp_id:#x} has {hdr[2]} members, the NAM host wants 3'
@@ -1150,7 +1156,7 @@ def nam_host_member(b0, comp_id, sdram_words=0):
     b0[r + 11] = 0                  # no static init parameters
     for k in range(15, 20):         # sub-arena sizes: 0 for a primitive, as stock primitive members have
         b0[r + k] = 0
-    b0[r + 13], b0[r + 14], b0[r + 15] = 0x91, 0x0d, sdram_words   # the instance's DM, PM, SDRAM
+    b0[r + 13], b0[r + 14], b0[r + 15] = dm_words, pm_words, sdram_words   # the instance's DM, PM, SDRAM
 
 
 # The Amp harnesses: their model placeholder (member 3, composite 0x6000c8) gives the
@@ -1260,7 +1266,7 @@ def pmap_slots_without_param(e4, blob_index, params):
     return sorted(slots - {p['slot'] for p in params})
 
 
-def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
+def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, dm_words=0x91, pm_words=0x0d):
     """Entry 4 with one more blob, the NAM host: a copy of the model's composite
     (NAM_HOST_COMPOSITE) appended to Blob 0 (0x6001c6, 0x6001c7, ...;
     clone_composite_in_blob0) with its amp member made primitive 0x9c75
@@ -1286,7 +1292,7 @@ def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
     assert src_comp_id == NAM_HOST_COMPOSITE, \
         f'the NAM host wants a model on composite {NAM_HOST_COMPOSITE:#x} (HD2_AmpLine6Clarity), not {src_comp_id:#x}'
     b0_words, new_comp_id = clone_composite_in_blob0(b0_words, src_comp_id)
-    nam_host_member(b0_words, new_comp_id, sdram_words)
+    nam_host_member(b0_words, new_comp_id, sdram_words, dm_words, pm_words)
     if sdram_words:
         raise_amp_harness_sdram(b0_words, sdram_words)
     err = sharc_blob0_check(b0_words, SHARC_BLOB0_MAX_WORDS)
@@ -1471,11 +1477,211 @@ def add_model_entry3(e3, src, new_name, display_name, blob_index, nam):
 
 
 def cmd_ir_title(args):
+    global ir_title_cave
     l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
-    new_l6ia, _ = ir_title(l6ia_bytes, args.preset_id or [], fx_pids=args.fx_preset_id or [])
+    plain = ir_title_cave
+    if args.knob is not None:
+        if args.preset_id:
+            raise SystemExit('ir-title --knob: effect entries only (--fx-preset-id)')
+        seg6 = _parse_e0_segments(get_entry_swapped(l6ia_bytes, 0))[6][3]
+        if seg6 not in IR_TITLE_KNOB:
+            raise SystemExit('ir-title --knob: no addresses known for this unit')
+        ir_title_cave = lambda cave_va, pids, X, fx_pids=(): ir_title_knob_cave(cave_va, X, IR_TITLE_KNOB[seg6],
+                                                                               list(fx_pids), args.knob)
+    try:
+        new_l6ia, _ = ir_title(l6ia_bytes, args.preset_id or [], fx_pids=args.fx_preset_id or [])
+    finally:
+        ir_title_cave = plain
     donor = args.input if is_hxf else args.donor
     save_l6ia_to_any(new_l6ia, args.output, donor_hxf=donor)
     print(f"[+] Wrote {args.output}")
+
+
+# --- the 4-knob NAM's Entry 0 steps (HX Stomp build) ----------------------------------------------
+def remove_model_entry0(e0, preset_id):
+    """Entry 0 without a stock model's Table 1 row and browser items: its preset_id is free for
+    add-fx-model. Its code, Table 2 row and Entry 3/4 records stay (nothing selects it any more).
+    Returns (e0, number of browser items removed)."""
+    e0 = bytearray(e0)
+    segs = _parse_e0_segments(e0)
+    A = e0_device(segs)
+    fo = lambda va, n=4: _e0_vaddr_to_foff(segs, va, n)
+    u32 = lambda va: struct.unpack_from('<I', e0, fo(va))[0]
+    tab1 = u32(A.TAB1_BASE_PTRS[0])
+    rd, cnt = _decode_thumb_movw(bytes(e0[fo(A.TAB1_CNT_INSN):fo(A.TAB1_CNT_INSN) + 4]))
+    rows = [struct.unpack_from('<IHHI', e0, fo(tab1 + 12 * i, 12)) for i in range(cnt)]
+    hit = [r for r in rows if r[1] == preset_id]
+    if len(hit) != 1:
+        raise SystemExit(f'remove-model: preset_id {preset_id} is in Table 1 {len(hit)} times')
+    name_idx = hit[0][0]
+    rows = [r for r in rows if r[1] != preset_id]
+    o = fo(tab1, 12 * cnt)
+    e0[o:o + 12 * cnt] = b''.join(struct.pack('<IHHI', *r) for r in rows) + b'\0' * 12
+    e0[fo(A.TAB1_CNT_INSN):fo(A.TAB1_CNT_INSN) + 4] = _encode_thumb_movw(rd, cnt - 1)
+    for iva in A.TAB1_CNT_M1_INSNS:
+        r2, c = _decode_thumb_movw(bytes(e0[fo(iva):fo(iva) + 4]))
+        assert c == cnt - 1, f'Table 1 count-1 mismatch at {iva:#x}'
+        e0[fo(iva):fo(iva) + 4] = _encode_thumb_movw(r2, cnt - 2)
+    assert u32(A.TAB1_END_PTR) == tab1 + 12 * cnt
+    struct.pack_into('<I', e0, fo(A.TAB1_END_PTR), tab1 + 12 * (cnt - 1))
+    removed = 0
+    for idx in range(E0_BLIST_SLOTS):
+        lp, lc = u32(A.BLIST_PTR_TAB + 4 * idx), u32(A.BLIST_CNT_TAB + 4 * idx)
+        if not lp or not lc:
+            continue
+        items = [bytes(e0[fo(lp + 48 * k, 48):fo(lp + 48 * k, 48) + 48]) for k in range(lc)]
+        keep = [it for it in items if struct.unpack_from('<I', it, 4)[0] != name_idx]
+        if len(keep) == lc:
+            continue
+        if not keep:
+            raise SystemExit(f'remove-model: browser list {idx} would be empty')
+        o = fo(lp, 48 * lc)
+        e0[o:o + 48 * lc] = b''.join(keep) + b'\0' * 48 * (lc - len(keep))
+        struct.pack_into('<I', e0, fo(A.BLIST_CNT_TAB + 4 * idx), len(keep))
+        removed += lc - len(keep)
+    return bytes(l6ia.fix_internal_crcs(bytes(e0))), removed
+
+
+def move_folder_entry0(e0, name, src, dst):
+    """Entry 0 with browser folder `name`, the last folder of category `src` (an add-fx-model
+    --folder result), moved to the next free folder of category `dst`. A folder is a list pointer
+    and count (BLIST_PTR_TAB / BLIST_CNT_TAB), a name (SUBCAT_NAMES) and the category's folder
+    count (SUBCAT_CNT); the 48-byte items name the model and its btype (the block's kind), not the
+    category, so an effect listed under Amp stays an effect. Returns (e0, the new folder index)."""
+    e0 = bytearray(e0)
+    segs = _parse_e0_segments(e0)
+    A = e0_device(segs)
+    fo = lambda va, n=4: _e0_vaddr_to_foff(segs, va, n)
+    u32 = lambda va: struct.unpack_from('<I', e0, fo(va))[0]
+    put = lambda va, v: struct.pack_into('<I', e0, fo(va), v)
+    nm = name.encode('latin1')
+    name_at = lambda cat, sub: fo(A.SUBCAT_NAMES + 104 * cat + 26 * sub, 26)
+    ns, nd = u32(A.SUBCAT_CNT + 4 * src), u32(A.SUBCAT_CNT + 4 * dst)
+    s_sub, d_sub = ns - 1, nd
+    if bytes(e0[name_at(src, s_sub):name_at(src, s_sub) + 26]).rstrip(b'\0') != nm:
+        raise SystemExit(f'move-folder: the last folder of category {src} is not {name!r}')
+    if d_sub >= 4 or u32(A.BLIST_PTR_TAB + 4 * (4 * dst + d_sub)) or any(e0[name_at(dst, d_sub):name_at(dst, d_sub) + 26]):
+        raise SystemExit(f'move-folder: category {dst} has no free folder')
+    sl = 4 * src + s_sub
+    put(A.BLIST_PTR_TAB + 4 * (4 * dst + d_sub), u32(A.BLIST_PTR_TAB + 4 * sl))
+    put(A.BLIST_CNT_TAB + 4 * (4 * dst + d_sub), u32(A.BLIST_CNT_TAB + 4 * sl))
+    e0[name_at(dst, d_sub):name_at(dst, d_sub) + 26] = nm.ljust(26, b'\0')
+    put(A.SUBCAT_CNT + 4 * dst, nd + 1)
+    put(A.BLIST_PTR_TAB + 4 * sl, 0)
+    put(A.BLIST_CNT_TAB + 4 * sl, 0)
+    e0[name_at(src, s_sub):name_at(src, s_sub) + 26] = b'\0' * 26
+    put(A.SUBCAT_CNT + 4 * src, ns - 1)
+    return bytes(l6ia.fix_internal_crcs(bytes(e0))), d_sub
+
+
+def _entry0_step(args, fn, *a):
+    l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
+    new_e0, res = fn(get_entry_swapped(l6ia_bytes, 0), *a)
+    new_l6ia, _, _ = l6ia.rebuild_archive(l6ia_bytes, {0: new_e0})
+    save_l6ia_to_any(new_l6ia, args.output, donor_hxf=args.input if is_hxf else args.donor)
+    return res
+
+
+def cmd_remove_model(args):
+    n = _entry0_step(args, remove_model_entry0, args.preset_id)
+    print(f"[+] Wrote {args.output}: preset_id {args.preset_id} removed (Table 1 row, {n} browser item(s))")
+
+
+def cmd_move_folder(args):
+    sub = _entry0_step(args, move_folder_entry0, args.name, args.src, args.dst)
+    print(f"[+] Wrote {args.output}: folder {args.name} moved from category {args.src} to category {args.dst} folder {sub}")
+
+
+# The IR-name title from a float Model knob that is not knob 0 (or is): ir-title --knob. The cave does
+# what the stock IR Single branch does up to the value read, with q = {-2, knob} (sp+24) and the half
+# byte 0 (sp+32), then 0x28d92a98 and FUN_28e0477c(ctx, r6 = slot, &q, sp+16); the value at sp+17 is a
+# float's bits, truncated to an int by integer code (Entry 0 hardly uses the FPU), written back, and on
+# at 0x28dbedfc as stock (subs r0,#1: the slot test, the name). A value outside 1..128 takes the stock
+# "<EMPTY>" title, never a lookup past the IR table. The redraw follows knob `knob`.
+# Per unit: the branch's calls and exits, and its registers: SUB the layout byte's (the subcategory
+# register, set to 0), SLOT the block slot's (FUN_28e0477c's r1). The XL's from its Entry 0 (static).
+IR_TITLE_KNOB = {
+    0x28d8fa80: dict(SUB=5, SLOT=6, CTX_FN=0x28d92a98, PARAM_FN=0x28e0477c, AFTER_READ=0x28dbedfc,
+                     EMPTY=0x28dbeedc, B_REDRAW=0x28dbf7e6),        # HX Stomp
+    0x28d92230: dict(SUB=6, SLOT=8, CTX_FN=0x28d95248, PARAM_FN=0x28e0aa8c, AFTER_READ=0x28dc1f24,
+                     EMPTY=0x28dc1fcc, B_REDRAW=0x28dc28d6),        # HX Stomp XL
+}
+
+
+def _thumb_bl(src, dst):
+    b = bytearray(thumb_bw(src, dst))
+    b[3] |= 0x40                                  # BL: B.W's encoding with the link bit
+    return bytes(b)
+
+
+def ir_title_knob_cave(cave_va, X, K, fx_pids, knob):
+    """The --knob cave as bytes: (bytes, caveA address, caveB address)."""
+    assert 0 <= knob < 256
+    items, labels = [], {}
+    raw = lambda h: items.append(('raw', bytes.fromhex(h)))
+    lab = lambda n: items.append(('label', n))
+
+    def subw(base_reg, imm):                      # ldr.w r3,[base_reg,#1]; subw r3,r3,#imm
+        assert 0 <= imm < 4096
+        items.append(('raw', struct.pack('<2H', 0xf8d0 | base_reg, 0x3001) +
+                      struct.pack('<2H', 0xf2a3 | ((imm >> 11) << 10), (((imm >> 8) & 7) << 12) | (3 << 8) | (imm & 0xff))))
+    EQ, NE, MI, HI, GT = 0, 1, 4, 8, 12
+    lab('caveA')
+    raw('237b0f2b'); items.append(('bcc', NE, 'a1')); items.append(('bw', X.IR_CONT))   # ldrb r3,[r4,#12]; cmp r3,#15
+    lab('a1')
+    for p in fx_pids:
+        subw(4, p); items.append(('cbz', 'a2'))
+    items.append(('b', 'a3'))
+    lab('a2')
+    items.append(('raw', struct.pack('<H', 0x2000 | (K['SUB'] << 8))))              # movs rSUB,#0
+    raw('6ff00102'); items.append(('raw', struct.pack('<H', 0x2300 | knob)))         # mvn r2,#1; movs r3,#knob
+    raw('cde90623'); items.append(('raw', struct.pack('<2H', 0xf88d, (K['SUB'] << 12) | 0x020)))   # strd; strb.w rSUB,[sp,#32]
+    items.append(('bl', K['CTX_FN']))
+    raw('04ab06aa'); items.append(('raw', struct.pack('<H', 0x4601 | (K['SLOT'] << 3))))   # add r3,sp,#16; add r2,sp,#24; mov r1,rSLOT
+    items.append(('bl', K['PARAM_FN']))
+    raw('ddf81100c20d'); items.append(('bcc', EQ, 'a7'))                            # ldr.w r0,[sp,#17]; lsrs r2,r0,#23
+    raw('7f3a'); items.append(('bcc', MI, 'a6')); raw('172a'); items.append(('bcc', GT, 'a7'))   # subs r2,#127; cmp r2,#23
+    raw('c0f3160141f40001c2f1170221fa02f0'); items.append(('b', 'a8'))             # ubfx; orr #0x800000; rsb #23; lsr.w
+    lab('a6'); raw('0020')                                                          # movs r0,#0
+    lab('a8'); raw('cdf81100')                                                      # str.w r0,[sp,#17]
+    lab('a7'); raw('411e7f29'); items.append(('bcc', HI, 'a10')); items.append(('bw', K['AFTER_READ']))   # 1..128?
+    lab('a10'); items.append(('bw', K['EMPTY']))
+    lab('a3'); raw('237b'); items.append(('bw', X.NON_IR))
+    lab('caveB')
+    raw('2b7b0f2b'); items.append(('bcc', EQ, 'b4'))                                # ldrb r3,[r5,#12]; cmp r3,#15
+    for p in fx_pids:
+        subw(5, p); items.append(('cbz', 'b5'))
+    items.append(('bw', X.B_RET))
+    lab('b4'); items.append(('bw', X.B_IR))
+    lab('b5'); raw('1b9b'); items.append(('raw', struct.pack('<H', 0x2b00 | knob))); items.append(('bcc', EQ, 'b9'))
+    items.append(('bw', X.B_RET))
+    lab('b9'); items.append(('bw', K['B_REDRAW']))
+    pos = 0
+    for it in items:
+        if it[0] == 'label':
+            labels[it[1]] = pos
+        pos += len(it[1]) if it[0] == 'raw' else {'label': 0, 'bcc': 2, 'cbz': 2, 'b': 2, 'bw': 4, 'bl': 4}[it[0]]
+    out = bytearray()
+    for it in items:
+        at, k = len(out), it[0]
+        if k == 'raw':
+            out += it[1]
+        elif k in ('bw', 'bl'):
+            out += (thumb_bw if k == 'bw' else _thumb_bl)(cave_va + at, it[1])
+        elif k != 'label':
+            off = labels[it[-1]] - (at + 4)
+            if k == 'bcc':
+                assert off % 2 == 0 and -256 <= off < 256
+                out += struct.pack('<H', 0xd000 | (it[1] << 8) | ((off >> 1) & 0xff))
+            elif k == 'cbz':
+                assert off % 2 == 0 and 0 <= off <= 126
+                out += struct.pack('<H', 0xb100 | ((off >> 6) << 9) | (((off >> 1) & 0x1f) << 3) | 3)
+            else:
+                assert off % 2 == 0 and -2048 <= off < 2048
+                out += struct.pack('<H', 0xe000 | ((off >> 1) & 0x7ff))
+    while len(out) % 4:
+        out += b'\x00\xbf'
+    return bytes(out), cave_va + labels['caveA'], cave_va + labels['caveB']
 
 
 def cmd_add_model(args):
@@ -1488,7 +1694,7 @@ def cmd_add_model(args):
 
     nam = nam_params(e3, info)
     e4 = get_entry_swapped(l6ia_bytes, 4)
-    new_e4, blob, new_comp_id = add_model_entry4(e4, src['blob_index'], nam, args.sdram_words)
+    new_e4, blob, new_comp_id = add_model_entry4(e4, src['blob_index'], nam, args.sdram_words, args.dm_words, args.pm_words)
     replaced = {4: new_e4}
     print(f"[+] Entry 4: NAM host blob {blob} on composite {new_comp_id:#x} (a copy of {src['name']}'s); "
           f"{len(e4):#x} -> {len(new_e4):#x} bytes")
@@ -1563,7 +1769,7 @@ def cmd_add_model(args):
     print(f"[+] Wrote {args.output} (L6IA {old_end:#x} -> {new_end:#x} bytes, delta {new_end - old_end:+d} B)")
 
 
-# The same kernel under an effect category (a NAM block in Distortion > NAM): the kit's
+# The same kernel under an effect category (a NAM block in Distortion > Mono): the kit's
 # effect-host add_model (kit_patch_amp.py, a copy of hx-stomp-kit's hxkit/patch_amp.py),
 # with nam-a2-lite's knobs (module.toml [[param]], in its param_spec form) and instance.
 NAM_FX_PARAMS = ((1, 'HD2_ImpulseResponse2048Mono', 'Index', 7, 'Model', None),
@@ -1581,16 +1787,116 @@ FX_CLONES = {2: 'HD2_DistMinotaurMono', 3: 'HD2_CompressorAutoSwellMono', 4: 'HD
              8: 'HD2_PitchSimplePitchMono', 9: 'HD2_FilterMutantFilterMono', 10: 'HD2_WahChromeMono',
              16: 'HD2_VolPanGainMono'}
 
+# The 4-knob NAM (HX Stomp build): on a stock model's preset_id that HX Edit knows (MM4 Frequency
+# Shifter, 461, removed first with remove-model), the knobs type for type on that model's, so HX
+# Edit keeps NAM blocks with every value when it rewrites a preset (it writes values in its own
+# model's types and ranges; the unit drops a preset holding a value of another type). HX Edit
+# shows the block as that model. MM4: Speed float 0..3520, Mode int 0..2, Mix float 0..1,
+# Level float -60..6. No tone knobs: build the kernel with nam_multi.py --no-tone.
+NAM4_FX_PARAMS = ((1, 'HD2_AmpLine6Clarity', 'Boost', 7, 'Model', None),       # Speed: Model, a float
+                  (2, 'HD2_MM4FrequencyShifter', 'Mode', 15, 'Polarity', None),  # Mode: Polarity 0/1
+                  (3, 'HD2_AmpLine6Clarity', 'Drive', 5, 'Input', 0.5),         # Mix
+                  (4, 'HD2_AmpLine6Clarity', 'ChVol', 6, 'Output', 0.5))        # Level
+# Model's range on the unit. The unit steps a float knob by a size it picks from the range (on the
+# unit: 0..100 0.2 a click, 0..500 0.5, 0..1000 1.0), so 0..1000 steps one slot a click; above
+# 128 the kernel plays nothing and the title (ir-title --knob) reads <EMPTY>.
+NAM4_MODEL_RANGE = (0.0, 1000.0)
+
+
+def nam4_params(nam_params):
+    """kit_patch_amp.nam_params for NAM4_FX_PARAMS: Model a float knob shown as IR Select (the
+    kernel truncates a float Model), Polarity labelled Normal/Inverted on Mode's int."""
+    f2u = lambda f: struct.unpack('<I', struct.pack('<f', f))[0]
+
+    def wrapped(e3, info, spec=None):
+        out = nam_params(e3, info, spec)
+        for p in out:
+            if p['slot'] == 1:
+                p['raw'][5], p['raw'][6], p['raw'][7] = f2u(NAM4_MODEL_RANGE[0]), f2u(NAM4_MODEL_RANGE[1]), f2u(1.0)
+                p['default_word'] = p['raw'][7]
+                p['meta'] = [('displayName', 7, 'Model'), ('displayType', 7, 'dynamicList'), ('displayNameShort', 7, 'Model')]
+            elif p['slot'] == 2:
+                p['raw'][6], p['raw'][7], p['default_word'] = 1, 0, 0
+                p['meta'] = [('displayType', 7, 'list'), ('0', 7, 'Normal'), ('1', 7, 'Inverted'),
+                             ('displayName', 7, 'Polarity'), ('displayNameShort', 7, 'Polarity')]
+        return out
+    return wrapped
+
+
+# The ten-knob NAM with a tone stack (HX Stomp build): on Xenomorph Fuzz Mono's preset_id (555,
+# removed first with remove-model), type for type on its knobs (Gain, Tone, Level float 0..1;
+# Clipping int 0..1; OscLevel, OscTone float 0..1; MinFreq, MaxFreq float 0..6000; WaveShape int
+# 0..2; Sensitivity float 0..1), in live order: Input, Treble, Output, Polarity, Bass, Mid, Model,
+# Mid Freq, Q, High Cut. Kernel: nam_multi.py --mid-sweep (Mid Freq DM 19 in Hz, Q DM 20 as 0..2;
+# High Cut on Presence's DM 11). Title: ir-title --knob 6.
+X = 'HD2_DistXenomorphFuzzMono'
+EQ_FX_PARAMS = ((1, 'HD2_AmpLine6Clarity', 'Drive', 5, 'Input', 0.5),              # Gain
+                (2, 'HD2_AmpLine6Clarity', 'Treble', 10, None, 0.5),               # Tone
+                (3, 'HD2_AmpLine6Clarity', 'ChVol', 6, 'Output', 0.5),             # Level
+                (4, X, 'Clipping', 15, 'Polarity', None),                          # Clipping
+                (5, 'HD2_AmpLine6Clarity', 'Bass', 8, None, 0.5),                  # OscLevel
+                (6, 'HD2_AmpLine6Clarity', 'Mid', 9, None, 0.5),                   # OscTone
+                (7, 'HD2_AmpLine6Clarity', 'Boost', 7, 'Model', None),             # MinFreq: Model 0..1000
+                (8, 'HD2_AmpBusyOneCh1', 'Ch1 Mid Freq', 19, 'Mid Freq', None),    # MaxFreq: 150..3000 Hz
+                (9, X, 'WaveShape', 20, 'Q', None),                                # WaveShape: Q 0.7/1.4/2.8
+                (10, 'HD2_AmpLine6Clarity', 'Presence', 11, 'High Cut', 1.0))      # Sensitivity: 10.0 off
+EQ_MID_FREQ = (150.0, 3000.0, 650.0)     # nam_multi.MID_HZ; 650 Hz the default
+EQ_Q_LABELS = ('0.7', '1.4', '2.8')      # nam_multi.MID_Q
+
+
+def eq_params(nam_params):
+    """kit_patch_amp.nam_params for EQ_FX_PARAMS."""
+    f2u = lambda f: struct.unpack('<I', struct.pack('<f', f))[0]
+
+    def wrapped(e3, info, spec=None):
+        out = nam_params(e3, info, spec)
+        for p in out:
+            if p['slot'] == 7:
+                p['raw'][5], p['raw'][6], p['raw'][7] = f2u(NAM4_MODEL_RANGE[0]), f2u(NAM4_MODEL_RANGE[1]), f2u(1.0)
+                p['default_word'] = p['raw'][7]
+                p['meta'] = [('displayName', 7, 'Model'), ('displayType', 7, 'dynamicList'), ('displayNameShort', 7, 'Model')]
+            elif p['slot'] == 4:
+                p['raw'][7], p['default_word'] = 0, 0
+                p['meta'] = [('displayType', 7, 'list'), ('0', 7, 'Normal'), ('1', 7, 'Inverted'),
+                             ('displayName', 7, 'Polarity'), ('displayNameShort', 7, 'Polarity')]
+            elif p['slot'] == 10:
+                p['meta'] = [('displayType', 7, 'knob'), ('displayName', 7, 'High Cut'), ('displayNameShort', 7, 'HighCut')]
+            elif p['slot'] == 8:
+                p['raw'][5], p['raw'][6], p['raw'][7] = (f2u(v) for v in EQ_MID_FREQ)
+                p['default_word'] = p['raw'][7]
+                p['meta'] = [('displayType', 7, 'hz'), ('displayName', 7, 'Mid Freq'), ('displayNameShort', 7, 'MidFreq')]
+            elif p['slot'] == 9:
+                p['raw'][7], p['default_word'] = 0, 0
+                p['meta'] = [('displayType', 7, 'list')] + [(str(k), 7, q) for k, q in enumerate(EQ_Q_LABELS)] + \
+                            [('displayName', 7, 'Q'), ('displayNameShort', 7, 'Q')]
+        return out
+    return wrapped
+
+
+def cmd_effects_eq(args):
+    import effects
+    l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
+    save_l6ia_to_any(effects.build_base(l6ia_bytes), args.output, donor_hxf=args.input if is_hxf else args.donor)
+    print(f"[+] Wrote {args.output}")
+
 
 def cmd_add_fx_model(args):
     import kit_patch_amp
     l6ia_bytes, is_hxf = load_l6ia_from_any(args.input)
     cat = FX_CATEGORY_IDS[args.category]
-    new_l6ia, info = kit_patch_amp.add_model(
-        l6ia_bytes, args.clone or FX_CLONES[cat], args.name, args.display_name, folder=args.folder,
-        short_name=args.short_name, preset_id=args.preset_id, dsp_cost=args.dsp_cost, params=NAM_FX_PARAMS,
-        prim_id=0x9c75, instance={'dm_words': 0x91, 'pm_words': 0x0d, 'sdram_words': args.sdram_words},
-        host='HD2_VolPanVolMono', category=cat, log=print)
+    params, saved = NAM_FX_PARAMS, kit_patch_amp.nam_params
+    if args.knobs == 'nam4':
+        params, kit_patch_amp.nam_params = NAM4_FX_PARAMS, nam4_params(saved)
+    elif args.knobs == 'eq':
+        params, kit_patch_amp.nam_params = EQ_FX_PARAMS, eq_params(saved)
+    try:
+        new_l6ia, info = kit_patch_amp.add_model(
+            l6ia_bytes, args.clone or FX_CLONES[cat], args.name, args.display_name, folder=args.folder,
+            short_name=args.short_name, preset_id=args.preset_id, dsp_cost=args.dsp_cost, params=params,
+            prim_id=0x9c75, instance={'dm_words': args.dm_words, 'pm_words': args.pm_words, 'sdram_words': args.sdram_words},
+            host='HD2_VolPanVolMono', category=cat, log=print)
+    finally:
+        kit_patch_amp.nam_params = saved
     save_l6ia_to_any(new_l6ia, args.output, donor_hxf=args.input if is_hxf else args.donor)
     print(f"[+] Wrote {args.output}: {args.display_name} as an effect (kind {info['kind']}, preset_id {info['preset_id']})")
 
@@ -1616,7 +1922,15 @@ def main():
     p_fx.add_argument('--preset-id', type=int, required=True)
     p_fx.add_argument('--dsp-cost', type=int, required=True)
     p_fx.add_argument('--sdram-words', type=lambda x: int(x, 0), default=0x5000)
+    p_fx.add_argument('--dm-words', type=lambda x: int(x, 0), default=0x91,
+                      help="each block's I0 block in words (the mono FX slot allows up to 0x38b)")
+    p_fx.add_argument('--pm-words', type=lambda x: int(x, 0), default=0x0d,
+                      help="each block's I8 (PM) block in words (the mono FX slot allows up to 0x14e)")
     p_fx.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
+    p_fx.add_argument('--knobs', choices=('nam', 'nam4', 'eq'), default='nam',
+                      help="nam: the 8 knobs (Model first); nam4: Model, Polarity, Input, Output on MM4 Frequency "
+                           "Shifter's types (NAM4_FX_PARAMS; with remove-model 461 and --preset-id 461); eq: ten knobs "
+                           "with a tone stack on Xenomorph Fuzz Mono's types (EQ_FX_PARAMS; remove-model 555, --preset-id 555)")
 
     p_add = sub.add_parser('add-model', help='Add the NAM host amp to Entry 0, 2, 3 and 4')
     p_add.add_argument('input', help='Input .hxf or L6IA (the stock HX Stomp or HX Stomp XL v3.80.0 firmware)')
@@ -1632,6 +1946,12 @@ def main():
     p_add.add_argument('--sdram-words', type=lambda x: int(x, 0), default=0,
                        help='each block\'s own SDRAM (DDR2) block in words (0x5000 for tools/sharc/nam_multi.py); '
                             'raises the Amp harnesses\' model budget to fit (default 0: none)')
+    p_add.add_argument('--dm-words', type=lambda x: int(x, 0), default=0x91,
+                       help="each block's I0 block in words (default 0x91; the Amp harness allows up to "
+                            "0x596; 0x303 for tools/sharc/nam_multi.py's DM rings)")
+    p_add.add_argument('--pm-words', type=lambda x: int(x, 0), default=0x0d,
+                       help="each block's I8 (PM) block in words (default 0x0d; the Amp harness allows "
+                            "up to 0x1fa; 0x147 for tools/sharc/nam_multi.py's PM rings)")
     p_add.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
     p_add.add_argument('--dsp-cost', type=int,
                        help="DSP cost for Entry 0 Table 1 (default: the source's; stock amps 775..3700, "
@@ -1644,7 +1964,29 @@ def main():
                        help="the model's preset_id (add-model --preset-id); repeat for several models")
     p_irt.add_argument('--fx-preset-id', type=int, action='append',
                        help="a model added as an effect (add-fx-model): no cab-half test; repeatable")
+    p_irt.add_argument('--knob', type=int,
+                       help="the Model knob's index, a float knob (the 4-knob NAM: 0); outside 1..128 the title reads <EMPTY>")
     p_irt.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
+
+    p_rm = sub.add_parser('remove-model', help="Remove a stock model's Table 1 row and browser items (frees its preset_id)")
+    p_rm.add_argument('input', help='Input .hxf or L6IA')
+    p_rm.add_argument('output', help='Output .hxf or L6IA')
+    p_rm.add_argument('--preset-id', type=int, required=True)
+    p_rm.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
+
+    p_mv = sub.add_parser('move-folder', help="Move a category's last browser folder to another category")
+    p_mv.add_argument('input', help='Input .hxf or L6IA (after add-fx-model --folder)')
+    p_mv.add_argument('output', help='Output .hxf or L6IA')
+    p_mv.add_argument('--name', required=True, help='the folder (add-fx-model --folder)')
+    p_mv.add_argument('--from', dest='src', type=int, required=True, help='its category (2 Distortion)')
+    p_mv.add_argument('--to', dest='dst', type=int, required=True, help='the new category (12 Amp)')
+    p_mv.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
+
+    p_eff = sub.add_parser('effects-eq', help="HX Effects 3.80.0: NAM A2 Lite's ten-knob block as Distortion > Mono, "
+                           "every entry but the kernel (tools/effects.py; then patch)")
+    p_eff.add_argument('input')
+    p_eff.add_argument('output')
+    p_eff.add_argument('--donor', help='the stock .hxf, when OUT is an .hxf and IN is not')
 
     p_pat = sub.add_parser('patch', help='Inject the SHARC kernel into Entry 2 and hook primitive 0x9c75 to it')
     p_pat.add_argument('input', help='Input .hxf or L6IA')
@@ -1656,7 +1998,8 @@ def main():
 
     args = ap.parse_args()
     {'add-model': cmd_add_model, 'add-fx-model': cmd_add_fx_model, 'inspect': cmd_inspect, 'ir-title': cmd_ir_title,
-     'patch': cmd_patch}[args.cmd](args)
+     'patch': cmd_patch, 'remove-model': cmd_remove_model, 'move-folder': cmd_move_folder,
+     'effects-eq': cmd_effects_eq}[args.cmd](args)
 
 
 if __name__ == '__main__':

@@ -2,3 +2,4 @@ numpy
 pytest
 pyusb
 unicorn==2.1.4
+msgpack

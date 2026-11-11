@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """nam2ir.py - a NAM A2 Lite model (3 channels) as an HX Stomp User IR, for NAM A2 Lite.
 
-usage: nam2ir.py <model.nam> -o model.wav [--no-level]
+usage: nam2ir.py <model.nam> -o model.wav [--no-level] [--no-loudness]
 
 A capture that gives its interface's level (metadata input_level_dbu, the dBu
 at 0 dBFS) has it in IR word 5 (nam_lite.level_word); the kernel then trims
@@ -9,13 +9,22 @@ its input by STOMP_DBU - input_level_dbu (nam_lite.py), so that at Input 5.0
 the Stomp's input meets the model as the capture's interface did. --no-level
 leaves word 5 at 0 (no trim).
 
+A capture that gives its loudness (metadata loudness, NAM's measure of the model's
+output) has it in IR word 6 (nam_lite.loud_word); the kernel then scales the model's
+output to LOUD_TARGET (-18 dB, the NAM plugin's Normalized level), so that captures
+play at about the same volume. --no-loudness leaves word 6 at 0 (as it comes out).
+A file made before word 6 has 0 there and plays as it did.
+
+Refused: a capture whose file gives another sample rate than 48 kHz (the Stomp does
+not resample), or whose 3-channel model is not the A2 shape (nam_pack.a2_mismatch).
+
 Writes a 2,048-sample, 48 kHz, mono, 32-bit float .wav. Import it into a User
 IR slot (1..128) with HX Edit and set NAM A2 Lite's Model knob to that slot's
 number. A .nam holding several sizes (a SlimmableContainer) gives its 3-channel
 A2 Lite one. web/index.html does the same in a browser.
 
 The layout is tools/sharc/nam_lite.py's
-ir_samples(): 0.5, -0.5, 3.0, a scale 2^e, 1871 / 1024, 0, 0, 0, then the model's
+ir_samples(): 0.5, -0.5, 3.0, a scale 2^e, 1871 / 1024, level, loudness, 0, then the model's
 1,871 weights in the order the kernel loads them, then its silence state (72
 words, each / 16: what the rings hold after silence, so a change of model does
 not pop), all divided by 2^e (exact). A file made before the silence state has
@@ -82,7 +91,7 @@ def main():
     if len(argv) < 3 or "-o" not in argv:
         sys.exit(__doc__)
     out = argv.pop(argv.index("-o") + 1)
-    src = [a for a in argv if a not in ("-o", "--no-level")][0]
+    src = [a for a in argv if a not in ("-o", "--no-level", "--no-loudness")][0]
     w, c = nam_pack.load(src, channels=nam_lite.C)
     if c != nam_lite.C:
         sys.exit(f"{src}: {c} channels; NAM A2 Lite takes the 3-channel A2 Lite model")
@@ -90,8 +99,9 @@ def main():
     if bad:
         sys.exit(f"{src}: not an A2 Lite capture the kernel can run: " + "; ".join(bad))
     dbu = None if "--no-level" in argv else nam_pack.input_level_dbu(src)
+    loud = None if "--no-loudness" in argv else nam_pack.loudness(src)
     try:
-        words = nam_lite.ir_samples(w, dbu)
+        words = nam_lite.ir_samples(w, dbu, loud)
     except ValueError as e:
         sys.exit(f"{src}: {e}")
     write_wav(out, words)
@@ -100,6 +110,13 @@ def main():
           f"({nam_lite.STOMP_DBU:g} dBu at 0 dBFS)" if dbu is not None
           else "input level none: the capture gives no input_level_dbu" if "--no-level" not in argv
           else "input level left out (--no-level)")
+    if loud is not None and nam_lite.loud_word(loud):
+        print(f"loudness {loud:.1f} dB: output {nam_lite.LOUD_TARGET - loud:+.1f} dB "
+              f"(normalised to {nam_lite.LOUD_TARGET:g} dB)")
+    else:
+        print(f"loudness {loud:.1f} dB: too quiet for IR word 6, output as it comes out" if loud is not None
+              else "loudness none: the capture gives no loudness" if "--no-loudness" not in argv
+              else "loudness left out (--no-loudness)")
     print(f"wrote {out}: 2048 samples, 48 kHz float, 1,871 weights (scale {scale:g}); "
           f"HX Edit: import into a User IR slot, then set NAM A2 Lite's Model knob to that slot")
 

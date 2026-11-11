@@ -3,7 +3,7 @@
 // in Node (module.exports) for the check against the Python tool.
 //
 // The .wav is 2,048 samples, 48 kHz, mono, 32-bit float: a header (0.5, -0.5,
-// 3.0, a scale 2^e, 1871 / 1024, the input level, 0, 0), then the capture's 1,871 weights
+// 3.0, a scale 2^e, 1871 / 1024, the input level, the loudness, 0), then the capture's 1,871 weights
 // in the order the kernel loads them, then their silence state (72 words), all
 // divided by 2^e so that every sample is within HX Edit's +-15.8 limit, then zeros.
 (function (root) {
@@ -17,6 +17,8 @@
   var DILATION = [1, 3, 7, 17, 41, 101, 239, 1, 3, 7, 17, 41, 101, 239, 1, 13, 1, 3, 7, 17, 41, 101, 239];
   var N_WEIGHTS = 1871;
   var STOMP_DBU = 11.5;             // the Stomp's input at 0 dBFS, the firmware's: tools/sharc/nam_lite.py
+  var LOUD_REF = -18;               // IR word 6's reference and the firmware's target: tools/sharc/nam_lite.py
+  var LOUD_TARGET = -18;            // (the NAM plugin's Normalized level)
 
   function same(a, b) {
     return Array.isArray(a) && a.length === b.length && a.every(function (x, i) { return x === b[i]; });
@@ -46,22 +48,53 @@
                     "). NAM A2 Lite plays A2 Lite captures only.");
   }
 
-  // What would make the kernel compute something else than this capture.
+  // What would make the kernel compute something else than this capture: the A2 shape,
+  // tools/sharc/nam_pack.py a2_mismatch() (NeuralAmpModelerCore's is_a2_shape, rule for rule).
   function problems(m) {
     var out = [];
-    var L = m.config.layers;
+    var cfg = m.config;
+    var L = cfg.layers;
     if (L.length !== 1) out.push(L.length + " layer arrays; A2 Lite has 1");
     var l = L[0];
+    var off = function (v) { return v === undefined || v === null || v === false || (typeof v === "object" && !v.active); };
+    if (!(cfg.head === undefined || cfg.head === null) || !(cfg.condition_dsp === undefined || cfg.condition_dsp === null)) {
+      out.push("a post-stack head or a condition DSP");
+    }
+    if (typeof cfg.head_scale !== "number" || (cfg.in_channels !== undefined && cfg.in_channels !== 1)) out.push("no head_scale");
+    if (l.input_size !== 1 || l.condition_size !== 1) out.push("input_size and condition_size are not 1");
+    if (l.bottleneck !== C) out.push("bottleneck is not " + C);
+    if (!l.kernel_sizes || !l.dilations) out.push("no kernel sizes or dilations");
+    if (!Array.isArray(l.activation) || l.activation.length !== KERNEL.length) out.push("not one activation per layer");
+    if (l.gated === true) out.push("gated");
+    if (l.secondary_activation !== undefined && l.secondary_activation !== null &&
+        !(Array.isArray(l.secondary_activation) && l.secondary_activation.length === KERNEL.length &&
+          l.secondary_activation.every(function (x) { return x === null; }))) out.push("a secondary activation");
+    if (l.head1x1 && typeof l.head1x1 === "object" && l.head1x1.active) out.push("head1x1 is on");
+    if (!l.layer1x1 || !l.layer1x1.active || (l.layer1x1.groups !== undefined && l.layer1x1.groups !== 1)) out.push("layer1x1 is not on with groups 1");
+    var h = l.head;
+    if (!h || h.out_channels !== 1 || h.kernel_size !== HEAD_TAPS || (h.head_dilation !== undefined && h.head_dilation !== 1) || !h.bias) {
+      out.push("the head is not " + HEAD_TAPS + " taps with a bias");
+    }
+    ["conv_pre_film", "conv_post_film", "input_mixin_pre_film", "input_mixin_post_film", "activation_pre_film",
+     "activation_post_film", "layer1x1_post_film", "head1x1_post_film"].forEach(function (k) {
+      if (!off(l[k])) out.push("FiLM (" + k + ")");
+    });
+    if ((l.groups_input !== undefined && l.groups_input !== 1) || (l.groups_input_mixin !== undefined && l.groups_input_mixin !== 1)) {
+      out.push("grouped convolutions");
+    }
+    if (l.slimmable !== undefined && l.slimmable !== null) out.push("slimmable layers");
     if (l.kernel_sizes && !same(l.kernel_sizes, KERNEL)) out.push("kernel sizes differ from A2's");
     if (l.dilations && !same(l.dilations, DILATION)) out.push("dilations differ from A2's");
     (l.activation || []).forEach(function (a, i) {
-      if (a && (a.type !== "LeakyReLU" || a.negative_slope !== 0.01)) {
-        out.push("layer " + (i + 1) + " uses " + a.type + "; the kernel has LeakyReLU 0.01");
+      if (!a || typeof a !== "object" || a.type !== "LeakyReLU" || !(Math.abs((a.negative_slope || 0) - 0.01) <= 1e-7)) {
+        out.push("layer " + (i + 1) + " uses " + (a && a.type) + "; the kernel has LeakyReLU 0.01");
       }
     });
     (l.gating_mode || []).forEach(function (g, i) {
-      if (g && g !== "none") out.push("layer " + (i + 1) + " is gated");
+      if (g !== "none") out.push("layer " + (i + 1) + " is gated");
     });
+    if (l.gating_mode !== undefined && l.gating_mode !== null &&
+        !(Array.isArray(l.gating_mode) && l.gating_mode.length === KERNEL.length)) out.push("not one gating mode per layer");
     if (!Array.isArray(m.weights) || m.weights.length !== N_WEIGHTS) {
       out.push((m.weights ? m.weights.length : 0) + " weights; A2 Lite has " + N_WEIGHTS);
     }
@@ -73,6 +106,19 @@
   function inputLevelDbu(meta) {
     var dbu = meta && meta.input_level_dbu;
     return typeof dbu === "number" && isFinite(dbu) ? dbu : null;
+  }
+
+  // The capture's loudness in dB (metadata loudness), or null: nam_pack.py loudness().
+  function loudness(meta) {
+    var x = meta && meta.loudness;
+    return typeof x === "number" && isFinite(x) ? x : null;
+  }
+
+  // IR word 6: tools/sharc/nam_lite.py loud_word(); 0 (left as it is) when too quiet.
+  function loudWord(db) {
+    if (db === null) return 0;
+    var g = Math.fround(Math.pow(10, (LOUD_REF - db) / 20));
+    return g > 0 && g < IR_LIMIT ? g : 0;
   }
 
   // IR word 5: tools/sharc/nam_lite.py level_word().
@@ -148,14 +194,15 @@
   }
 
   // The 2,048 IR samples as a Float32Array, and the scale exponent.
-  function irSamples(w, dbu) {
+  function irSamples(w, dbu, loud) {
     var st = stream(w);
     var peak = 0;
     st.forEach(function (x) { peak = Math.max(peak, Math.abs(x)); });
     var e = 0;
     while (peak / Math.pow(2, e) > 15.5) e++;
     var s = Math.pow(2, e);
-    var vals = [0.5, -0.5, C, s, N_WEIGHTS / 1024, levelWord(dbu === undefined ? null : dbu), 0, 0].concat(st.map(function (x) { return x / s; }));
+    var vals = [0.5, -0.5, C, s, N_WEIGHTS / 1024, levelWord(dbu === undefined ? null : dbu),
+                loudWord(loud === undefined ? null : loud), 0].concat(st.map(function (x) { return x / s; }));
     if (vals.length >= IR_SAMPLES) throw new Error("Too many weights for one IR slot.");
     vals.forEach(function (v) {
       if (!(Math.abs(v) < IR_LIMIT)) throw new Error("A sample HX Edit would refuse (" + v + ").");
@@ -186,7 +233,8 @@
   }
 
   // Text of a .nam file -> { wav, info } or an Error thrown. opts: level: false
-  // to leave the input level out (word 5 0: no trim).
+  // to leave the input level out (word 5 0: no trim); loudness: false to leave the
+  // loudness out (word 6 0: as it comes out).
   function convert(text, opts) {
     opts = opts || {};
     var d;
@@ -195,8 +243,14 @@
     var bad = problems(pick.model);
     if (bad.length) throw new Error("Not an A2 Lite capture the kernel can run: " + bad.join("; ") + ".");
     var meta = d.metadata || {};
+    [d.sample_rate, pick.model.sample_rate].forEach(function (rate) {
+      if (rate !== undefined && rate !== null && rate !== 48000) {
+        throw new Error("Trained at " + rate + " Hz; the Stomp runs at 48 kHz and does not resample, so it would sound off.");
+      }
+    });
     var dbu = opts.level === false ? null : inputLevelDbu(meta);
-    var ir = irSamples(pick.model.weights, dbu);
+    var loud = opts.loudness === false ? null : loudness(meta);
+    var ir = irSamples(pick.model.weights, dbu, loud);
     var rate = pick.model.sample_rate || d.sample_rate;
     return {
       wav: wavBytes(ir.samples),
@@ -209,13 +263,15 @@
         peak: ir.peak,
         inputDbu: dbu,
         trimDb: dbu === null ? null : STOMP_DBU - dbu,
+        loudness: loud,
+        loudDb: loud === null || !loudWord(loud) ? null : LOUD_TARGET - loud,
         sampleRate: rate,
-        warnings: rate && rate !== 48000 ? ["Trained at " + rate + " Hz; the Stomp runs at 48 kHz, so it will sound off."] : []
+        warnings: []
       }
     };
   }
 
-  var api = { STOMP_DBU: STOMP_DBU, convert: convert, pickModel: pickModel, problems: problems, irSamples: irSamples, wavBytes: wavBytes };
+  var api = { STOMP_DBU: STOMP_DBU, LOUD_TARGET: LOUD_TARGET, convert: convert, pickModel: pickModel, problems: problems, irSamples: irSamples, wavBytes: wavBytes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.NAM2IR = api;
 })(this);

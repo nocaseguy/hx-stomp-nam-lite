@@ -98,3 +98,53 @@ def test_both_refuse_wrong_weight_count(tmp_path, weights):
     src.write_text(nam_json(weights[:-1]))
     assert py_convert(src, tmp_path / "py.wav").returncode != 0
     assert js_convert(src, tmp_path / "js.wav")["ok"] is False
+
+
+@pytest.mark.parametrize("loud", [-16.7, -28.3, -9.0, -50.0], ids=["-16.7", "-28.3", "-9", "too quiet"])
+def test_same_bytes_with_loudness(tmp_path, nam_file, loud):
+    # a capture that gives its loudness: both put 10^((-18 - loudness)/20) in word 6 (0 when the
+    # word cannot hold it), and nothing else changes
+    src = nam_file(metadata={"loudness": loud})
+    r = py_convert(src, tmp_path / "py.wav")
+    assert r.returncode == 0, r.stderr
+    assert js_convert(src, tmp_path / "js.wav") == {"ok": True}
+    py = (tmp_path / "py.wav").read_bytes()
+    assert (tmp_path / "js.wav").read_bytes() == py
+    words = struct.unpack("<2048f", py[44:])
+    assert words[6] == (0.0 if loud < -42 else pytest.approx(10 ** ((-18 - loud) / 20), rel=1e-6))
+    off = py_convert(src, tmp_path / "off.wav")
+    assert "loudness left out" not in off.stdout
+    plain = subprocess.run([sys.executable, str(ROOT / "tools/nam2ir.py"), str(src), "-o", str(tmp_path / "raw.wav"),
+                            "--no-loudness"], capture_output=True, text=True)
+    assert plain.returncode == 0 and "loudness left out (--no-loudness)" in plain.stdout
+    other = struct.unpack("<2048f", (tmp_path / "raw.wav").read_bytes()[44:])
+    assert words[:6] + words[7:] == other[:6] + other[7:] and other[6] == 0.0
+
+
+@pytest.mark.parametrize("where", ["file", "model"])
+def test_both_refuse_other_sample_rate(tmp_path, weights, where):
+    d = json.loads(nam_json(weights))
+    if where == "file":
+        d = {"architecture": "SlimmableContainer", "sample_rate": 44100,
+             "config": {"submodels": [{"model": d}]}}
+    else:
+        d["sample_rate"] = 44100.0
+    src = tmp_path / "bad.nam"
+    src.write_text(json.dumps(d))
+    assert py_convert(src, tmp_path / "py.wav").returncode != 0
+    assert js_convert(src, tmp_path / "js.wav")["ok"] is False
+
+
+@pytest.mark.parametrize("layer", [
+    {"conv_pre_film": {"active": True}},
+    {"bottleneck": 2},
+    {"head1x1": {"active": True}},
+    {"layer1x1": {"active": False}},
+    {"secondary_activation": [{"type": "Tanh"}] * 23},
+    {"activation": [{"type": "LeakyReLU", "negative_slope": 0.2}] * 23},
+], ids=["film", "bottleneck", "head1x1", "layer1x1", "secondary", "slope"])
+def test_both_refuse_not_a2_shape(tmp_path, weights, layer):
+    src = tmp_path / "bad.nam"
+    src.write_text(nam_json(weights, **layer))
+    assert py_convert(src, tmp_path / "py.wav").returncode != 0
+    assert js_convert(src, tmp_path / "js.wav")["ok"] is False

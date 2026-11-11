@@ -18,6 +18,7 @@ add_model has no tempo sync (kit_patch_amp.SYNC_PARAMS), so this tool lays out t
 parameter map itself (click_blob) and uses the kit's Entry 0, 3 and 4 steps around it.
 """
 import argparse
+import importlib.util
 import os
 import struct
 import sys
@@ -32,7 +33,7 @@ import nam_multi
 
 ASM = os.path.join(SCRIPT_DIR, '..', 'src', 'sharc', 'click.asm')
 NAME, DISPLAY, FOLDER = 'HD2_ClickMetronomeMono', 'Metronome', 'Metronome'
-PRESET_ID = 181                     # the first free one after NAM's 147 and 148; fixed for ever as theirs
+PRESET_ID = 181                     # fixed for ever: presets store it
 DSP_COST = 50
 CLONE = 'HD2_Tremolo60sBiasTremMono'   # a mono modulation with four knobs and a synced pair: no trails, as delays have
 CATEGORY = 5                        # Modulation
@@ -165,10 +166,18 @@ def replace_last_blob(e4, blob_index, words):
     return out
 
 
+def nam_layout():
+    """nam_multi's Layout of build.py's HX Stomp kernel, with its KERNEL['HX_Stomp'] flags."""
+    spec = importlib.util.spec_from_file_location('customos_build', os.path.join(SCRIPT_DIR, '..', 'build.py'))
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    return nam_multi.layout(build.KERNEL['HX_Stomp'][1:])
+
+
 def pm_base(n_insns):
     """Where the kernel goes: right under NAM A2 Lite's cold code, above its slots
-    (nam_multi.Layout of build.py's three slots)."""
-    _, lay = nam_multi.build(3)
+    (nam_layout())."""
+    lay = nam_layout()
     n = n_insns + (n_insns & 1)
     base = lay.cold_pm - n
     nw = nam_multi.NW3 + (base - nam_multi.NW3) * 3 // 2

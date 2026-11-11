@@ -321,9 +321,9 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 # ---- the whole GR build, pinned as tests/test_firmware.py pins the default one
 
 GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
-    'HX_GR': 'b526089e9ebe6e90e60c50c5d4007c86',
-    'HX_GR HX_FRAMEPROBE': 'c481fc1c30e51f54d6c28fb2ba42b0d1',
-    'HX_GR HX_CLICK': 'ab6d7b53765d060b0bab486a95f1dca8',    # patch_click.py adds a model, which would drop knobs written before it
+    'HX_GR': 'c4b19e70f5500e5e8b763951add88b38',
+    'HX_GR HX_FRAMEPROBE': '036990f9e12e633e835326cadad63c91',
+    'HX_GR HX_CLICK': '2024b31e6e0c95ff8080deebd4714490',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
@@ -344,6 +344,45 @@ def test_gr_build(tmp_path, flags):
     assert 'ALL OK' in r.stdout and 'Entry 0: features gr, splash\n' in r.stdout
     assert r.stdout.count(': Mtr Position, Mtr Direction, Mtr Thickness on slots') == len(pc.COMP_MODELS)
     assert hashlib.md5(out.read_bytes()).hexdigest() == GR_BUILT_MD5[flags]
+
+
+def build_steps(tmp_path, monkeypatch, unit, env):
+    """The commands build.py's main() runs for `unit` with `env`, each step stubbed out."""
+    import hashlib
+    import importlib.util
+    import sys
+    spec = importlib.util.spec_from_file_location('customos_build', ROOT / 'build.py')
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    stock = tmp_path / 'stock.hxf'
+    stock.write_bytes(b'not firmware')
+    monkeypatch.setattr(build, 'STOCK_MD5', {hashlib.md5(stock.read_bytes()).hexdigest(): unit})
+    for k in ('HX_GR', 'HX_FRAMEPROBE', 'HX_CLICK'):
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setattr(build.os, 'replace', lambda *a: None)
+    monkeypatch.setattr(build.os, 'remove', lambda *a: None)
+    monkeypatch.setattr(sys, 'argv', ['build.py', str(stock), '-o', str(tmp_path / 'out.hxf'), '--no-check'])
+    ran = []
+    monkeypatch.setattr(build, 'run', lambda *a: ran.append(a[1:]) or 'ALL OK')
+    build.main()
+    return ran
+
+
+@pytest.mark.parametrize('unit', ['HX_Stomp_XL', 'HX_Effects'])
+def test_frameprobe_is_for_the_hx_stomp_only(tmp_path, monkeypatch, unit):
+    ran = build_steps(tmp_path, monkeypatch, unit, {'HX_FRAMEPROBE': '1'})
+    assert any(a[0] == 'tools/sharc/nam_multi.py' for a in ran)
+    patch = next(a for a in ran if a[:2] == ('tools/patch_amp.py', 'patch'))
+    assert '--wrap-prim' not in patch and not patch[-1].endswith('frame_probe.asm')
+
+
+def test_frameprobe_wraps_the_compressors_on_the_hx_stomp(tmp_path, monkeypatch):
+    ran = build_steps(tmp_path, monkeypatch, 'HX_Stomp', {'HX_FRAMEPROBE': '1'})
+    assert not any(a[0] == 'tools/sharc/nam_multi.py' for a in ran)
+    patch = next(a for a in ran if a[:2] == ('tools/patch_amp.py', 'patch'))
+    assert patch.count('--wrap-prim') == 3 and patch[patch.index('--asm') + 1].endswith('frame_probe.asm')
 
 
 # ---- the feature: its hooks on the stock firmware

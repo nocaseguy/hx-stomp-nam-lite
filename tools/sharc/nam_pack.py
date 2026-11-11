@@ -35,8 +35,78 @@ def load(path, channels=3):
     subs = [s["model"] for s in d["config"]["submodels"]] if d.get("architecture") == "SlimmableContainer" else [d]
     for m in subs:
         if m.get("architecture") == "WaveNet" and m["config"]["layers"][0]["channels"] == channels:
+            for x in (d, m):
+                rate = x.get("sample_rate")
+                if rate is not None and rate != SAMPLE_RATE:
+                    raise SystemExit(f"{path}: a {rate:g} Hz capture; the HX Stomp runs at 48 kHz "
+                                     "and does not resample (it would play with its response shifted)")
+            why = a2_mismatch(m["config"], channels)
+            if why:
+                raise SystemExit(f"{path}: not an A2 model ({why})")
             return m["weights"], channels
     raise SystemExit(f"no {channels}-channel WaveNet in {path}")
+
+
+SAMPLE_RATE = 48000      # no sample_rate in a file: NAM's default, 48 kHz
+
+
+def a2_mismatch(config, channels):
+    """None when a WaveNet config is the A2 shape the kernels compute, else what differs:
+    NeuralAmpModelerCore's is_a2_shape (NAM/wavenet/a2_fast.cpp) rule for rule. The weight
+    count alone would pass a model with another activation, dilation order or a FiLM."""
+    layers = config.get("layers")
+    if not isinstance(layers, list) or len(layers) != 1:
+        return "one layer array"
+    if config.get("head") is not None or config.get("condition_dsp") is not None:
+        return "a post-stack head or a condition DSP"
+    if not isinstance(config.get("head_scale"), (int, float)) or config.get("in_channels", 1) != 1:
+        return "head_scale, in_channels 1"
+    la = layers[0]
+    if la.get("input_size") != 1 or la.get("condition_size") != 1:
+        return "input_size and condition_size 1"
+    if la.get("channels") != channels or la.get("bottleneck") != channels:
+        return f"channels and bottleneck {channels}"
+    if la.get("kernel_sizes") != KERNEL or la.get("dilations") != DILATION:
+        return "A2's kernel sizes and dilations"
+    act = la.get("activation")
+    if (not isinstance(act, list) or len(act) != len(KERNEL)
+            or any(not isinstance(a, dict) or a.get("type") != "LeakyReLU"
+                   or abs(a.get("negative_slope", 0.0) - 0.01) > 1e-7 for a in act)):
+        return "LeakyReLU(0.01) in every layer"
+    gm, sa = la.get("gating_mode"), la.get("secondary_activation")
+    if gm is not None and (gm != ["none"] * len(KERNEL)) or la.get("gated") is True:
+        return "no gating"
+    if sa is not None and sa != [None] * len(KERNEL):
+        return "no secondary activation"
+    if isinstance(la.get("head1x1"), dict) and la["head1x1"].get("active", False):
+        return "head1x1 off"
+    l1 = la.get("layer1x1")
+    if not isinstance(l1, dict) or not l1.get("active", False) or l1.get("groups", 1) != 1:
+        return "layer1x1 on, groups 1"
+    h = la.get("head")
+    if (not isinstance(h, dict) or h.get("out_channels") != 1 or h.get("kernel_size") != HEAD_TAPS
+            or h.get("head_dilation", 1) != 1 or not h.get("bias", False)):
+        return f"a {HEAD_TAPS}-tap head with a bias"
+    for k in ("conv_pre_film", "conv_post_film", "input_mixin_pre_film", "input_mixin_post_film",
+              "activation_pre_film", "activation_post_film", "layer1x1_post_film", "head1x1_post_film"):
+        v = la.get(k)
+        if not (v is None or v is False or isinstance(v, dict) and not v.get("active", False)):
+            return f"no FiLM ({k})"
+    if la.get("groups_input", 1) != 1 or la.get("groups_input_mixin", 1) != 1:
+        return "no grouped convolutions"
+    if la.get("slimmable") is not None:
+        return "not slimmable"
+    return None
+
+
+def loudness(path):
+    """The capture's loudness in dB (metadata loudness, NAM's measure of the model's output on
+    its standard signal) of a .nam file; None when it does not give a number (or for a .h)."""
+    if path.endswith(".h"):
+        return None
+    x = (json.loads(open(path).read()).get("metadata") or {}).get("loudness")
+    ok = isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+    return float(x) if ok else None
 
 
 
