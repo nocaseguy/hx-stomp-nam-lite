@@ -1,5 +1,5 @@
 """The gain-reduction meter: the DSP wrapper (src/sharc/frame_probe.asm) in ssim, the compressor knobs (tools/patch_comp.py),
---wrap-prim (tools/patch_amp.py), the M4 meter (src/m4/gr_meter.s) in unicorn and its feature (tools/features/gr.py)."""
+its place beside the NAM and Metronome kernels, --wrap-prim (tools/patch_amp.py), the M4 meter (src/m4/gr_meter.s) in unicorn and its feature (tools/features/gr.py)."""
 import math
 import os
 import re
@@ -9,7 +9,9 @@ from pathlib import Path
 import pytest
 
 import features
+import nam_multi
 import patch_amp as pa
+import patch_click
 import patch_comp as pc
 import patch_menu as pm
 import sasm
@@ -32,7 +34,7 @@ SCALE = 0.25                                            # the stand-in core: I2 
 
 def probe():
     """(sim, symbol lookup) of frame_probe.asm, with a stand-in core and control function and the scan over one frame."""
-    src = (ROOT / 'src/sharc/frame_probe.asm').read_text()
+    src = pc.dsp_asm(0xe4850, 0xc4ef8)
     for k, v in (('ORIG', CORE), ('ORIG_2719', CORE), ('ORIG_CTRL_271A', CTRL), ('ORIG_CTRL_2719', CTRL),
                  ('ORIG_CTRL_2710', CTRL), ('SCAN_A', FRAME), ('SCAN_B', FRAME + 256), ('SCAN_C', FRAME + 256),
                  ('SCAN_D', FRAME + 256)):
@@ -218,6 +220,48 @@ def test_wrap_prim_refuses_a_stock_address_that_differs():
         pa.wrap_primitive(e2, '0x2719:0x8d342', 0xc4ef8)
 
 
+# ---- the DSP wrapper's place, beside NAM A2 Lite's kernel and the Metronome's
+
+def dsp_ranges():
+    """[start, end) normal-word ranges of the wrapper's data and code, from pc.dsp_place()."""
+    dm, pm = pc.dsp_place()
+    secs, _ = sasm.assemble(pc.dsp_asm(dm, pm), 'frame_probe.asm')
+    (n_dm,), (n_pm,) = ([len(s.words) for s in secs if s.kind == k] for k in ('dm', 'pm'))
+    return (dm, dm + n_dm), (pc.nw(pm), pc.nw(pm + n_pm + (n_pm & 1)))
+
+
+def overlap(a, b):
+    return a[0] < b[1] and b[0] < a[1]
+
+
+def test_dsp_sits_right_above_nams_two_slots():
+    lay = patch_click.nam_layout(gr=True)
+    (data, code) = dsp_ranges()
+    assert lay.slots == 2 and data[0] == lay.b3_to and data[1] <= code[0]
+    assert not any(overlap(r, c) for r in (data, code) for c in lay.claims())
+
+
+def test_dsp_sits_under_the_metronome_and_nams_cold_code():
+    lay = patch_click.nam_layout(gr=True)
+    click = patch_click.pm_base(patch_click.kernel_size(), lay)
+    _, code = dsp_ranges()
+    assert code[1] <= pc.nw(click) < pc.nw(lay.cold_pm)
+    _, pm = pc.dsp_place()
+    assert 0x0e302c <= pm and pc.nw(pm) + (code[1] - code[0]) <= nam_multi.NW3 + 0x8000
+
+
+def test_dsp_does_not_fit_beside_three_slots():
+    lay = patch_click.nam_layout(gr=False)
+    (data, code) = dsp_ranges()
+    assert lay.slots == 3 and lay.cold_nw - lay.b3_to < (data[1] - data[0]) + (code[1] - code[0])
+
+
+def test_wraps_call_the_stock_code_the_wrapper_calls():
+    _, syms = sasm.assemble(pc.dsp_asm(*pc.dsp_place()), 'frame_probe.asm')
+    assert dict(pc.WRAPS) == {0x271a: syms['ORIG'], 0x2719: syms['ORIG_2719'], 0x2710: syms['ORIG_2719']}
+    assert {prim for _, prim in pc.COMP_MODELS} == set(dict(pc.WRAPS))
+
+
 # ---- the compressor knobs, on the stock firmware
 
 def stock_l6ia():
@@ -311,6 +355,52 @@ def test_rochester_cores_are_the_deluxe_core_its_knobs_drive(model, slots):
         assert pids == {1, 2, 3, 4, 8}
 
 
+def e2_words(data):
+    e = pa.l6ia.parse(data)[2]
+    raw = data[e['payload_off']: e['payload_off'] + e['payload_len']]
+    return raw, list(struct.unpack(f'<{len(raw) // 4}I', raw))
+
+
+@pytest.mark.firmware
+def test_dsp_patch_points_each_core_and_its_control_function_at_the_wrapper():
+    data = stock_l6ia()
+    stock, _ = e2_words(data)
+    _, words = e2_words(pc.patch_dsp(data, log=lambda *_: None))
+    _, syms = sasm.assemble(pc.dsp_asm(*pc.dsp_place()), 'frame_probe.asm')
+    joined = f",{','.join(map(str, words))},"
+    for prim, orig in pc.WRAPS:
+        block = pa.wrap_primitive(stock, f'{prim:#x}:{orig:#x}', syms[f'ENTRY_{prim:X}'],
+                                  (syms[f'ORIG_CTRL_{prim:X}'], syms[f'CTRL_{prim:X}']))
+        assert f",{','.join(map(str, block))}," in joined, f'{prim:#x}'
+
+
+DEFAULT_E3 = 0xf0d00            # the default build's Entry 3: amps load [verified on unit]; 0xf3888 drops every amp and preamp
+
+
+@pytest.fixture(scope='module')
+def added_then_comp():
+    """(Entry 3 after add-model, after patch_comp too): add-model has moved the string section and model table to the tail."""
+    added, _ = patch_click.add_click(stock_l6ia(), log=lambda *_: None)
+    return pa.get_entry_swapped(added, 3), pa.get_entry_swapped(pc.patch_comp(added, log=lambda *_: None), 3)
+
+
+@pytest.mark.firmware
+def test_comp_patch_puts_the_strings_back_in_the_stock_tables_place(added_then_comp):
+    before, after = added_then_comp
+    h0, h1 = struct.unpack_from('<10I', before, 0), struct.unpack_from('<10I', after, 0)
+    assert h0[3] > pc.STOCK_E3_END and h1[3] == pc.STR_HOME and h1[6] == h0[3]
+    assert len(after) < len(before) - 0x10000
+
+
+@pytest.mark.firmware
+def test_comp_patch_keeps_every_other_model_and_slot_list(added_then_comp):
+    before, after = added_then_comp
+    comps = {m for m, _ in pc.COMP_MODELS}
+    view = lambda e3: [pc.models_view({'models': [m]}) for m in pa.parse_entry3_full(e3)['models'] if m['name'] not in comps]
+    assert view(before) == view(after)
+    assert pc.slot_lists(before) == pc.slot_lists(after)
+
+
 @pytest.mark.firmware
 def test_comp_patch_refuses_a_second_run(comp_patched):
     _, new = comp_patched
@@ -320,10 +410,9 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 
 # ---- the whole GR build, pinned as tests/test_firmware.py pins the default one
 
-GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
-    'HX_GR': 'b526089e9ebe6e90e60c50c5d4007c86',
-    'HX_GR HX_FRAMEPROBE': 'c481fc1c30e51f54d6c28fb2ba42b0d1',
-    'HX_GR HX_CLICK': 'ab6d7b53765d060b0bab486a95f1dca8',    # patch_click.py adds a model, which would drop knobs written before it
+GR_BUILT_MD5 = {
+    'HX_GR': 'cdcd4c4c91314d888bb22230a455cc31',
+    'HX_GR HX_CLICK': '117441e871126b0cb5a9566ca64a9579',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
@@ -337,13 +426,61 @@ def test_gr_build(tmp_path, flags):
     if not stock:
         pytest.skip('HX_STOMP_HXF is not set')
     out = tmp_path / 'gr.hxf'
-    env = {k: v for k, v in os.environ.items() if k not in ('HX_GR', 'HX_FRAMEPROBE', 'HX_CLICK')} | {f: '1' for f in flags.split()}
+    env = {k: v for k, v in os.environ.items() if k not in ('HX_GR', 'HX_CLICK')} | {f: '1' for f in flags.split()}
     r = subprocess.run([sys.executable, str(ROOT / 'build.py'), stock, '-o', str(out), '--no-check'],
                        capture_output=True, text=True, cwd=ROOT, env=env)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert 'ALL OK' in r.stdout and 'Entry 0: features gr, splash\n' in r.stdout
+    shown = 'gr, metronome, splash; Entry 7; Entry 8' if 'HX_CLICK' in flags else 'gr, splash'     # the Metronome's off icon
+    assert 'ALL OK' in r.stdout and f'Entry 0: features {shown}\n' in r.stdout
     assert r.stdout.count(': Mtr Position, Mtr Direction, Mtr Thickness on slots') == len(pc.COMP_MODELS)
     assert hashlib.md5(out.read_bytes()).hexdigest() == GR_BUILT_MD5[flags]
+    assert len(pa.get_entry_swapped(pa.load_l6ia_from_any(str(out))[0], 3)) <= DEFAULT_E3
+
+
+def build_steps(tmp_path, monkeypatch, unit, env):
+    """The commands build.py's main() runs for `unit` with `env`, each step stubbed out."""
+    import hashlib
+    import importlib.util
+    import sys
+    spec = importlib.util.spec_from_file_location('customos_build', ROOT / 'build.py')
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    stock = tmp_path / 'stock.hxf'
+    stock.write_bytes(b'not firmware')
+    monkeypatch.setattr(build, 'STOCK_MD5', {hashlib.md5(stock.read_bytes()).hexdigest(): unit})
+    for k in ('HX_GR', 'HX_CLICK'):
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setattr(build.os, 'replace', lambda *a: None)
+    monkeypatch.setattr(build.os, 'remove', lambda *a: None)
+    monkeypatch.setattr(sys, 'argv', ['build.py', str(stock), '-o', str(tmp_path / 'out.hxf'), '--no-check'])
+    ran = []
+    monkeypatch.setattr(build, 'run', lambda *a: ran.append(a[1:]) or 'ALL OK')
+    build.main()
+    return ran
+
+
+@pytest.mark.parametrize('unit', ['HX_Stomp_XL', 'HX_Effects'])
+def test_gr_is_for_the_hx_stomp_only(tmp_path, monkeypatch, unit):
+    ran = build_steps(tmp_path, monkeypatch, unit, {'HX_GR': '1'})
+    assert '--slots' not in next(a for a in ran if a[0] == 'tools/sharc/nam_multi.py')
+    assert not any(a[0] == 'tools/patch_comp.py' for a in ran)
+
+
+@pytest.mark.parametrize('env', [{}, {'HX_CLICK': '1'}])
+def test_gr_keeps_nam_on_two_slots_and_patches_last(tmp_path, monkeypatch, env):
+    ran = build_steps(tmp_path, monkeypatch, 'HX_Stomp', {'HX_GR': '1'} | env)
+    kernel = next(a for a in ran if a[0] == 'tools/sharc/nam_multi.py')
+    assert kernel[kernel.index('--slots') + 1] == '2'
+    patch = next(a for a in ran if a[:2] == ('tools/patch_amp.py', 'patch'))
+    assert '--wrap-prim' not in patch and patch[patch.index('--asm') + 1].endswith('nam_lite.asm')
+    assert [a[0] for a in ran][-3:] == ['tools/patch_comp.py', 'tools/l6ia_verify.py', 'tools/hxf.py']
+
+
+def test_without_gr_nam_keeps_three_slots(tmp_path, monkeypatch):
+    ran = build_steps(tmp_path, monkeypatch, 'HX_Stomp', {})
+    assert '--slots' not in next(a for a in ran if a[0] == 'tools/sharc/nam_multi.py')
 
 
 # ---- the feature: its hooks on the stock firmware

@@ -9,7 +9,7 @@ import features
 import patch_menu as pm
 import setting_ids
 from features import breathing_line as bl, gr
-from firmware import assert_virtual, reader, stock_e0
+from firmware import assert_virtual, menu_entry0, reader, stock_e0
 
 RATES = [round(2 ** 32 / (ms * 1000)) for ms in (8000, 6000, 4800, 4000, 3200, 2500, 2000, 1500, 1100, 800)]
 
@@ -40,7 +40,7 @@ def test_settings_values_defaults_and_ids():
 @pytest.mark.firmware
 def test_build_serves_the_settings_virtually_and_hooks_the_paint_and_the_tick():
     e0 = stock_e0()
-    new, on = pm.menu_entry0(e0, None, {'HX_BREATHING_LINE': '1'})
+    new, on = menu_entry0(e0, None, {'HX_BREATHING_LINE': '1'})
     assert 'breathing_line' in [features.name(m) for m in on]
     for s in bl.SETTINGS:
         assert_virtual(new, bl, s)
@@ -59,10 +59,10 @@ def test_a_build_with_the_gr_meter_hands_the_line_its_shown_word(monkeypatch):
         seen[path] = (real(self, path, inc), inc)
         return seen[path][0]
     monkeypatch.setattr(pm.Patch, 'module', module)
-    pm.menu_entry0(stock_e0(), None, {'HX_BREATHING_LINE': '1', 'HX_GR': '1'})
+    menu_entry0(stock_e0(), None, {'HX_BREATHING_LINE': '1', 'HX_GR': '1'})
     assert seen['src/m4/breathing_line.s'][1] == {'gr.inc': f'.equ GR_SHOWN, {seen[gr.MODULE][0]["data"] + gr.SHOWN:#x}\n'}
     seen.clear()
-    pm.menu_entry0(stock_e0(), None, {'HX_BREATHING_LINE': '1'})
+    menu_entry0(stock_e0(), None, {'HX_BREATHING_LINE': '1'})
     assert seen['src/m4/breathing_line.s'][1] == {'gr.inc': '.equ GR_SHOWN, 0x0\n'}
 
 
@@ -157,6 +157,7 @@ MOD = 0x28e60000
 SEGMENTS, NODES = 0x2812a594, 0x2812b000
 REDRAW, GET_VALUE, CLOCK, LOCK, UNLOCK, FILL = 0x28db8508, 0x28e1f844, 0x28da6458, 0x28e24970, 0x28e24ae8, 0x100017e8
 IDS = {'color': 0xd7, 'motion': 0xd8, 'speed': 0xd9}
+START_MS = 2000                     # the line starts this long after the first Home paint
 _code = {}
 
 
@@ -173,6 +174,7 @@ class Line:
         self.m.stub(FILL, lambda m: self.fills.append((m.reg('r0'), m.reg('r1'), m.reg('r2'), m.reg('r3'), *m.stack_args(3))))
         for k in range(4):
             self.segment(k, h=1)
+        self.set_data(6, START_MS + 1)
 
     def segment(self, k, h=1, visible=1):
         w = SEGMENTS + 0x1c * k
@@ -372,6 +374,18 @@ def test_tick_asks_for_a_repaint_every_25_ms_while_running(line):
     assert ticks(line, 100) == 0, 'no paint yet'
     line.paint(motion=3)
     assert ticks(line, 100) == 4
+
+
+def test_line_starts_2_s_after_the_first_home_paint(line):
+    """User decision: the BPM shows at 1 s and the line starts at 2 s, as both starting together glitched at boot."""
+    line.set_data(6, 0)
+    assert ticks(line, 3000) == 0, 'no Home paint yet'
+    assert line.paint(motion=3) == [] and line.data(0) == 0
+    assert ticks(line, START_MS - 1) == 0
+    assert line.paint(motion=3) == [], 'a later paint does not restart the count'
+    assert ticks(line, 1) == 1, 'a paint to start the line'
+    assert len(line.paint(motion=3)) == 80 and line.data(0) == 1
+    assert ticks(line, 25) == 1 and line.data(6) == START_MS + 1
 
 
 def test_tick_stops_once_the_home_view_stops_painting(line):

@@ -8,7 +8,8 @@ version. It is distributed WITHOUT ANY WARRANTY; see LICENSE.
 What is not here
 ----------------
 No Line 6 firmware, code or data is included or distributed. The build reads
-the user's own copy of the official HX Stomp 3.80.0 firmware file and changes
+the user's own copy of the official HX Stomp, HX Stomp XL or HX Effects 3.80.0
+firmware file and changes
 it on the user's computer. The patcher contains the offsets and table layouts
 it needs to do that, and checks the input's MD5 first. Firmware built with
 it contains Line 6's firmware and should not be redistributed.
@@ -24,6 +25,13 @@ Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0). That file
 transcribes them from the Analog Devices "SHARC Processor Programming
 Reference".
 
+tools/effects.py: the HX Effects support builds on Scott's HX Effects port,
+hx-effects-nam-lite (https://github.com/scottlynn73/hx-effects-nam-lite,
+GPL-3.0-or-later, itself built on this project): the HX Effects' User IR store
+and model-table offsets, and taking over a stock model's identity there.
+
+Photo docs/hx-stomp-xl-amp-nam.jpg: Med Hamza, used with credit.
+
 Neural Amp Modeler (https://github.com/sdatkinson/neural-amp-modeler,
 MIT licence): src/sharc/nam_a2.asm and tools/sharc/nam_multi_kernel.asm are
 independent implementations of the A2 WaveNet arithmetic, written from the
@@ -31,6 +39,6 @@ model file format; no NeuralAmpModelerCore source is included.
 
 Trademarks
 ----------
-Line 6, Helix, HX Stomp and HX Edit are trademarks of Yamaha Guitar Group,
+Line 6, Helix, HX Stomp, HX Effects and HX Edit are trademarks of Yamaha Guitar Group,
 Inc. This project is not affiliated with, endorsed by or supported by Line 6
 or Yamaha Guitar Group. SHARC is a trademark of Analog Devices, Inc.

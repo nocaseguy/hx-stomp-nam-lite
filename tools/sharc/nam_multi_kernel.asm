@@ -16,6 +16,11 @@
 //   created again at the same place), a free slot, a slot whose owner has not run
 //   since this instance's own last call (removed). With none, it passes its input
 //   through.
+// - DM rings (nam_multi.py DM_LAYERS): the smallest long rings are near rings in the
+//   instance's own DM block instead, from (I0 + DM_BASE) & ~1 (S_DMB; T_BS picks a near
+//   ring's base: S_SELF, S_DMB or S_PMB); the model member's dm_words makes the block that
+//   long. PM rings (PM_LAYERS): the next in the instance's PM block, from (I8 + PM_BASE) & ~1
+//   (S_PMB), pm_words long.
 // - The long rings (d >= FAR_D) are in the instance's own SDRAM block (DM(2, I3)
 //   words 6 and 7). Per far layer, external-port DMA channel 0 brings each
 //   channel's K-1 older tap windows (16 words each) into a staging buffer, as a
@@ -43,7 +48,9 @@
 // DM(P_PHASE) (a bool: not 0 inverts the output, by negating Ch Vol's gain).
 // Drive is x the slot's S_TRIM, set on each load from the model's IR word 5
 // (10^(-input_level_dbu/20); 0 none, as the built-in model and older .wav files)
-// x STOMP_GAIN (10^(STOMP_DBU/20), nam_lite.py): as nam-a2-lite's N_TRIM.
+// x STOMP_GAIN (10^(STOMP_DBU/20), nam_lite.py): as nam-a2-lite's N_TRIM. The head's
+// scale is x the model's IR word 6 (10^((LOUD_REF - loudness)/20); 0 none) x LOUD_GAIN
+// (10^((LOUD_TARGET - LOUD_REF)/20)), set on each load: the loudness normalisation.
 
 .equ PEYEN,    0x200000
 .equ BDCST9,   0x400000
@@ -470,7 +477,8 @@ n_in: MODIFY(I5, M7);
       L8 = DM(T_L, I4);
       M11 = DM(T_L, I4);
       R10 = DM(T_RB, I4);
-      R0 = I6;
+      M4 = DM(T_BS, I4);                // the ring's base: the slot, or its owner's DM rings
+      R0 = DM(M4, I6);
       R10 = R10 + R0;
       R9 = DM(T_STRIDE, I4);
       B8 = R10;
@@ -491,7 +499,8 @@ n_in: MODIFY(I5, M7);
       M1 = R2;
       M0 = DM(T_KD, I4);
       R10 = DM(T_RB, I4);
-      R0 = I6;
+      M4 = DM(T_BS, I4);                // the ring's base: the slot, or its owner's DM rings
+      R0 = DM(M4, I6);
       R10 = R10 + R0;
       B0 = R10;
       L0 = DM(T_L, I4);
@@ -1223,6 +1232,20 @@ n_putw: F0 = DM(I3, M7), PM(I8, M10) = F0;
 
 // ---- a slot's first call (and after a failure): its state, sentinels, HIST
 m_init:
+    R0 = I6;
+    DM(S_SELF, I6) = R0;                // a near ring's base (T_BS)
+    R0 = I0;                            // the DM rings: past the stock words, even
+    R1 = DM_BASE;
+    R0 = R0 + R1;
+    R1 = -2;
+    R0 = R0 AND R1;
+    DM(S_DMB, I6) = R0;
+    R0 = DM(SAVE + 46);                 // the PM rings: the instance's I8 block past the stock words
+    R1 = PM_BASE;
+    R0 = R0 + R1;
+    R1 = -2;
+    R0 = R0 AND R1;
+    DM(S_PMB, I6) = R0;
     R0 = 0;
     DM(S_SIG, I6) = R0;                 // no model loaded: the next block loads one
     DM(P_SIGN, I0) = R0;
@@ -1358,6 +1381,14 @@ ld_cp: DM(I4, 1) = F0;
     IF LT JUMP ld_chunk;
     R0 = 0;
     DM(DMAC0) = R0;
+    I3 = R8;                            // its loudness: the head's scale x word 6,
+    F0 = DM(-6, I3);                    // 10^((LOUD_REF - loudness)/20) (0: none), x
+    F1 = DM(LOUD_GAIN);                 // 10^((LOUD_TARGET - LOUD_REF)/20)
+    F0 = F0 * F1;
+    F1 = DM(S_STREAM + ST_SCALE, I6);
+    F0 = PASS F0;
+    IF NE F1 = F1 * F0;
+    DM(S_STREAM + ST_SCALE, I6) = F1;
     // the slot's rings to the silence state; the far rings are patched as read
     I4 = CLR;
     R11 = I6;
@@ -1366,6 +1397,8 @@ ld_cp: DM(I4, 1) = F0;
     F5 = 16.0;                          // (the values are kept / 16: HX Edit's +-15.8)
     LCNTR = NCLR, DO ld_clr UNTIL LCE;
       R1 = DM(0, I4);
+      M4 = DM(3, I4);                   // the ring's base: the slot, or the DM rings
+      R11 = DM(M4, I6);
       R1 = R1 + R11;
       I3 = R1;
       R1 = DM(2, I4);
@@ -1377,7 +1410,7 @@ ld_cp: DM(I4, 1) = F0;
       LCNTR = R1, DO ld_clrw UNTIL LCE;
 ld_clrw: DM(I3, 1) = R0;
       NOP;
-ld_clr: MODIFY(I4, 3);
+ld_clr: MODIFY(I4, 4);
     R0 = 0;                             // every ring from offset 0; no samples yet
     DM(S_T, I6) = R0;
     DM(S_HHW, I6) = R0;

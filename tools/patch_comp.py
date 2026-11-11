@@ -7,16 +7,24 @@ Each model in COMP_MODELS gets three more parameters after its own, in the three
            handing it to the compressor core as pid 100, 101, 102, which the DSP wrapper's control function keeps;
            and for each core an init record, pid 103, saying whether its output overwrites its first input or its second.
   Entry 0: the model's row in the UI Model Info Table counts the new parameters.
+  Entry 2: the DSP wrapper src/sharc/frame_probe.asm in Block 3, above NAM's two slots (build.py's GR_SLOTS), and each core of
+           WRAPS entering it.
 Run it after every step that adds models (add-model, add-fx-model, patch_click.py): those rebuild Entry 3's and Entry 4's tails
 from the models they added and would drop what this writes there.
 """
 import argparse
+import os
 import struct
 import zlib
 
 import patch_amp as pa
+import nam_multi
+import patch_click
 
-COMP_MODELS = (   # (model, its compressor core's primitive: src/sharc/frame_probe.asm wraps each of these)
+ASM = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src', 'sharc', 'frame_probe.asm')
+
+WRAPS = ((0x271a, 0x8d9c9), (0x2719, 0x8d342), (0x2710, 0x8d342))    # (primitive, its stock process code): frame_probe.asm's ORIG..
+COMP_MODELS = (   # (model, its compressor core's primitive: one of WRAPS)
     ('HD2_CompressorDeluxeCompMono', 0x271a), ('HD2_CompressorDeluxeCompStereo', 0x271a),
     ('HD2_CompressorLAStudioCompMono', 0x2719), ('HD2_CompressorLAStudioCompStereo', 0x2719),
     ('HD2_CompressorKinkyCompMono', 0x2710), ('HD2_CompressorKinkyCompStereo', 0x2710),
@@ -32,6 +40,7 @@ GR_KNOBS = (   # (name, displayName, displayNameShort, value labels, default): i
 INT_INPUT_OP = 0x0b
 GR_PID = 100                    # src/sharc/frame_probe.asm's GR_PID: past every core's own pids (the LA Studio Comp's go to 14)
 STOCK_E3_END = 0xcadb4
+STR_HOME = 0x200                # where the stock string section is
 
 
 def e3_strings(e3):
@@ -49,8 +58,10 @@ def e3_strings(e3):
 
 def e3_add_strings(e3, wanted):
     """Entry 3 with the strings of `wanted` it lacks appended to its section, and {string: index} for them all.
-    Indices never change. A stock section (at 0x200) is copied past the end; the tail one add-model writes at
-    0xcae00 grows in place, the model table and everything after it moving down, their offsets with them."""
+    Indices never change. A stock section (at 0x200) is copied past the end. Once add-model has copied the section and
+    the model table to the tail (0xcae00), their stock copies at 0x200..h[8] are dead: the section goes back to 0x200 and
+    the model table and everything after it move back over the old tail section, their offsets with them. That keeps
+    Entry 3 small: one 11 KB larger than the default build's makes the unit drop every amp and preamp [verified on unit]."""
     e3 = bytearray(e3)
     h = list(struct.unpack_from('<10I', e3, 0))
     str_off, recs, data, index = e3_strings(e3)
@@ -73,10 +84,12 @@ def e3_add_strings(e3, wanted):
     else:
         old_mtab = h[6]
         assert old_mtab > str_off, 'the model table is not after the string section'
-        new_mtab = pa._align(str_off + len(section), 0x200)
+        assert STR_HOME + len(section) <= h[8] < STOCK_E3_END, 'the section does not fit in the stock tables\' place'
+        new_mtab = str_off
         delta = new_mtab - old_mtab
-        out = e3[:str_off] + section + bytes(new_mtab - str_off - len(section)) + e3[old_mtab:]
+        out = e3[:STR_HOME] + section + bytes(h[8] - STR_HOME - len(section)) + e3[h[8]:str_off] + e3[old_mtab:]
         mv = lambda v: v + delta if v >= old_mtab else v
+        h[3] = STR_HOME
         h[6] = new_mtab
         for i in range(h[7]):
             d = new_mtab + 56 * i
@@ -307,6 +320,49 @@ def e0_set_param_counts(e0, name_idx, old, new):
     return bytes(e0)
 
 
+def dsp_asm(dm, pm):
+    """frame_probe.asm with its data at dm and its code at pm."""
+    return open(ASM).read().replace('GR_DM_BASE', f'{dm:#x}').replace('GR_PM_BASE', f'{pm:#x}')
+
+
+def nw(pm):
+    """The normal-word address of Block 3's 48-bit address pm (even)."""
+    return nam_multi.NW3 + (pm - nam_multi.NW3) * 3 // 2
+
+
+def dsp_place():
+    """(DM base, PM base) of frame_probe.asm: its data right above NAM's slots, then its code, clear of the
+    Metronome's kernel under NAM's cold code (there in every build, so GR builds share one layout)."""
+    lay = patch_click.nam_layout(gr=True)
+    secs, _ = pa.sasm.assemble(dsp_asm(nam_multi.B3, nam_multi.NW3), 'frame_probe.asm')
+    n_dm, n_pm = (sum(len(s.words) for s in secs if s.kind == k) for k in ('dm', 'pm'))
+    dm = lay.b3_to
+    pm = nam_multi.NW3 - (-(dm + n_dm - nam_multi.NW3) * 2 // 3)
+    pm += pm & 1
+    click = patch_click.pm_base(patch_click.kernel_size(), lay)
+    if nw(pm + n_pm + (n_pm & 1)) > nw(click):
+        raise SystemExit(f'the GR DSP code ({n_dm} words, {n_pm} instructions from {dm:#x}) does not fit under the '
+                         f'Metronome\'s kernel ({click:#x})')
+    return dm, pm
+
+
+def patch_dsp(l6ia_bytes, log=print):
+    """Entry 2: frame_probe.asm at dsp_place(), and each core of WRAPS entering it, its control function too."""
+    dm, pm = dsp_place()
+    secs, syms = pa.sasm.assemble(dsp_asm(dm, pm), 'frame_probe.asm')
+    entries = pa.l6ia.parse(l6ia_bytes)
+    e2 = l6ia_bytes[entries[2]['payload_off']: entries[2]['payload_off'] + entries[2]['payload_len']]
+    ldr = []
+    for sec in secs:
+        ldr += (pa.pack_init_l48 if sec.kind == 'pm' else pa.pack_init_l32)(sec.addr, sec.words)
+        log(f"[+] Entry 2: GR {len(sec.words)} {'instructions' if sec.kind == 'pm' else 'words'} @ {sec.kind.upper()} {sec.addr:#x}")
+    for prim, orig in WRAPS:
+        ldr += pa.wrap_primitive(e2, f'{prim:#x}:{orig:#x}', syms[f'ENTRY_{prim:X}'],
+                                 (syms[f'ORIG_CTRL_{prim:X}'], syms[f'CTRL_{prim:X}']))
+    new, _, _ = pa.l6ia.rebuild_archive(l6ia_bytes, {2: pa.l6ia.swap32(pa.inject_sharc_ldr_blocks(e2, ldr))})
+    return new
+
+
 def patch_comp(l6ia_bytes, models=COMP_MODELS, log=print):
     e0 = pa.get_entry_swapped(l6ia_bytes, 0)
     e3 = pa.get_entry_swapped(l6ia_bytes, 3)
@@ -339,7 +395,7 @@ def main():
     ap.add_argument('--donor', help='Stock .hxf of the unit, when input is a raw L6IA and output a .hxf')
     a = ap.parse_args()
     data, is_hxf = pa.load_l6ia_from_any(a.input)
-    pa.save_l6ia_to_any(patch_comp(data), a.output, donor_hxf=a.input if is_hxf else a.donor)
+    pa.save_l6ia_to_any(patch_comp(patch_dsp(data)), a.output, donor_hxf=a.input if is_hxf else a.donor)
     print(f'[+] Wrote {a.output}')
 
 

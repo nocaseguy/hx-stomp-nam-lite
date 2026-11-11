@@ -11,7 +11,7 @@ import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import bpm, tuner
-from firmware import assert_virtual, branch_target, reader, stock_e0
+from firmware import assert_virtual, branch_target, menu_entry0, reader, stock_e0
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONTS = (4, 5, 2, 1)                # Font's values as font numbers: XL 35 Bold, L 41 Lite, M 28 Bold, S 21 Reg
@@ -46,7 +46,7 @@ def build(e0, extra=(), monkeypatch=None):
 
     monkeypatch.setattr(pm.Patch, 'module', module)
     mods = sorted(features.load() + list(extra), key=lambda f: (getattr(f, 'ORDER', 100), features.name(f)))
-    new, on = pm.menu_entry0(e0, mods, {'HX_TUNER': '1', 'HX_BPM': '1'})
+    new, on = menu_entry0(e0, mods, {'HX_TUNER': '1', 'HX_BPM': '1'})
     assert 'bpm' in [features.name(m) for m in on]
     return new, seen['src/m4/bpm.s']
 
@@ -377,7 +377,8 @@ def test_nothing_repaints_before_the_home_view_has_painted(m4):
     assert not m4.called(REDRAW) and m4.data(8, 4) == b'\0\0\0\0'
 
 
-def test_tick_repaints_every_20_ms_for_the_first_1500_ms(m4):
+def test_tick_repaints_every_20_ms_from_1000_to_1500_ms(m4):
+    """The tempo shows at 1 s and the boot's black bars over it need repaints until 1.5 s; the breathing line starts at 2 s."""
     painted(m4, boot_done=False)
     fs_functions(m4, [7, 7, 7])
     times = []
@@ -385,7 +386,15 @@ def test_tick_repaints_every_20_ms_for_the_first_1500_ms(m4):
         m4.call('bpm_tick')
         if m4.called(REDRAW):
             times.append(ms)
-    assert times == list(range(20, 1501, 20))
+    assert times == list(range(1000, 1501, 20))
+
+
+@pytest.mark.parametrize('ms, shown', [(0, False), (999, False), (1000, True), (1500, True)])
+def test_before_shows_nothing_until_1000_ms_after_the_first_paint(m4, ms, shown):
+    """At boot the BPM and the breathing line starting together glitched (user decision: the BPM at 1 s, the line at 2 s)."""
+    before(m4, ms=ms)
+    assert m4.data(0)[0] == 1, 'painted, so the tick counts'
+    assert bool(m4.called(SET_TEXT_VISIBLE)) == bool(m4.called(SET_RECT_VISIBLE)) == shown
 
 
 @pytest.mark.parametrize('pid, repaints', [(13, 0), (14, 1), (15, 1), (16, 1), (17, 0), (126, 0)])
@@ -424,13 +433,14 @@ def test_ledsend_passes_leds_that_are_not_rings(m4):
     assert m4.called(LED_SEND_REST)[0][:2] == (3, 0xffffff)
 
 
-def before(m4, font=None, colour=None, dot=None, lit=0, tapped=0):
+def before(m4, font=None, colour=None, dot=None, lit=0, tapped=0, ms=1500):
     ids = setting_ids.by_name()
     m4.settings = {14: 2, 15: bits(128.0)}
     for key, v in (('font', font), ('color', colour), ('dot', dot)):
         if v is not None:
             m4.settings[ids[f'bpm.{key}']] = v
     m4.set_data(4, [lit, tapped])
+    m4.set_data(8, struct.pack('<I', ms))
     m4.call('bpm_before', 0x20000000, 0x2812a05c)
 
 
