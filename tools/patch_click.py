@@ -4,7 +4,7 @@
 usage: patch_click.py <in .hxf | L6IA> <out .hxf | L6IA> [--donor stock.hxf]
 
 Run after tools/patch_amp.py patch (build.py does it for HX_CLICK=1 builds). It adds:
-  - the model Modulation > Metronome > Metronome (Entries 0, 3, 4; preset ID 181): a copy
+  - the model Looper > Metronome > Metronome (Entries 0, 3, 4; preset ID 181): a copy
     of the mono effect host whose one member is the primitive 0x0128, with the knobs Time,
     Level, Accent and Thru, and Time's tempo sync (Time's note list SyncSelect1 and its
     switch TempoSync1, hidden as on every stock delay);
@@ -36,7 +36,8 @@ NAME, DISPLAY, FOLDER = 'HD2_ClickMetronomeMono', 'Metronome', 'Metronome'
 PRESET_ID = 181                     # fixed for ever: presets store it
 DSP_COST = 50
 CLONE = 'HD2_Tremolo60sBiasTremMono'   # a mono modulation with four knobs and a synced pair: no trails, as delays have
-CATEGORY = 5                        # Modulation
+CATEGORY = 5                        # Modulation: the source's, so the block stays a plain effect
+BROWSER = 18                        # Looper: where the browser lists it, a folder beside Mono and Stereo
 HOST = 'HD2_VolPanVolMono'
 PRIM = (0x0128, 0x200050)           # kit_patch_amp.UNUSED_SHARC_PRIMS' second: NAM has the first
 INSTANCE = {'dm_words': 0x91, 'pm_words': 0x0d, 'sdram_words': 0}
@@ -47,7 +48,7 @@ CLAMP = (0.00035, 8.0)              # Simple Delay's 0x54 node: Time's range
 # so SyncSelect1 and TempoSync1 keep its slots too. Types: 3 float, 2 int, 1 bool.
 ACCENT_LABELS = [('displayType', 'list'), ('1', 'Off')] + [(str(k), str(k)) for k in range(2, 13)]
 PARAMS = ((1, 'Time', 'Time', 5, 3, None, None, 0.5, None),
-          (2, 'Level', 'Level', 6, 3, None, None, 0.0, None),
+          (2, 'Level', 'Level', 6, 3, None, None, -14.0, None),
           (3, 'Accent', None, 7, 2, 1, 12, 1, ACCENT_LABELS),
           (4, 'Thru', None, 8, 1, 0, 0, 1, [('false', 'Off'), ('true', 'On')]),
           (10, 'SyncSelect1', 'SyncSelect1', None, 2, None, None, 6, None),
@@ -216,7 +217,8 @@ def add_click(l6ia_bytes, log=print):
     new_e4 = replace_last_blob(new_e4, blob, click_blob(comp, params))
     log(f"[+] Entry 4: Metronome blob {blob} on composite {comp:#x} (primitive {PRIM[0]:#06x})")
 
-    drop = tuple(k for k in kit.FX_MODEL_META_DROP if k != 'displayParamCount')
+    # no category: block category 0x19, which tools/features/metronome.py makes Metronome, with Icon_Tempo
+    drop = tuple(k for k in kit.FX_MODEL_META_DROP if k != 'displayParamCount') + ('category',)
     new_e3, model_id, _ = kit.add_model_entry3(e3, src, NAME, DISPLAY, blob, params, drop_meta=drop)
     chk = kit.parse_entry3_full(new_e3)
     m = chk['models'][model_id]
@@ -228,7 +230,7 @@ def add_click(l6ia_bytes, log=print):
 
     new_e0, pid, cost, _ = kit.add_model_entry0(
         e0, src['words'][2], m['words'][2], DISPLAY, preset_id=PRESET_ID, dsp_cost=DSP_COST,
-        n_params=len(params), folder=(CATEGORY, FOLDER), fx=True)
+        n_params=len(params), folder=(BROWSER, FOLDER), fx=True, src_category=CATEGORY)
     new_e0 = bytearray(new_e0)
     segs = kit._parse_e0_segments(new_e0)
     A = kit.e0_device(segs)
@@ -237,7 +239,7 @@ def add_click(l6ia_bytes, log=print):
     row = kit._e0_vaddr_to_foff(segs, t2 + 44 * (n2 - 1), 44)
     assert struct.unpack_from('<I', new_e0, row)[0] == m['words'][2]
     struct.pack_into('<3I', new_e0, row + 24, N_SHOWN, len(params), len(params))   # the synced pair hidden
-    log(f"[+] Entry 0: preset_id {pid}, dsp_cost {cost}, Modulation > {FOLDER}")
+    log(f"[+] Entry 0: preset_id {pid}, dsp_cost {cost}, Looper > {FOLDER}")
 
     entries = l6ia.parse(l6ia_bytes)
     e2_raw = l6ia_bytes[entries[2]['payload_off']: entries[2]['payload_off'] + entries[2]['payload_len']]

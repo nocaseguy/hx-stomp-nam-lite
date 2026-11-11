@@ -8,6 +8,7 @@
 .equ BPM_DOTS, 18                   @ rectangles: 9 a dot
 .equ BPM_DOT_TOP, 237               @ the dots' top (y counts up from the bottom)
 .equ FS_FUNCTIONS, 0x28128a74       @ each footswitch's function, two bytes apart: 1 is TAP
+.equ SHOW_MS, 1000                  @ after the first Home paint; the breathing line starts a second later, as both at once glitch at boot
 
 bpm_written:                        @ after the settings store's write (ID, value, how): the Home view only repaints on request
     subs r0, #14                    @ Tempo Select, Global BPM, Preset BPM
@@ -62,12 +63,14 @@ bpm_tick:                           @ after the LED task's 1 ms sleep: the dot l
     bhs bpm_booted
     adds r0, #1
     str r0, [r4, #8]
+    cmp r0, #SHOW_MS
+    blo bpm_booted
     movs r1, #20
     udiv r2, r0, r1
     mls r0, r2, r1, r0
     cmp r0, #0
     it eq
-    bleq bpm_repaint                @ every 20 ms for 1.5 s from the first paint: the boot leaves black bars over the text [verified on unit]
+    bleq bpm_repaint                @ every 20 ms from SHOW_MS to 1.5 s: the boot leaves black bars over the text [verified on unit]
 bpm_booted:
     ldr r1, =FS_FUNCTIONS
     movs r2, #0
@@ -190,6 +193,10 @@ bpm_before:                         @ before the Home paint (framebuffer, Home v
     adr.w r0, bpm_data
     movs r1, #1
     str r1, [r0]
+    ldr r1, [r0, #8]
+    cmp r1, #SHOW_MS
+    it lo
+    poplo {r3-r9, pc}               @ too soon: the widgets stay hidden, as the constructor left them
     movs r0, #SETTING_BPM_DOT
     movs r1, #SETTING_BPM_DOT_MAX
     movs r2, #SETTING_BPM_DOT_DEFAULT

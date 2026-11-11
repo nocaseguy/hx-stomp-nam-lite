@@ -72,6 +72,7 @@ var SOURCES = [
   "tools/features/dsp_meter.py",
   "tools/features/gr.py",
   "tools/features/long_press.py",
+  "tools/features/metronome.py",
   "tools/features/more_snapshots.py",
   "tools/features/splash.py",
   "tools/features/tuner.py",
