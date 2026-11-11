@@ -11,7 +11,7 @@ import m4asm
 import patch_menu as pm
 import setting_ids
 from features import Setting
-from firmware import reader, stock_e0
+from firmware import branch_target, built, reader, stock_e0
 
 MODS = features.load()
 SETTINGS = {f'{features.name(m)}.{s.key}': s for m in MODS for s in getattr(m, 'SETTINGS', ())}
@@ -207,3 +207,50 @@ def test_stock_uses_finds_reads_writes_and_loops():
 def test_text_cave_takes_many_settings():
     tables = {pid: (BASE + 0x9000, 255, 0) for pid in pm.MAIN_STORE_IDS[:90]}
     assert len(pm.text_cave(BASE, tables)) > 90 * 20
+
+
+FS_TABLE, FS_STOCK_IDS = pm.STOCK_CATEGORIES['Footswitches'][1], (17, 97, 98, 99, pm.EMPTY_SLOT, pm.EMPTY_SLOT)
+STOCK_TABLES = (0x28e3b540, 0x28e3b5b8)     # every category's page table, from Ins/Outs' to the end of Preferences'
+
+
+def page_table(read, cat, site='lookup'):
+    """The table a built dispatch cave loads for cat: its movw/movt after the cmp/beq for cat."""
+    cave = branch_target(pm.SITES[site][0], read(pm.SITES[site][0], 4))
+    code = read(cave, 64)
+    at = next(i for i in range(0, 60, 2) if code[i:i + 2] == bytes([cat, 0x28 + pm.SITES[site][1]]))
+    target = at + 2 + 4 + 2 * code[at + 2] + 2   # the beq's target, past the ldrb page
+    lo, hi = struct.unpack_from('<2I', code, target)
+    imm = lambda w: ((w >> 16 & 0xff) | (w >> 28 & 7) << 8 | (w >> 10 & 1) << 11 | (w & 0xf) << 12)
+    return imm(lo) | imm(hi) << 16
+
+
+@pytest.mark.firmware
+def test_footswitches_gets_the_hold_pages_and_other_categories_stay_stock():
+    e0 = stock_e0()
+    read, stock = reader(pm.menu_entry0(e0, MODS, {'HX_LONG_PRESS': '1'})[0]), reader(e0)
+    assert read(*STOCK_TABLES[:1], STOCK_TABLES[1] - STOCK_TABLES[0]) == stock(STOCK_TABLES[0], STOCK_TABLES[1] - STOCK_TABLES[0])
+    assert struct.unpack('<6H', read(FS_TABLE, 12)) == FS_STOCK_IDS
+    pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
+    assert struct.unpack('<6I', read(pages, 24)) == (3, 4, 4, 1, 4, 1)
+    assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK, 'no feature with an HXtra page: no HXtra section'
+    ids = setting_ids.by_name()
+    hold = tuple(ids[f'long_press.fs{n}'] for n in range(1, 6)) + (pm.EMPTY_SLOT,)
+    for site in pm.SITES:
+        assert struct.unpack('<12H', read(page_table(read, 2, site), 24)) == FS_STOCK_IDS + hold, site
+
+
+@pytest.mark.firmware
+def test_hxtra_section_and_footswitches_pages_together():
+    read, _ = built({'HX_LONG_PRESS': '1', 'HX_BPM': '1'})
+    pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
+    assert struct.unpack('<7I', read(pages, 28)) == (3, 4, 4, 1, 4, 1, 1)
+    ids = setting_ids.by_name()
+    assert struct.unpack('<3H', read(page_table(read, 6), 6)) == tuple(ids[f'bpm.{k}'] for k in ('font', 'color', 'dot'))
+    assert struct.unpack('<6H', read(page_table(read, 2) + 12, 12))[:5] == tuple(ids[f'long_press.fs{n}'] for n in range(1, 6))
+
+
+@pytest.mark.firmware
+def test_menu_must_name_a_stock_category():
+    demo = fake('demo', MENU='Tempo', SETTINGS=(Setting('a', b'A', (b'0', b'1')),))
+    with pytest.raises(SystemExit, match='MENU is True, False or one of Footswitches'):
+        pm.menu_entry0(stock_e0(), [demo], {}, dict(setting_ids.by_name(), **{'demo.a': 0xcc}))

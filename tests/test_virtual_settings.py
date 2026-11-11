@@ -454,3 +454,36 @@ def test_built_turn_steps_by_the_stock_knob_arithmetic(m4emu):
     assert b.get(0xcc) == (0, (2, 4))       # clamped at Position's max
     m.call(0x28dcef50, VIEW, 1, 4)
     assert b.get(0xcd) == (0, (2, 1)) and b.get(0xcc) == (0, (2, 4))
+
+
+@pytest.mark.firmware
+def test_built_turn_on_the_footswitches_pages(m4emu):
+    """Long press's Hold settings on Footswitches pages 3 and 4 (MENU 'Footswitches'): the stock turn handler steps FS1 Hold through
+    the engine, and a stock Footswitches setting reaches the stock turn's generic case with the ID the stock table gives it."""
+    new, _ = pm.menu_entry0(stock_e0(), MODS, {'HX_LONG_PRESS': '1'})
+    b = Built(m4emu, new)
+    m = b.m
+    b.m.write(record(108) + 8, struct.pack('<BxxxI', 3, FLOAT_ONE))
+    m.write(VIEW, b'\0' * 0x50)
+    m.write(VIEW + 0xa, bytes([2, 2]))      # Footswitches, page 3
+    m.call(0x28dcef50, VIEW, 0, 4)
+    assert b.get(SETTINGS_IDS['long_press.fs1']) == (0, (2, 5))     # FS6 -> FS7
+    assert b.get(SETTINGS_IDS['long_press.fs2']) == (0, (2, 5)), 'FS2 Hold keeps its default'
+    assert struct.unpack('<BxxxI', m.read(record(108) + 8, 8)) == (2, 0x87655), 'FS1 Hold 5, the others their defaults'
+
+
+@pytest.mark.firmware
+@pytest.mark.parametrize('page, slot', [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1)])    # Stomp Select, FS3..FS5 Function, empty
+def test_built_turn_on_a_stock_footswitches_setting_is_the_stock_turn(m4emu, page, slot):
+    runs = []
+    for e0 in (stock_e0(), pm.menu_entry0(stock_e0(), MODS, {'HX_LONG_PRESS': '1'})[0]):
+        m = Built(m4emu, e0).m
+        m.write(VIEW, b'\0' * 0x50)
+        m.write(VIEW + 0xa, bytes([2, page]))
+        for delta in (4, -4, 400):
+            m.call(0x28dcef50, VIEW, slot, delta)
+        runs.append(([at for at, _ in m.log], m.calls(CHANGED), m.read(RECORDS, 40 * 137), m.read(VIEW, 0x50)))
+    assert runs[0] == runs[1], 'the same calls, repaints and stores (the table register left over differs: ours is a copy)'
+
+
+SETTINGS_IDS = setting_ids.by_name()

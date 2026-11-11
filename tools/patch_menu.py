@@ -49,6 +49,9 @@ ARRAYS = {   # name: (stock address, new entry, literal pool words that point at
     'names': (0x28e3b5d0, None, (0x28dce9a4, 0x28dcea84)),
 }
 CAT_NAME = b'HXtra'
+# Stock categories a feature's MENU may name: (category, its page table, as each dispatch's own literal loads it). The table is
+# copied with the feature's pages after its own, since the next category's table follows it.
+STOCK_CATEGORIES = {'Footswitches': (2, 0x28e3b550)}
 # Sites that switch on the category with `cmp rN,#5; bhi exit; tbb`: (hook, cat reg, page reg, table reg, tbb, exit, stub).
 # The stub is category 2's generic case entered after its table load: it sets the slot in r4 itself, which some cases leave to the category.
 SITES = {
@@ -150,23 +153,25 @@ def limits_entry(pid):
     return (LIMITS_TAB_LOW, LIMITS_TAB_LOW + 2 * (pid - 1)) if pid < 0x38 else (LIMITS_TAB_HIGH, LIMITS_TAB_HIGH + 2 * (pid - 0x3f))
 
 
-def dispatch_cave(at, site, table, stub=None):
-    """cmp reg,#6 -> HXtra case: page and table into the generic case's registers, then into that case (or stub, which ends there
-    or at the site's exit itself)."""
+def dispatch_cave(at, site, tables, stub=None):
+    """cmp reg,#category -> our table ({category: table}: HXtra's 6, or a stock category's copy with our pages): page and table
+    into the generic case's registers, then into that case (or stub, which ends there or at the site's exit itself)."""
     _, reg, page, tab, tbb, exit_, generic = site
     stub = stub or generic
     a = Asm(at)
-    a.h(cmp_imm(reg, 6))
-    a.b16('eq', 'mine')
+    for cat in tables:
+        a.h(cmp_imm(reg, cat))
+        a.b16('eq', f'mine{cat}')
     a.h(cmp_imm(reg, 5))
     a.b16('hi', 'exit')
     a.bw(tbb)
     a.label('exit')
     a.bw(exit_)
-    a.label('mine')
-    a.h(0x7ac0 | page)                      # ldrb page,[r0,#0xb]
-    a.movw_movt(tab, table)
-    a.bw(stub)
+    for cat, table in tables.items():
+        a.label(f'mine{cat}')
+        a.h(0x7ac0 | page)                  # ldrb page,[r0,#0xb]
+        a.movw_movt(tab, table)
+        a.bw(stub)
     return a.bytes()
 
 
@@ -699,14 +704,19 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None, virtual=No
     p = Patch(load(0), mods, setting_ids.by_name() if ids is None else ids, load, values)
     packing = setting_ids.packing() if virtual is None else virtual
     settings, stored = [], []   # (ID, setting): on HXtra pages in page order; of every feature
+    extra = {}                  # stock category -> (ID, setting) on its pages after its own
     for m in on:
         mine = []
         for s in getattr(m, 'SETTINGS', ()):
             check_setting(features.name(m), s)
             mine.append((p.id(f'{features.name(m)}.{s.key}'), s))
         stored += mine
-        if getattr(m, 'MENU', True):
-            settings += mine + [(EMPTY_SLOT, None)] * (-len(mine) % 3)
+        menu = getattr(m, 'MENU', True)
+        if isinstance(menu, str) and menu not in STOCK_CATEGORIES:
+            raise SystemExit(f'patch-menu: {features.name(m)}: MENU is True, False or one of {", ".join(STOCK_CATEGORIES)}')
+        if menu:
+            pages = extra.setdefault(STOCK_CATEGORIES[menu][0], []) if isinstance(menu, str) else settings
+            pages += mine + [(EMPTY_SLOT, None)] * (-len(mine) % 3)
 
     for tab in (NAMES_LONG, NAMES_SHORT):
         if p.read(tab + NAME_LEN * 22, 8) != b'Main LCD':
@@ -725,8 +735,8 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None, virtual=No
         if pid not in packing:
             set_limits(p, pid, s)
     virt = add_virtual(p, [(pid, s) for pid, s in stored if pid in packing], packing)
-    if settings:        # no feature with an HXtra page: no HXtra section
-        add_category(p, settings, virt)
+    if settings or extra:       # no feature with a page: no HXtra section and stock categories as they are
+        add_category(p, settings, virt, extra)
 
     for m in on:
         if hasattr(m, 'apply'):
@@ -777,33 +787,45 @@ def add_virtual(p, virt, packing):
     return m
 
 
-def add_category(p, settings, virt=None):
-    """The HXtra section of Global Settings: its pages of settings ((ID, setting) in page order, three to a page) and value text;
-    virt, the virtual settings' module, takes the turn and the click first."""
+def add_category(p, settings, virt=None, extra=None):
+    """The HXtra section of Global Settings when settings has pages ((ID, setting) in page order, three to a page), the pages extra
+    ({stock category: (ID, setting)}) adds after a stock category's own, and their value text; virt, the virtual settings' module,
+    takes the turn and the click first."""
+    extra = extra or {}
     p.expect(TEXT_FN, TEXT_FN_STOCK, 'the value-text function')
     p.expect(NAV_CMP, NAV_CMP_STOCK, 'the category navigation')
     p.expect(NAV_WRAP, NAV_WRAP_STOCK, 'the category navigation')
     for site in SITES.values():
         p.expect(site[0], bytes([5, 0x2b if site[1] == 3 else 0x2c]), 'a category dispatch')
 
-    # HXtra data: the per-category arrays with a seventh entry, its page table and its value strings
-    name_va = p.add(CAT_NAME + b'\0')
+    # The per-category arrays with a seventh entry for HXtra, and the page counts of the stock categories that grow
+    name_va = p.add(CAT_NAME + b'\0') if settings else None
     for key, (stock, new, lits) in ARRAYS.items():
         for lit in lits:
             if p.u32(lit) != stock:
                 raise SystemExit(f'patch-menu: a category array pointer at {lit:#x} is not the stock one')
-        entries = [p.u32(stock + 4 * i) for i in range(6)] + [{'names': name_va, 'pages': len(settings) // 3}.get(key, new)]
+        entries = [p.u32(stock + 4 * i) for i in range(6)]
+        if key == 'pages':
+            entries = [n + len(extra.get(cat, ())) // 3 for cat, n in enumerate(entries)]
+        if settings:
+            entries.append({'names': name_va, 'pages': len(settings) // 3}.get(key, new))
         array_va = p.add(b''.join(struct.pack('<I', x) for x in entries))
         for lit in lits:
             p.put(lit, struct.pack('<I', array_va), f'the category array {key}')
-    table_va = p.add(b''.join(struct.pack('<H', pid) for pid, _ in settings))
-    values = {pid: (p.add(b''.join(padded(v) for v in s.values)), s.max, s.default) for pid, s in settings if s is not None}
+    tables = {6: p.add(b''.join(struct.pack('<H', pid) for pid, _ in settings))} if settings else {}
+    for cat, pages in extra.items():
+        table = next(t for c, t in STOCK_CATEGORIES.values() if c == cat)
+        own = p.read(table, 6 * p.u32(ARRAYS['pages'][0] + 4 * cat))
+        tables[cat] = p.add(own + b''.join(struct.pack('<H', pid) for pid, _ in pages))
+    values = {pid: (p.add(b''.join(padded(v) for v in s.values)), s.max, s.default)
+              for pid, s in settings + [x for pages in extra.values() for x in pages] if s is not None}
 
-    p.put(NAV_CMP, b'\x06\x2b', 'the category navigation')
-    p.put(NAV_WRAP, b'\x06\x21', 'the category navigation')
+    if settings:
+        p.put(NAV_CMP, b'\x06\x2b', 'the category navigation')
+        p.put(NAV_WRAP, b'\x06\x21', 'the category navigation')
     for name, site in SITES.items():
         stub = virt[f'virt_{name}'] if virt and name in ('turn', 'click') else None
-        p.put(site[0], thumb_bw(site[0], p.add(dispatch_cave(p.next(), site, table_va, stub))), f'the category dispatch {name}')
+        p.put(site[0], thumb_bw(site[0], p.add(dispatch_cave(p.next(), site, tables, stub))), f'the category dispatch {name}')
     p.put(TEXT_FN, thumb_bw(TEXT_FN, p.add(text_cave(p.next(), values))), 'the value-text function')
 
 
