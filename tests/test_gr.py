@@ -321,9 +321,9 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 # ---- the whole GR build, pinned as tests/test_firmware.py pins the default one
 
 GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
-    'HX_GR': '658513cbe5a8d8aae518835931864aa4',
-    'HX_GR HX_FRAMEPROBE': '2954c849762e01c52a0bc9b45fa962ee',
-    'HX_GR HX_CLICK': 'afaa6b0889ef8c036534d42a22818bbb',    # patch_click.py adds a model, which would drop knobs written before it
+    'HX_GR': 'b526089e9ebe6e90e60c50c5d4007c86',
+    'HX_GR HX_FRAMEPROBE': 'c481fc1c30e51f54d6c28fb2ba42b0d1',
+    'HX_GR HX_CLICK': 'ab6d7b53765d060b0bab486a95f1dca8',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
@@ -341,7 +341,7 @@ def test_gr_build(tmp_path, flags):
     r = subprocess.run([sys.executable, str(ROOT / 'build.py'), stock, '-o', str(out), '--no-check'],
                        capture_output=True, text=True, cwd=ROOT, env=env)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert 'ALL OK' in r.stdout and 'Entry 0: features gr\n' in r.stdout
+    assert 'ALL OK' in r.stdout and 'Entry 0: features gr, splash\n' in r.stdout
     assert r.stdout.count(': Mtr Position, Mtr Direction, Mtr Thickness on slots') == len(pc.COMP_MODELS)
     assert hashlib.md5(out.read_bytes()).hexdigest() == GR_BUILT_MD5[flags]
 

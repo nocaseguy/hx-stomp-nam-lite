@@ -275,7 +275,7 @@ def test_firmware_has_five_tuner_pages_and_no_customos_section_of_its_own():
 @pytest.mark.firmware
 def test_without_its_flag_the_tuner_is_stock():
     read, on = built({})
-    assert on == []
+    assert on == ['splash']
     assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK and read(pm.TEXT_FN, 4) == pm.TEXT_FN_STOCK, 'no CustomOS section'
     assert read(tuner.NEXT_PAGE, 2) == tuner.NEXT_PAGE_STOCK and read(tuner.PAGE_DOTS, 2) == tuner.PAGE_DOTS_STOCK
     assert read(tuner.TAP_SITE, 4) == pm.thumb_bw(tuner.TAP_SITE, tuner.TAP_CORE) and read(tuner.TURN_FN, 4) == tuner.TURN_FN_STOCK
@@ -284,7 +284,7 @@ def test_without_its_flag_the_tuner_is_stock():
 @pytest.mark.firmware
 def test_customos_holds_only_the_other_features_settings():
     read, on = built({'HX_TUNER': '1', 'HX_BPM': '1'})
-    assert on == ['tuner', 'bpm']
+    assert on == ['tuner', 'bpm', 'splash']
     assert read(pm.NAV_CMP, 2) == b'\x06\x2b'
     pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
     assert struct.unpack('<I', read(pages + 4 * 6, 4))[0] == 1, "BPM's three settings: one page"

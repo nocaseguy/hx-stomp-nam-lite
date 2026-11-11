@@ -31,7 +31,7 @@ Each feature is a module in `tools/features/`. They are off by default, and the 
 | **Breathing line** | `HX_BREATHING_LINE=1` | Just for fun: the line across the middle of the Home screen comes alive in the colours, motion and speed you pick (Breathe, Pulse, Sine, Cylon, Comet, Heart, Sparkle). See [Breathing line](#breathing-line). |
 | **Long press** | `HX_LONG_PRESS=1` | In Stomp mode, hold a footswitch for 1 s for a second action: the tuner, FS4 or FS5, or a virtual footswitch FS6–FS10. A tap still toggles the switch's own blocks. See [Long press](#long-press). |
 | **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). |
-| **Boot screen** | `--splash`, `--splash-text` | Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). |
+| **Boot screen** | `--splash`, `--splash-text` | The boot text reads "HXtra". Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). |
 
 ```sh
 HX_TUNER=1 HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
@@ -120,7 +120,7 @@ python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf --splash my_picture.jp
 
 - `--splash` takes any picture macOS can open (PNG, JPEG, HEIC, ...) at any size. The screen is **320x240**; a 320x240 PNG is used exactly as it is, and anything else is converted to it with macOS's `sips`: scaled to cover the screen and cropped at the centre, or with `--splash-fit fit`, scaled to fit inside it on black. Off macOS, give a 320x240 PNG.
 - The loading bar crosses the picture about halfway down, and the text sits on it in the bottom 40 rows, in grey (`0xb1b1b1`), so keep the bottom darkish.
-- `--splash-text` replaces "Firmware 3.80.0" with up to 23 characters: ASCII, and emoji, each of which counts as one, e.g. `--splash-text "HXS OS v0.1 🎸"`.
+- The boot text reads "HXtra" in place of "Firmware 3.80.0". `--splash-text` replaces it with up to 23 characters: ASCII, and emoji, each of which counts as one, e.g. `--splash-text "HXS OS v0.1 🎸"`.
 - Each emoji becomes a colour glyph of the line's font, 18 px tall, level with the capitals. On macOS it's rendered from Apple Color Emoji; `--splash-glyph 🎸=guitar.png` (repeatable) gives your own picture instead, and off macOS it's required. A line with emoji is drawn white, not grey, as the firmware shows a glyph's own colours only on a white line.
 - The boot screen is a CustomOS feature (`tools/features/splash.py`). The flags set its inputs `HX_SPLASH`, `HX_SPLASH_FIT`, `HX_SPLASH_TEXT` and `HX_SPLASH_GLYPHS`, which work as environment variables too, as the other features' flags do.
 - `python3 tools/splash_topo.py out.png [--seed N]` draws a neon contour-map picture to start from; `python3 tools/patch_splash.py export firmware.hxf out.png` saves the picture an image has now.

@@ -180,7 +180,7 @@ def test_a_feature_with_settings_and_a_shared_hook_builds():
                                   Setting('dir', b'Demo\nDirection', (b'Normal', b'Reverse'))), apply=apply)
     ids = dict(setting_ids.by_name(), **{'demo.pos': 102, 'demo.dir': 128})
     new, on = pm.menu_entry0(e0, MODS + [demo], {'HX_TUNER': '1'}, ids)
-    assert [features.name(m) for m in on] == ['tuner', 'demo']
+    assert [features.name(m) for m in on] == ['tuner', 'splash', 'demo']
     read = reader(new)
     assert read(pm.NAMES_LONG + pm.NAME_LEN * 102, 13) == b'Demo\nPosition'
     tab, entry = pm.limits_entry(102)

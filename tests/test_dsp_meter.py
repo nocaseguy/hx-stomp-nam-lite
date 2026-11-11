@@ -499,7 +499,7 @@ def test_browser_takes_the_widget_lock_after_the_level_and_count(browser):
 @pytest.mark.firmware
 def test_build_chains_the_module_after_the_edit_paint():
     read, on = built({'HX_DSP_METER': '1'})
-    assert on == ['dsp_meter']
+    assert on == ['dsp_meter', 'splash']
     stub = struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0]
     assert stub & 1 and stub != dsp_meter.EDIT_PAINT
     stub &= ~1
@@ -571,7 +571,7 @@ def test_build_serves_dsp_disp_as_a_virtual_setting():
 @pytest.mark.firmware
 def test_without_the_flag_the_edit_paint_and_dsp_disp_id_stay_stock():
     read, on = built({})
-    assert on == []
+    assert on == ['splash']
     assert struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0] == dsp_meter.EDIT_PAINT
     assert struct.unpack('<I', read(dsp_meter.BROWSER_PAINT_LIT, 4))[0] == dsp_meter.BROWSER_PAINT
     assert read(dsp_meter.NAMES_X, 2) == dsp_meter.NAMES_X_STOCK
@@ -583,7 +583,7 @@ def test_without_the_flag_the_edit_paint_and_dsp_disp_id_stay_stock():
 def test_builds_alongside_bpm():
     """Both features on: no overlapping writes, and the Edit paint is still the meter's alone (BPM chains the Home paint)."""
     read, on = built({'HX_DSP_METER': '1', 'HX_BPM': '1'})
-    assert on == ['bpm', 'dsp_meter']
+    assert on == ['bpm', 'dsp_meter', 'splash']
     stub = struct.unpack('<I', read(dsp_meter.EDIT_PAINT_LIT, 4))[0] & ~1
     head = pm.chain_cave(stub, dsp_meter.EDIT_PAINT & ~1, [], [stub])
     assert read(stub, len(head) - 12) == head[:-12]
