@@ -1,6 +1,6 @@
 # Resource limits: how much more fits on the HX Stomp
 
-**Read this before planning a feature.** It says which of the HX Stomp's resources are nearly full, what typical changes cost, and where the remaining room is. Measured on 2026-11-03 against stock 3.80.0, the default `build.py` image (NAM A2 Lite, 3 slots) and the GR-meter image (`HX_GR=1 HX_FRAMEPROBE=1`, branch `gr-meter-experiment`). Setting IDs, glyph slots and M4 code were re-measured on 2026-11-04 on main, with an all-features build (`HX_BPM=1 HX_DSP_METER=1`, plus `--splash-text` with an emoji). Status tags are as in [FIRMWARE_NOTES.md](../FIRMWARE_NOTES.md). The HX Stomp XL has the same Entries 2, 3 and 4, so it has the same DSP and model limits.
+**Read this before planning a feature.** It says which of the HX Stomp's resources are nearly full, what typical changes cost, and where the remaining room is. Measured on 2026-11-03 against stock 3.80.0, the default `build.py` image (NAM A2 Lite, 3 slots) and the GR-meter image (`HX_GR=1 HX_FRAMEPROBE=1`, branch `gr-meter-experiment`). Setting IDs, glyph slots and M4 code were re-measured on 2026-11-04 on main, with an all-features build (`HX_BPM=1 HX_DSP_METER=1`, plus `--splash-text` with an emoji). Status tags are as in [research/conventions.md](research/conventions.md). The HX Stomp XL has the same Entries 2, 3 and 4, so it has the same DSP and model limits.
 
 ## The short version
 
@@ -17,7 +17,7 @@ The HX Stomp has two processors. The **M4** (LPC4350, the CPU) runs the screen, 
 | SHARC internal RAM | **568 words** (NAM, 3 slots); 2,720 (2 slots) | DSP code, DSP state | verified offline |
 | Preset model IDs (1..832) | **8** | each new model | verified offline |
 | Entry 2 partition (DSP boot stream, 512 KiB) | **9.5 KB** (NAM build); **2.3 KB** with `HX_GR=1 HX_CLICK=1` | DSP code and tables | verified offline |
-| Entry 3 (model database) | **under 11 KB** past the default build's `0xf0d00` bytes: by `0xf3888` the unit drops every amp and preamp (the partition itself has 53 KB) | models (~1.8 KB), knobs (~1 KB per model) | verified on unit |
+| Entry 3 (model database) | **between 1 KB and 11 KB** past the default build's `0xf0d00` bytes: `0xf10f0` is known to work, and by `0xf3888` the unit drops every amp and preamp (the partition itself has 53 KB) | models (~1.8 KB), knobs (~1 KB per model) | verified on unit |
 | Blob 0 buffer (DSP composite library) | 88,551 words (~27 more cloned composites) | models | verified offline |
 | DSP time per preset | M4 admits up to 90%; 15% always taken | blocks in a preset | verified offline |
 | M4 code space (segment 6) | **1.73 MB** before the RAM-run hook at `0x29000000`; ~3.1 MB installed (4 MiB image cap) | caves, relocated tables | verified offline |

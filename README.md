@@ -15,7 +15,7 @@ HXtra forks it at upstream commit `2e80164`, has merged upstream up to `01c0bb0`
 - **New functionality on the Cortex-M4 application** (the HX Stomp's UI and control side), not just the DSP, added as small Thumb-2 code caves that each check the stock bytes they replace.
 - **A feature engine.** Each feature is its own module in `tools/features/`, with its own settings, hooks and tests, and features that hook the same place in the firmware share it instead of overwriting each other (see [How it works](#how-it-works)).
 - **A way for the DSP to talk to the UI.** A DSP routine writes its own values into the unused tail of the frames the DSP already sends the M4, and an M4 hook reads them. This needs no knowledge of Line 6's own message formats.
-- **[FIRMWARE_NOTES.md](FIRMWARE_NOTES.md)**, a shared map of what is known about the 3.80.0 firmware: addresses, formats, techniques that work, dead ends, and what is still open. Every claim is marked verified on the unit, verified offline, or a hypothesis.
+- **[Research notes](docs/research/INDEX.md)**, a shared map of what is known about the 3.80.0 firmware, one note per part of the system: addresses, formats, techniques that work, dead ends, and what is still open. An index says what each note covers and when you'd need it. Every claim is marked verified on the unit, verified offline, or a hypothesis.
 
 The built image is `HX_Stomp_v3.80.0_HXtra.hxf`. NAM A2 Lite is the same block as upstream's: ten knobs and a tone stack in Amp → NAM, on Xenomorph Fuzz Mono's preset ID 555 (that stock model is removed), so HX Edit keeps NAM blocks and presets made with either build open with the other. **Presets saved with an earlier NAM build (preset IDs 147 and 148) don't open NAM A2 Lite in this one:** re-add the block in those presets. Upstream's [CHANGELOG.md](CHANGELOG.md) has the NAM changes.
 
@@ -250,11 +250,11 @@ HXtra has only ever run on an HX Stomp. The XL and HX Effects builds pass the bu
 - **NAM captures through the IR slots.** The HX Stomp already stores up to 128 User IRs of 2,048 samples and hands them to the DSP unchanged. `nam2ir.py` packs a capture's weights into those samples, behind a small header the kernel recognises.
 - **The NAM block.** `tools/patch_amp.py` builds the block's DSP graph, parameter map and menu entries on Xenomorph Fuzz Mono's identity, with the NAM kernel as its DSP stage (`build.py`'s `STEPS`).
 
-[FIRMWARE_NOTES.md](FIRMWARE_NOTES.md) has the details: addresses, the M4-to-DSP frame format, the Settings and Home screen internals, and the open problems.
+The [research notes](docs/research/INDEX.md) have the details: addresses, the M4-to-DSP frame format, the Settings and Home screen internals, and the open problems. Start from their index.
 
 ## Contributing
 
-Add what you learn to [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md), with its status (verified on unit, verified offline, or hypothesis) and how you found it. Never paste Line 6 code or data there: describe it and give addresses.
+Add what you learn to the matching note in [docs/research](docs/research/INDEX.md) (see [conventions.md](docs/research/conventions.md)), with its status (verified on unit, verified offline, or hypothesis) and how you found it. Never paste Line 6 code or data there: describe it and give addresses.
 
 Try every change from RAM on a unit before relying on it, and say in the commit what was seen on the unit and what was only checked offline.
 
@@ -277,7 +277,7 @@ M4 code (the caves `tools/patch_menu.py` writes, and each feature's `.s` module)
 
 ```
 build.py                      one-step build from the stock .hxf
-FIRMWARE_NOTES.md             what is known about the 3.80.0 firmware
+docs/research/INDEX.md        what is known about the 3.80.0 firmware: the index of the research notes
 tools/patch_menu.py           HXtra: the feature engine, the Global Settings section and its caves (HX Stomp)
 tools/features/               the features: tuner.py, bpm.py, breathing_line.py, dsp_meter.py, long_press.py, more_snapshots.py, splash.py
 tools/setting_ids.py          which setting ID each feature's setting uses
