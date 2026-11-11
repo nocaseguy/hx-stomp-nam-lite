@@ -122,3 +122,10 @@ def test_page_copy_builds_features_from_the_cache(tmp_path):
                            env={**env, **extra}, cwd=root, capture_output=True, text=True)
         assert r.returncode == 0, r.stdout + r.stderr
     assert out["cache"].read_bytes() == out["clang"].read_bytes()
+
+
+def test_pages_publishes_every_source():
+    # the page fetches each of SOURCES from the site, which has only what .github/workflows/pages.yml copies there
+    site = ROOT / ".github/workflows/pages.yml"
+    copied = [p for line in re.findall(r"^\s*cp -r (.*) _site/", site.read_text(), re.M) for p in line.split()]
+    assert [p for p in listed_sources() if not any(p == c or p.startswith(c + "/") for c in copied)] == []
