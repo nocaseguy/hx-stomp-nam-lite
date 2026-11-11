@@ -41,11 +41,9 @@ def test_cached_module(tmp_path, monkeypatch):
         m4asm.assemble_module(str(a / "x.s"), (a,))
 
 
-def test_web_flags_leave_out_gr():
-    flags = m4cache.web_flags()
-    assert "HX_GR" not in flags
-    assert set(flags) == {"HX_TUNER", "HX_BPM", "HX_DSP_METER", "HX_BREATHING_LINE", "HX_LONG_PRESS", "HX_MORE_SNAPSHOTS",
-                          "HX_CLICK"}
+def test_web_flags_are_every_feature():
+    assert set(m4cache.web_flags()) == {"HX_TUNER", "HX_BPM", "HX_GR", "HX_DSP_METER", "HX_BREATHING_LINE", "HX_LONG_PRESS",
+                                        "HX_MORE_SNAPSHOTS", "HX_CLICK"}
 
 
 def test_make_refuses_a_cache_build(monkeypatch):

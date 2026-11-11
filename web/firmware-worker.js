@@ -35,6 +35,8 @@ var BUILT_MD5 = {
 
 // build.py's KERNEL and STEPS (tests/test_web_build.py keeps them equal): per unit, the kernel
 // command and the patch_amp.py steps, each "patch_amp.py CMD IN OUT ARGS..." on the previous output.
+// GR_SLOTS too: build.py's kernel(unit) adds it on an HX Stomp build with the GR meter.
+var GR_SLOTS = ["--slots", "2"];
 var KERNEL = {"HX_Stomp": ["tools/sharc/nam_multi.py", "--mid-sweep"], "HX_Stomp_XL": ["tools/sharc/nam_multi.py", "--mid-sweep"], "HX_Effects": ["tools/sharc/nam_multi.py", "--mid-sweep", "--effects"]};
 var STEPS = {
   "HX_Stomp": [
@@ -65,6 +67,7 @@ var SOURCES = [
   "tools/effects.py",
   "tools/patch_menu.py",
   "tools/patch_click.py",
+  "tools/patch_comp.py",
   "tools/m4asm.py",
   "tools/image_store.py",
   "tools/patch_splash.py",
@@ -95,11 +98,13 @@ var SOURCES = [
   "src/m4/dsp_meter.s",
   "src/m4/gr_meter.s",
   "src/m4/long_press.s",
+  "src/m4/metronome.s",
   "src/m4/more_snapshots.s",
   "src/m4/strip.s",
   "src/m4/tuner.s",
   "src/m4/virtual_settings.s",
   "src/sharc/click.asm",
+  "src/sharc/frame_probe.asm",
 ];
 // The release's M4 code for the features (tools/m4cache.py); a page from a checkout has none, and offers no features.
 var CACHE = "m4cache.json";
@@ -191,7 +196,8 @@ async function build(stock, flags) {
     return out;
   }
   try {
-    step(3, "Building the NAM kernel…", KERNEL[unit].concat(["-o", "build/nam_lite.asm"]));
+    var gr = flags.indexOf("HX_GR") >= 0;
+    step(3, "Building the NAM kernel…", KERNEL[unit].concat(gr ? GR_SLOTS : [], ["-o", "build/nam_lite.asm"]));
     var base = "build/stock.hxf";
     STEPS[unit].forEach(function (s, k) {
       var out = "build/nam_lite_" + k + ".l6ia";
@@ -211,6 +217,11 @@ async function build(stock, flags) {
       step(5, "Adding the kernel to the DSP program…",
            ["tools/patch_click.py", "build/nam_lite.l6ia", "build/nam_lite_click.l6ia"]);
       p.FS.rename("/repo/build/nam_lite_click.l6ia", "/repo/build/nam_lite.l6ia");
+    }
+    if (gr) {           // last, as in build.py: every step that adds a model rebuilds the tails its knobs live in
+      step(5, "Adding the kernel to the DSP program…",
+           ["tools/patch_comp.py", "build/nam_lite.l6ia", "build/nam_lite_comp.l6ia"]);
+      p.FS.rename("/repo/build/nam_lite_comp.l6ia", "/repo/build/nam_lite.l6ia");
     }
     var report = step(6, "Checking every checksum and packing the file…",
                       ["tools/l6ia_verify.py", "build/nam_lite.l6ia"]);

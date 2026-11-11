@@ -26,13 +26,9 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 UNIT = 'HX_Stomp'                   # the features are the HX Stomp's only
 
 
-BUILD_FLAGS = ('HX_CLICK',)        # build.py's own switches the page builds too: the Metronome block (tools/patch_click.py)
-
-
 def web_flags():
-    """The switch of each feature the page builds, in feature order (those not marked WEB = False), then BUILD_FLAGS."""
-    flags = [features.flags(m)[0] for m in features.load() if features.flags(m) and getattr(m, 'WEB', True)]
-    return flags + [f for f in BUILD_FLAGS if f not in flags]
+    """The switch of every feature, in feature order: the page builds them all."""
+    return [features.flags(m)[0] for m in features.load() if features.flags(m)]
 
 
 def combo_key(flags):

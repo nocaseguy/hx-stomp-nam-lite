@@ -3,7 +3,6 @@
 No Global Settings: the knobs live in the blocks. The DSP side (src/sharc/frame_probe.asm) goes in with them, and NAM keeps two blocks."""
 FLAG = 'HX_GR'
 ORDER = 90                          # before the breathing line, which reads SHOWN
-WEB = False                         # its DSP side replaces the NAM kernel, and the web page always builds NAM
 MODULE = 'src/m4/gr_meter.s'
 SHOWN = 20                          # data + 20 in the module: nonzero while the meter shows
 

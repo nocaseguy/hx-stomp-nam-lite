@@ -51,7 +51,7 @@ def js_value(name):
 
 
 def test_build_steps_as_build_py():
-    for name in ("KERNEL", "STEPS"):
+    for name in ("KERNEL", "GR_SLOTS", "STEPS"):
         assert js_value(name) == py_dict("build.py", name), name
 
 
@@ -69,7 +69,8 @@ def test_sources_cover_the_build():
             "tools/sharc/nam_lite.py",
             "tools/sharc/nam_multi.py", "tools/sharc/nam_multi_kernel.asm",
             *(f"tools/features/{f.name}" for f in (ROOT / "tools/features").glob("*.py")),
-            "tools/patch_click.py", "build.py", "src/sharc/click.asm"}      # the Metronome: patch_click.py reads both
+            "tools/patch_click.py", "build.py", "src/sharc/click.asm",      # the Metronome: patch_click.py reads both
+            "tools/patch_comp.py", "src/sharc/frame_probe.asm"}             # the GR meter's knobs and DSP code
     for d in ("tools", "tools/sharc"):
         for f in listed:
             if not f.endswith(".py"):
@@ -96,7 +97,7 @@ def test_sources_have_every_m4_source():
 def test_page_lists_the_web_features():
     # the page builds every one, the set whose MD5 a release pins
     page = (ROOT / "web/index.html").read_text()
-    assert re.findall(r'<div class="feat" data-feature="(\w+)">', page) == m4cache.web_flags()
+    assert sorted(re.findall(r'<div class="feat" data-feature="(\w+)">', page)) == sorted(m4cache.web_flags())
 
 
 @pytest.mark.firmware
