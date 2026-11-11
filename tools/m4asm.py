@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""m4asm.py - assemble a position-independent Thumb-2 .s file (Apple's Command Line Tools clang) and print its .text as hex."""
+"""m4asm.py - assemble a position-independent Thumb-2 .s file (Apple's Command Line Tools clang) and print its .text as hex.
+
+With HX_M4_CACHE set to a release's m4cache.json (tools/m4cache.py), modules come from it instead of clang: the web page has none.
+"""
+import hashlib
+import json
+import os
 import struct
 import subprocess
 import sys
@@ -7,10 +13,38 @@ import tempfile
 
 CLANG = '/Library/Developer/CommandLineTools/usr/bin/clang'
 SHT_SYMTAB, SHT_RELA, SHT_REL = 2, 4, 9
+CACHE = 'HX_M4_CACHE'
+SOURCE_TYPES = ('.s', '.inc')
+
+
+def key(src, include=()):
+    """What a module's code depends on: its source and every source in its include directories, by name, not by path."""
+    h = hashlib.sha256()
+
+    def add(name, path):
+        data = open(path, 'rb').read()
+        h.update(f'{name}\0{len(data)}\0'.encode() + data)
+
+    add(os.path.basename(src), src)
+    for i, d in enumerate(include):
+        for name in sorted(n for n in os.listdir(d) if n.endswith(SOURCE_TYPES)):
+            add(f'{i}/{name}', os.path.join(d, name))
+    return h.hexdigest()
+
+
+def cached(path, src, include):
+    with open(path) as f:
+        hit = json.load(f)['modules'].get(key(src, include))
+    if hit is None:
+        raise SystemExit(f'm4asm: {path} has no code for {os.path.basename(src)} with these features: it is another '
+                         "release's, or these sources changed since it was made")
+    return bytes.fromhex(hit['code']), hit['symbols']
 
 
 def assemble_module(src, include=()):
     """(.text, {symbol: offset}) of src; refuses relocations and data outside .text, which nothing would place."""
+    if os.environ.get(CACHE):
+        return cached(os.environ[CACHE], src, include)
     with tempfile.TemporaryDirectory() as d:
         obj = f'{d}/o.o'
         subprocess.run([CLANG, '-target', 'thumbv7em-none-eabi', '-mcpu=cortex-m4', '-mfpu=fpv4-sp-d16', '-mfloat-abi=hard',
