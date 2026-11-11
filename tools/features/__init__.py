@@ -4,16 +4,16 @@ A feature module may have:
   FLAG       the environment variable that turns it on (HX_BPM=1 python3 build.py ...), a tuple of them (on when any is set), or
              None (the default) for always on; any non-empty value turns it on, and apply(p) reads the value with p.input(FLAG)
   INPUTS     Input()s: the environment variables it reads besides FLAG, or FLAG itself to give its value a kind
-  ORDER      its turn among the features (default 100): the order of their HXtra pages and of their handlers on a shared hook
+  ORDER      its turn among the features (default 100): the order of their Global Settings sections and of their handlers on a shared hook
   CONFLICTS  names of features it cannot be built with
-  SETTINGS   Setting()s on its own HXtra pages, three to a page; each takes the ID tools/setting_ids.py gives '<feature>.<key>'
+  SETTINGS   Setting()s in its own Global Settings section, after Displays, three to a page; each takes the ID tools/setting_ids.py gives '<feature>.<key>'
              (a virtual ID, which the engine serves from a bit field: see tools/setting_ids.py VIRTUAL)
-  TITLE      the title of its HXtra pages in Global Settings, on each of them (default: its name in words, breathing_line ->
+  TITLE      the title of its Global Settings section, on each of its pages (default: its name in words, breathing_line ->
              Breathing Line); 1..63 printable ASCII characters
   ICON       the stock image shown by that title, by name, e.g. 'Icon_Tempo' (default Icon_Displays); a name in
              tools/patch_menu.py ICONS
-  MENU       False when it shows its SETTINGS itself: they keep their IDs, limits and hxtra.inc lines but get no HXtra page,
-             and Global Settings has no HXtra section when no feature built in has a page there (default True); or a stock
+  MENU       False when it shows its SETTINGS itself: they keep their IDs, limits and hxtra.inc lines but get no section
+             (default True: a section of its own); or a stock
              category's name (patch_menu.STOCK_CATEGORIES, e.g. 'Footswitches'): its settings fill that category's trailing empty
              slots, then pages after its own
   apply(p)   its code and hooks, through tools/patch_menu.py's Patch: p.put() (a write no other feature may overlap), p.expect(),

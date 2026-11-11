@@ -39,7 +39,7 @@ HX_TUNER=1 HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/
 
 ### Custom settings
 
-The other features' settings are in Global Settings, in a seventh section called **HXtra**, after Displays (press right past Displays). It has no icon in the section strip, so none is lit while you are in it. Each feature that's built in has its own page there, titled with the feature's name (BPM Display, Breathing Line) and, for some, an icon of its own (see [Icons](docs/icons.md), which also makes an icon library of every stock icon from your firmware file). A build with none of them has no HXtra section. Long press's settings are in **Footswitches** instead, after FS5 Function.
+The other features' settings are in Global Settings, each feature in a section of its own after Displays (turn the knob right past Displays): **BPM Display**, then **Breathing Line**, each with its own icon by the title (see [Icons](docs/icons.md), which also makes an icon library of every stock icon from your firmware file). The section strip at the top has room for the six stock sections only, so none of its icons is lit while you are in a feature's. A build with none of these features has no sections after Displays. Long press's settings are in **Footswitches** instead, after FS5 Function.
 
 | Feature | Setting | Values | What it does |
 |---|---|---|---|
