@@ -1,5 +1,5 @@
 """tools/features/breathing_line.py and src/m4/breathing_line.s: the settings and their IDs, the hooks on the firmware, and the
-handlers run in tests/m4emu.py against a model of each Line Motion and Line Color."""
+handlers run in tests/m4emu.py against a model of each Type and Color."""
 import math
 import struct
 
@@ -21,6 +21,7 @@ SINE = [round(127.5 + 127.5 * math.sin(2 * math.pi * a / 256)) for a in range(25
 
 def test_settings_values_defaults_and_ids():
     s = {x.key: x for x in bl.SETTINGS}
+    assert [x.label for x in bl.SETTINGS] == [b'Color', b'Type', b'Speed'], 'one line: a 2-line label shows its name above its page'
     assert s['color'].values == (b'White', b'Red', b'Green', b'Blue', b'Fire', b'Ice', b'Sunset', b'Ocean', b'Aurora', b'Neon',
                                  b'Rainbow')
     assert s['color'].values[s['color'].default] == b'Rainbow' and len(s['color'].values) == len(SCHEMES) + 1
@@ -295,7 +296,7 @@ def test_paint_skips_a_hidden_segment(line):
 
 def test_paint_moves_the_phase_by_the_time_since_the_last(line):
     line.paint(motion=2, speed=9)
-    line.now += 400_000                         # half of Line Speed 10's 0.8 s
+    line.now += 400_000                         # half of Speed 10's 0.8 s
     phase = line.data(4)
     fills = line.paint(motion=2, speed=9, color=0)
     assert line.data(4) == (phase + 400_000 * RATES[9]) & 0xffffffff
@@ -324,7 +325,7 @@ def test_paint_counts_cycles_for_sparkle(line):
     line.paint(motion=8, speed=9)
     counted = []
     for _ in range(4):
-        line.now += 500_000                     # 5/8 of a cycle at Line Speed 10
+        line.now += 500_000                     # 5/8 of a cycle at Speed 10
         line.paint(motion=8, speed=9)
         counted.append(line.data(5))
     assert counted == [0, 1, 1, 2]
@@ -344,7 +345,7 @@ def test_off_draws_nothing_and_hands_the_line_back_to_the_stock_segments(line):
 
 
 def test_line_holds_still_while_a_gr_meter_shows(line_gr):
-    """User decision: the line yields to a compressor's meter, as at Line Motion Off, and runs again once the meter is off."""
+    """User decision: the line yields to a compressor's meter, as at Type Off, and runs again once the meter is off."""
     line_gr.m.u32(GR_SHOWN, 0)
     assert len(line_gr.paint(motion=3)) == 80 and line_gr.data(0) == 1
     line_gr.m.u32(GR_SHOWN, 1)

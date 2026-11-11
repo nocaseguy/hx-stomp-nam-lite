@@ -1,4 +1,4 @@
-"""tools/features/dsp_meter.py and src/m4/dsp_meter.s: the DSP Disp setting, the module run in unicorn against a fake DSP model and Edit
+"""tools/features/dsp_meter.py and src/m4/dsp_meter.s: the DSP Display setting, the module run in unicorn against a fake DSP model and Edit
 view (each block's per cent, the total in each format and its text widget, rounding and the ends, placement, locks) and a fake model
 browser (each listed model's per cent between its icon and name), and the firmware it builds."""
 import os
@@ -39,14 +39,14 @@ WHITE, BLACK = 0xffffff, 0
 
 def test_dsp_disp_setting():
     s, = dsp_meter.SETTINGS
-    assert (s.key, s.label, s.values, s.default, s.max) == ('disp', b'DSP\nDisp', (b'Used/All', b'Free', b'Used%'), 0, 2)
+    assert (s.key, s.label, s.values, s.default, s.max) == ('disp', b'Display\nDSP', (b'Used/All', b'Free', b'Used%'), 0, 2)
     assert all(len(v) <= 8 and b'\n' not in v for v in s.values), 'a value shows 8 characters, on one line [verified on unit]'
     assert DISP == 0xd1, 'a unit keeps a setting\'s value by ID: never move it once a build has used it'
     assert dsp_meter.FLAG == 'HX_DSP_METER'
 
 
 class Meter:
-    """The module in unicorn: blocks in slots, the DSP Disp setting, and what paint draws."""
+    """The module in unicorn: blocks in slots, the DSP Display setting, and what paint draws."""
 
     def __init__(self, m4emu):
         code, self.sym = m4emu.assemble('src/m4/dsp_meter.s', MODS, IDS)

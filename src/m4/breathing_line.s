@@ -1,5 +1,5 @@
-@ breathing_line.s - the Home screen's divider (the line between the signal flow and the knobs) animated: Line Motion's pattern in
-@ Line Color's colours at Line Speed. After each Home paint the line is filled straight into the framebuffer in 4 px strips over the
+@ breathing_line.s - the Home screen's divider (the line between the signal flow and the knobs) animated: Type's pattern in
+@ Color's colours at Speed. After each Home paint the line is filled straight into the framebuffer in 4 px strips over the
 @ stock segments, each strip as tall as the stock segment under it (the selected one is 2 px) and skipped where that one is hidden;
 @ the LED task's 1 ms tick asks for a repaint every FRAME_MS while it runs. tools/features/breathing_line.py chains the handlers.
 .syntax unified
@@ -19,7 +19,7 @@
 .equ GLOW, 16                       @ Comet's glow ahead of its head
 .equ TAIL, 20 * 16                  @ Comet's tail
 .equ SPARKS, 3                      @ Sparkle: strips that flash in a quarter cycle of each layer, in 16
-.equ RAINBOW, 10                    @ the Line Color without a row in bl_schemes
+.equ RAINBOW, 10                    @ the Color without a row in bl_schemes
 
 bl_tick:                            @ after the LED task's 1 ms sleep: a repaint every FRAME_MS while the line runs and the Home view is up
     adr.w r0, bl_data
@@ -59,7 +59,7 @@ bl_paint:                           @ after the Home paint (framebuffer): the st
     bl hxtra_setting_get
     movs r6, r0
 .if GR_SHOWN
-    ldr r1, =GR_SHOWN               @ a compressor's meter shows: the line holds still, as at Line Motion Off
+    ldr r1, =GR_SHOWN               @ a compressor's meter shows: the line holds still, as at Type Off
     ldr r1, [r1]
     cmp r1, #0
     it ne
@@ -148,7 +148,7 @@ bl_painted:
     add sp, #20
     pop {r4-r11, pc}
 
-bl_restore:                         @ Line Motion turned Off: the stock segments marked dirty, as setColor would mark them
+bl_restore:                         @ Type turned Off: the stock segments marked dirty, as setColor would mark them
     push {r4, lr}
     ldr r3, =0x28e24971
     blx r3
@@ -165,7 +165,7 @@ bl_dirty:
     blx r3
     pop {r4, pc}
 
-bl_level:                           @ r0 Line Motion, r1 a strip, r2 the phase (2^16 a cycle) -> r0 the strip's level 0..255
+bl_level:                           @ r0 Type, r1 a strip, r2 the phase (2^16 a cycle) -> r0 the strip's level 0..255
     push {r4-r6, lr}
     lsrs r3, r2, #8
     lsls r4, r1, #4
@@ -367,7 +367,7 @@ bl_fall2:                           @ bl_fall squared: a softer tail
     lsrs r0, #8
     pop {r3, pc}
 
-bl_colour:                          @ r0 Line Color, r1 a strip, r2 the phase, r3 a level -> r0 0xRRGGBB
+bl_colour:                          @ r0 Color, r1 a strip, r2 the phase, r3 a level -> r0 0xRRGGBB
     push {r4-r6, lr}
     mov r6, r3
     lsls r1, #4
@@ -463,9 +463,9 @@ bl_hue5:                            @ red, blue falling
 HXTRA_SETTING_GET
 .ltorg
 .balign 4
-bl_rates:                           @ Line Speed 1..10: 2^32 / the cycle in µs, for cycles of 8, 6, 4.8, 4, 3.2, 2.5, 2, 1.5, 1.1 and 0.8 s
+bl_rates:                           @ Speed 1..10: 2^32 / the cycle in µs, for cycles of 8, 6, 4.8, 4, 3.2, 2.5, 2, 1.5, 1.1 and 0.8 s
     .word 537, 716, 895, 1074, 1342, 1718, 2147, 2863, 3905, 5369
-bl_schemes:                         @ Line Color's three stops but Rainbow's; a plain colour repeats its one
+bl_schemes:                         @ Color's three stops but Rainbow's; a plain colour repeats its one
     .word 0xffffff, 0xffffff, 0xffffff  @ White
     .word 0xff0000, 0xff0000, 0xff0000  @ Red
     .word 0x00ff00, 0x00ff00, 0x00ff00  @ Green

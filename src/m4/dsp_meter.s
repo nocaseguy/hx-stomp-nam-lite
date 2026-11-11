@@ -1,5 +1,5 @@
 @ dsp_meter.s - the per-block DSP usage meter: each block in the Edit view's signal-flow row shows its share of the DSP in per cent, in black,
-@ and the top right corner shows their sum against what blocks may use (90% less the firmware's fixed 15%), as Global Settings > HXtra > DSP Disp asks,
+@ and the top right corner shows their sum against what blocks may use (90% less the firmware's fixed 15%), as Global Settings > HXtra > DSP Display asks,
 @ in a text widget of our own on the block title's baseline.
 @ The Edit view's top half (0x281282f8) has eight block slots, image widgets at view+0x4a4+0x24k, hidden when empty.
 @ DSP costs are the firmware's own, in hundredths of a per cent (the preset total adds 1500 and must stay within 9000).
@@ -15,7 +15,7 @@
 .thumb_func
 dsp_paint:                          @ r0 the framebuffer, r1 the Edit view's top half, after its stock paint
     push {r4-r7, lr}
-    sub sp, #44                     @ 0 the eight slots' DSP costs (-1 for none), 32 the blocks' sum in per cent (-1 for none), 36 DSP Disp
+    sub sp, #44                     @ 0 the eight slots' DSP costs (-1 for none), 32 the blocks' sum in per cent (-1 for none), 36 DSP Display
     mov r4, r0
     mov r5, r1
     movs r6, #0
@@ -270,7 +270,7 @@ label:                              @ r0 a browser row, r1 a number 0..999, r2 i
     add sp, #12
     pop {r5, r6, pc}
 
-total:                              @ r0 the blocks' sum in per cent (-1 for none), r1 DSP Disp (Used/All, Free, Used%), r4 the framebuffer
+total:                              @ r0 the blocks' sum in per cent (-1 for none), r1 DSP Display (Used/All, Free, Used%), r4 the framebuffer
     push {r3-r7, lr}                @ under the widget lock
     mov r6, r0
     mov r5, r1

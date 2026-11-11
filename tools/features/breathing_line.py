@@ -1,13 +1,13 @@
-"""Breathing line: the Home screen's divider animated in Line Motion's pattern, Line Color's colours and at Line Speed (src/m4/breathing_line.s)."""
+"""Breathing line: the Home screen's divider animated in Type's pattern, Color's colours and at Speed (src/m4/breathing_line.s)."""
 from features import Setting, gr
 
 FLAG = 'HX_BREATHING_LINE'
 SETTINGS = (
-    Setting('color', b'Line\nColor', (b'White', b'Red', b'Green', b'Blue', b'Fire', b'Ice', b'Sunset', b'Ocean', b'Aurora', b'Neon',
+    Setting('color', b'Color', (b'White', b'Red', b'Green', b'Blue', b'Fire', b'Ice', b'Sunset', b'Ocean', b'Aurora', b'Neon',
                                        b'Rainbow'), default=10),
-    Setting('motion', b'Line\nMotion', (b'Off', b'Steady', b'Pulse', b'Breathe', b'Sine', b'Cylon', b'Comet', b'Heart', b'Sparkle'),
+    Setting('motion', b'Type', (b'Off', b'Steady', b'Pulse', b'Breathe', b'Sine', b'Cylon', b'Comet', b'Heart', b'Sparkle'),
             default=3),
-    Setting('speed', b'Line\nSpeed', tuple(str(n).encode() for n in range(1, 11)), default=3),
+    Setting('speed', b'Speed', tuple(str(n).encode() for n in range(1, 11)), default=3),
 )
 
 HOME_PAINT_LIT, HOME_PAINT = 0x28d96e28, 0x28dc8d39                  # the Home view's paint function, as registered
