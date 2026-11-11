@@ -159,7 +159,7 @@ This writes `build/HX_Stomp_v3.80.0_HXtra.hxf` (from the XL's file, `build/HX_St
 4. Adds the kernel to the DSP's boot code (`patch_amp.py patch`).
 5. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
-The build is deterministic. The default HX Stomp build (no switches) has MD5 `fd18c1b0fda16c73c0f096d9b9edbdc7`, pinned in `tests/test_firmware.py`.
+The build is deterministic. The default HX Stomp build (no switches) has MD5 `b432800b85c8f5dc75b270d27019c5d2`, pinned in `tests/test_firmware.py`.
 
 A default build changes only 4 of the 15 parts of the firmware: the main application, the DSP program, the model list and the DSP graph library (the boot screen also changes the image store and the font table). **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
