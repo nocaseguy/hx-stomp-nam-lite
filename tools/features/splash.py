@@ -1,5 +1,5 @@
-"""The boot screen: a picture (HX_SPLASH, any picture; HX_SPLASH_FIT fill or fit), the line of text under it (HX_SPLASH_TEXT,
-"HXtra" when unset), and that line's glyphs drawn without their black boxes. Always on. build.py --splash, --splash-fit and --splash-text set these.
+"""The boot screen: a picture (HX_SPLASH, any picture; HX_SPLASH_FIT fill or fit; the stock one relabelled "HXtra STOMP" when
+unset), the line of text under it (HX_SPLASH_TEXT, the HXtra version when unset), and that line's glyphs drawn without their black boxes. Always on. build.py --splash, --splash-fit and --splash-text set these.
 Emoji in the text become colour glyphs of the line's font (pictures from HX_SPLASH_GLYPHS, build.py --splash-glyph, else
 rendered on macOS), and the line is drawn white, the one colour the glyph blitters copy unchanged.
 
@@ -14,8 +14,9 @@ import image_store
 import patch_menu as pm
 import patch_splash as ps
 import splash_emoji
+import splash_hxtra
 
-TEXT = 'HXtra'
+TEXT = 'v1.0.0'
 INPUTS = (Input('HX_SPLASH', path=True), Input('HX_SPLASH_FIT', choices=('fill', 'fit'), default='fill'),
           Input('HX_SPLASH_TEXT', default=TEXT), Input('HX_SPLASH_GLYPHS', path=True, mapping=True))
 
@@ -44,9 +45,8 @@ def transparent_text_cave(at, stock):
     return a.bytes()
 
 
-def picture(p, path, fit):
+def picture(p, w, h, rows):
     """The picture into HXStomp_Splash (320x181) or, at 320x240, into Screen_Boot, which the boot view then draws."""
-    w, h, rows = ps.load_picture(path, fit)
     name, _, stock_md5 = ps.FULL if h == ps.FULL[1] else ps.SPLASH
     e7, e8 = p.entry(7), p.entry(8)
     img = image_store.image(e7.data, e8.data, name)
@@ -57,6 +57,13 @@ def picture(p, path, fit):
     if name == ps.FULL[0]:
         p.expect(NAME_SITE, ps.SPLASH[0].ljust(16, b'\0'), "the boot view's image name")
         p.put(NAME_SITE, ps.FULL[0].ljust(16, b'\0'), "the boot view's image name")
+
+
+def stock_picture(p):
+    """Rows of (r, g, b) of the stock HXStomp_Splash."""
+    e8 = p.entry(8)
+    img = image_store.image(p.entry(7).data, e8.data, ps.SPLASH[0])
+    return ps.decode(e8.read(img.offset, img.length))
 
 
 def emoji_glyphs(p, emoji):
@@ -99,7 +106,9 @@ def line(p, text):
 
 def apply(p):
     if p.input('HX_SPLASH'):
-        picture(p, p.input('HX_SPLASH'), p.input('HX_SPLASH_FIT'))
+        picture(p, *ps.load_picture(p.input('HX_SPLASH'), p.input('HX_SPLASH_FIT')))
+    else:
+        picture(p, ps.W, ps.SPLASH[1], splash_hxtra.relabel(stock_picture(p)))
     line(p, p.input('HX_SPLASH_TEXT'))
     hook = p.own_entry(RENDER_FN, RENDER_STOCK, 'the text renderer')
     hook.to(p.add(transparent_text_cave(p.next(), hook.stock)))
