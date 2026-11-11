@@ -1,5 +1,5 @@
-@ bpm.s - the tempo as text at the top left of the Home screen, in the font and colour BPM Font and BPM Color say, and a 30 px dot
-@ lit in that colour while the TAP footswitch's ring is, red on a tap, left or right of the preset number (or both) as BPM Dot Pos says.
+@ bpm.s - the tempo as text at the top left of the Home screen, in the font and colour its Font Size and Color settings say, and a 30 px dot
+@ lit in that colour while the TAP footswitch's ring is, red on a tap, left or right of the preset number (or both) as Dot Position says.
 @ The tempo is the Global Setting the stock code uses, Global BPM or Preset BPM as Tempo Select says, as a whole BPM, with " X" while
 @ the tempo screen would show Extrnl. tools/features/bpm.py chains the handlers; only bpm_ledsend is a hook of its own.
 .syntax unified
@@ -412,12 +412,12 @@ bpm_none:                           @ the digit-only fonts have no dash: nothing
 HXTRA_SETTING_GET
 .ltorg
 .balign 4
-bpm_colours:                        @ BPM Color: White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple
+bpm_colours:                        @ Color: White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple
     .word 0xffffff, 0xb1b1b1, 0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0080ff, 0xb000ff
-bpm_fonts:                          @ BPM Font: 41 Lite, 35 Bold, 28 Bold, 28 Lite, 21 Bold, 21 Reg, as font numbers
-    .byte 5, 4, 2, 3, 0, 1
+bpm_fonts:                          @ Font Size: XL, L, M, S (35 Bold, 41 Lite, 28 Bold, 21 Reg), as font numbers
+    .byte 4, 5, 2, 1
 .balign 4
-bpm_dotshape:                       @ x, y below the dots' top, w, h, BPM Dot Pos bit, 0: nested rectangles whose union is a 30 px circle
+bpm_dotshape:                       @ x, y below the dots' top, w, h, Dot Position bit, 0: nested rectangles whose union is a 30 px circle
     .byte 80, 0, 8, 30, 1, 0        @ left: the right one mirrored about the preset number's middle, x = 160
     .byte 77, 1, 14, 28, 1, 0
     .byte 76, 2, 16, 26, 1, 0

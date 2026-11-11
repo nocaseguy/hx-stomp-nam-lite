@@ -6,10 +6,10 @@ FLAG = 'HX_BPM'
 TITLE = 'BPM Display'
 ICON = 'Icon_Tempo'
 ORDER = 20
-SETTINGS = (
-    Setting('font', b'BPM\nFont', (b'41 Lite', b'35 Bold', b'28 Bold', b'28 Lite', b'21 Bold', b'21 Reg')),
-    Setting('color', b'BPM\nColor', (b'White', b'Gray', b'Red', b'Orange', b'Yellow', b'Green', b'Cyan', b'Blue', b'Purple')),
-    Setting('dot', b'BPM\nDot Pos', (b'Left', b'Right', b'Both')),
+SETTINGS = (     # 'Position\nDot' reads Dot over Position: the line after the newline is the top one
+    Setting('font', b'Size\nFont', (b'XL', b'L', b'M', b'S'), default=1),
+    Setting('color', b'Color', (b'White', b'Gray', b'Red', b'Orange', b'Yellow', b'Green', b'Cyan', b'Blue', b'Purple')),
+    Setting('dot', b'Position\nDot', (b'Left', b'Right', b'Both')),
 )
 
 HOME_CTOR_CALL, HOME_CTOR = 0x28d96c44, 0x28dc91d0                  # bl to the Home view's constructor at boot

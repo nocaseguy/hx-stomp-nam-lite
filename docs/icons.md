@@ -1,6 +1,6 @@
-# Icons: the icon library and an HXtra page's icon
+# Icons: the icon library and a feature section's icon
 
-Each HXtra page in Global Settings shows a title and an icon next to it, both from the feature the page belongs to. The icon is one of the stock firmware's images, picked by name. This page says how to pick one, which images Global Settings itself uses, and how to see all of them. Status tags are as in [FIRMWARE_NOTES.md](../FIRMWARE_NOTES.md).
+Each feature with settings is a section of its own in Global Settings, after Displays, with a title and an icon next to it, both from the feature. The icon is one of the stock firmware's images, picked by name. This page says how to pick one, which images Global Settings itself uses, and how to see all of them. Status tags are as in [FIRMWARE_NOTES.md](../FIRMWARE_NOTES.md).
 
 ## See every icon: the icon library
 
@@ -12,7 +12,7 @@ python3 tools/icon_library.py HX_Stomp_v3.80.0_0x103966115.hxf      # writes bui
 
 Open `build/icons.html` in a browser. It draws every icon-like image (172 of the image store's 577) at twice its size on a black screen, each with its name, its size and its index, in four groups: the section icons Global Settings shows by the title, the section strip across the top, the section-style pictures Global Settings never draws, and every other `Icon_` image. You can filter the last group by name and show only the icons that fit. The icons HXtra uses are tagged with what uses them, and the names in `ICONS` are tagged **in ICONS**.
 
-## Give a feature's pages an icon
+## Give a feature's section an icon
 
 1. Pick an image in the library. One that **fits** (no bigger than 30×29, the size of the stock section icons) sits by the title as the stock ones do; a bigger one may run into the title.
 2. Put its name in the feature module, next to its `TITLE`:
@@ -24,19 +24,19 @@ Open `build/icons.html` in a browser. It draws every icon-like image (172 of the
 
 3. If the name isn't in `ICONS` in `tools/patch_menu.py`, add its line there with the index the library shows (`'Icon_Tempo': 0x181,`). The build stops with a message when a feature names an icon that isn't there, and a firmware test checks every line of `ICONS` against the stock image names.
 
-A feature with no `ICON` gets `Icon_Displays`, the icon HXtra has shown since it was added. A feature with several pages shows its icon on each of them.
+A feature with no `ICON` gets `Icon_Displays`, the stock Displays icon. A section with several pages shows its icon on each of them.
 
 ## In use
 
 | Image | Size | Index | Used for |
 | --- | --- | --- | --- |
-| `Icon_Displays` | 30×21 | 0x48 | the pages of a feature with no `ICON` |
+| `Icon_Displays` | 30×21 | 0x48 | the section of a feature with no `ICON` |
 | `Icon_Tempo` | 22×29 | 0x181 | BPM Display |
 | `Icon_DualIR` | 28×22 | 0x100 | Breathing Line |
 
 ## What stock Global Settings shows
 
-**The section icon by the title** [verified on unit]: one per section, from the list at `0x28e3b5b8`. HXtra's pages show theirs in the same place.
+**The section icon by the title** [verified on unit]: one per section, from the list at `0x28e3b5b8`. Each feature's section shows its own in the same place.
 
 | Section | Image | Size | Index |
 | --- | --- | --- | --- |
@@ -47,7 +47,7 @@ A feature with no `ICON` gets `Icon_Displays`, the icon HXtra has shown since it
 | MIDI/Tempo | `Icon_MIDITempo` | 22×24 | 0x14d |
 | Displays | `Icon_Displays` | 30×21 | 0x48 |
 
-**The section strip across the top** [verified offline]: `0x28dcf4d8` draws `Global_<section>` for each section and `Global_<section>Sel` (lit) for the current one, from the lists at `0x28e3b5f8` and `0x28e3b628`. It has six places only, so HXtra has none and nothing is lit while you are in it.
+**The section strip across the top** [verified offline]: `0x28dcf4d8` draws `Global_<section>` for each section and `Global_<section>Sel` (lit) for the current one, from the lists at `0x28e3b5f8` and `0x28e3b628`. It has six places only, so a feature's section has none and nothing is lit while you are in it.
 
 | Section | Image | Lit image | Size |
 | --- | --- | --- | --- |

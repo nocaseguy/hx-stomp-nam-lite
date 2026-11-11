@@ -85,7 +85,7 @@ def test_title_is_title_else_the_name_in_words():
 @pytest.mark.parametrize('m', [m for m in MODS if getattr(m, 'SETTINGS', ()) and getattr(m, 'MENU', True) is True],
                          ids=features.name)
 def test_every_feature_with_a_page_names_it(m):
-    assert getattr(m, 'TITLE', None), f'{features.name(m)} has HXtra pages but no TITLE'
+    assert getattr(m, 'TITLE', None), f'{features.name(m)} has a Global Settings category of its own but no TITLE'
     pm.check_title(m)
     pm.icon(m)
 
@@ -225,39 +225,23 @@ def test_a_feature_with_settings_and_a_shared_hook_builds():
 
 
 @pytest.mark.firmware
-def test_each_hxtra_page_shows_its_feature_s_title_and_icon(m4emu):
-    """A build with BPM and breathing line (a page each) and long press (in Footswitches, no HXtra page): the section paint's title
-    and icon calls run their caves, which give each HXtra page its feature's title and icon in ORDER, and leave the stock sections
-    theirs."""
-    e0 = stock_e0()
-    for site, fn in ((pm.TITLE_CALL, pm.TITLE_SET), (pm.ICON_CALL, pm.ICON_SET)):
-        assert reader(e0)(site, 4) == pm.bl(site, fn)
-    env = {'HX_BPM': '1', 'HX_LONG_PRESS': '1', 'HX_BREATHING_LINE': '1'}
-    new, _ = pm.menu_entry0(e0, MODS, env)
-    _, poff, slen, base, _ = pa._parse_e0_segments(new)[6]
-    m = m4emu.M4(new[poff:poff + slen], base)
-    view, stock_word = base + slen + 0x200, base + slen + 0x300
-    callers = {}
-    for site, fn in ((pm.TITLE_CALL, pm.TITLE_SET), (pm.ICON_CALL, pm.ICON_SET)):
-        [cave] = setting_ids.bl_targets(struct.unpack_from('<2H', new, poff + site - base), site).values()
-        m.stub(fn)
-        a = callers[fn] = pm.Asm(base + slen + 0x100 + 0x20 * len(callers))
-        a.h(0xb540, 0x460e)                 # push {r6,lr}; mov r6,r1
-        a.bl(cave)
-        a.h(0xbd40)                         # pop {r6,pc}
-        m.load(a.base, a.bytes())
-
-    def shown(fn, section, page):
-        m.write(view + 0xa, bytes([section, page]))
-        m.log.clear()
-        m.call(callers[fn].base, stock_word, view, section)
-        [(r0, *_)] = m.calls(fn)
-        return r0 if r0 == stock_word or fn == pm.ICON_SET else m.read(r0, pm.TITLE_LEN).split(b'\0')[0]
-
-    assert [shown(pm.TITLE_SET, 6, page) for page in range(3)] == [b'BPM Display', b'Breathing Line', stock_word]
-    assert [shown(pm.ICON_SET, 6, page) for page in range(3)] == [pm.ICONS['Icon_Tempo'], pm.ICONS['Icon_DualIR'], stock_word]
-    for fn in (pm.TITLE_SET, pm.ICON_SET):
-        assert [shown(fn, section, 0) for section in range(6)] == [stock_word] * 6
+def test_each_feature_is_a_category_with_its_title_and_icon():
+    """BPM and breathing line are categories 6 and 7 (in ORDER), each with its TITLE, ICON, page count and own table; long press
+    stays in Footswitches; navigation now ends at 7."""
+    read, on = built({'HX_BPM': '1', 'HX_LONG_PRESS': '1', 'HX_BREATHING_LINE': '1'})
+    assert on[:3] == ['bpm', 'breathing_line', 'long_press']
+    arrays = {key: struct.unpack('<I', read(lits[0], 4))[0] for key, (_, lits) in pm.ARRAYS.items()}
+    names = [read(struct.unpack('<I', read(arrays['names'] + 4 * cat, 4))[0], pm.TITLE_LEN).split(b'\0')[0] for cat in range(8)]
+    assert names == [b'Ins/Outs', b'Preferences', b'Footswitches', b'EXP Pedals', b'MIDI/Tempo', b'Displays', b'BPM Display',
+                     b'Breathing Line']
+    assert struct.unpack('<8I', read(arrays['vals'], 32))[6:] == (pm.ICONS['Icon_Tempo'], pm.ICONS['Icon_DualIR'])
+    assert struct.unpack('<8I', read(arrays['pages'], 32)) == (3, 4, 3, 1, 4, 1, 1, 1)
+    assert read(pm.NAV_CMP, 2) == b'\x07\x2b' and read(pm.NAV_WRAP, 2) == b'\x07\x21'
+    ids = setting_ids.by_name()
+    for site in pm.SITES:
+        assert struct.unpack('<3H', read(page_table(read, 6, site), 6)) == tuple(ids[f'bpm.{k}'] for k in ('font', 'color', 'dot'))
+        assert struct.unpack('<3H', read(page_table(read, 7, site), 6)) == tuple(
+            ids[f'breathing_line.{k}'] for k in ('color', 'motion', 'speed'))
 
 
 def test_stock_uses_finds_reads_writes_and_loops():
@@ -298,9 +282,9 @@ def test_footswitches_gets_the_hold_pages_and_other_categories_stay_stock():
     read, stock = reader(pm.menu_entry0(e0, MODS, {'HX_LONG_PRESS': '1'})[0]), reader(e0)
     assert read(*STOCK_TABLES[:1], STOCK_TABLES[1] - STOCK_TABLES[0]) == stock(STOCK_TABLES[0], STOCK_TABLES[1] - STOCK_TABLES[0])
     assert struct.unpack('<6H', read(FS_TABLE, 12)) == FS_STOCK_IDS
-    pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
+    pages = struct.unpack('<I', read(pm.ARRAYS['pages'][1][0], 4))[0]
     assert struct.unpack('<6I', read(pages, 24)) == (3, 4, 3, 1, 4, 1)
-    assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK, 'no feature with an HXtra page: no HXtra section'
+    assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK, 'no feature with a category of its own: navigation stays stock'
     ids = setting_ids.by_name()
     hold = tuple(ids[f'long_press.fs{n}'] for n in range(1, 6))
     for site in pm.SITES:      # FS5 Function's page takes FS1 and FS2 Hold in its empty slots, then a page of FS3..FS5 Hold
@@ -308,9 +292,9 @@ def test_footswitches_gets_the_hold_pages_and_other_categories_stay_stock():
 
 
 @pytest.mark.firmware
-def test_hxtra_section_and_footswitches_pages_together():
+def test_a_feature_category_and_footswitches_pages_together():
     read, _ = built({'HX_LONG_PRESS': '1', 'HX_BPM': '1'})
-    pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
+    pages = struct.unpack('<I', read(pm.ARRAYS['pages'][1][0], 4))[0]
     assert struct.unpack('<7I', read(pages, 28)) == (3, 4, 3, 1, 4, 1, 1)
     ids = setting_ids.by_name()
     assert struct.unpack('<3H', read(page_table(read, 6), 6)) == tuple(ids[f'bpm.{k}'] for k in ('font', 'color', 'dot'))
