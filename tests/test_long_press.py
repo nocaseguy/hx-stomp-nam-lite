@@ -124,7 +124,7 @@ def h(m4emu):
 def test_hold_settings():
     assert len(long_press.SETTINGS) == 5
     for n, s in zip((1, 2, 3, 4, 5), long_press.SETTINGS):
-        assert (s.key, s.label, s.default) == (f'fs{n}', f'FS{n}\nHold'.encode(), n + 3), 'FS1..FS5 Hold default to FS6..FS10'
+        assert (s.key, s.label, s.default) == (f'fs{n}', f'Function\nFS{n} Hold'.encode(), n + 3), 'FS1..FS5 Hold default to FS6..FS10'
         assert s.values == (b'Off', b'Tuner', b'FS4', b'FS5', b'FS6', b'FS7', b'FS8', b'FS9', b'FS10')
         assert all(len(v) <= 8 for v in s.values)
     assert HOLD_IDS == [0xd2, 0xd3, 0xd4, 0xd5, 0xd6], 'a unit keeps a setting\'s value by ID: never move it once a build has used it'
@@ -309,7 +309,7 @@ def test_other_ccs_keep_their_numbers(h, cc):
 @pytest.mark.firmware
 def test_build_owns_the_handler_and_hands_lp_event_the_stock_handler():
     read, on = built({'HX_LONG_PRESS': '1'})
-    assert on == ['long_press']
+    assert on == ['long_press', 'splash']
     veneer = branch_target(long_press.HANDLER, read(long_press.HANDLER, 4))
     hw = struct.unpack('<4H', read(veneer, 8))
     imm = lambda a, b: ((a & 0xf) << 12) | (((a >> 10) & 1) << 11) | (((b >> 12) & 7) << 8) | (b & 0xff)
@@ -346,4 +346,4 @@ def test_without_the_flag_the_handler_stays_stock():
 @pytest.mark.firmware
 def test_builds_alongside_the_tuner_bpm_and_dsp_meter():
     _, on = built({'HX_LONG_PRESS': '1', 'HX_BPM': '1', 'HX_DSP_METER': '1', 'HX_TUNER': '1'})
-    assert on == ['tuner', 'bpm', 'dsp_meter', 'long_press']
+    assert on == ['tuner', 'bpm', 'dsp_meter', 'long_press', 'splash']

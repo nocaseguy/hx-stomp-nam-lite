@@ -1,5 +1,5 @@
-"""tools/patch_menu.py's CustomOS engine, tools/features and tools/setting_ids.py: IDs claimed once, settings that fit the menu,
-writes that may not overlap, shared hooks, and the generated customos.inc."""
+"""tools/patch_menu.py's HXtra engine, tools/features and tools/setting_ids.py: IDs claimed once, settings that fit the menu,
+writes that may not overlap, shared hooks, and the generated hxtra.inc."""
 import os
 import struct
 import types
@@ -11,7 +11,7 @@ import m4asm
 import patch_menu as pm
 import setting_ids
 from features import Setting
-from firmware import reader, stock_e0
+from firmware import branch_target, built, reader, stock_e0
 
 MODS = features.load()
 SETTINGS = {f'{features.name(m)}.{s.key}': s for m in MODS for s in getattr(m, 'SETTINGS', ())}
@@ -80,7 +80,7 @@ def patch():
     p = pm.Patch.__new__(pm.Patch)
     p.e0, p.mods, p.ids = bytearray(0x10000), [], {}
     p.segs = [(0, 0, 0x8000, BASE, 0x8000)] * 7
-    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'CustomOS', [], {}
+    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'HXtra', [], {}
     return p
 
 
@@ -136,26 +136,26 @@ def test_entry_chain_moves_the_prologue():
     assert p.read(fn, 4) == pm.thumb_bw(fn, tramp + 8)
 
 
-def test_customos_inc_lists_every_setting():
-    inc = pm.customos_inc(MODS, setting_ids.by_name())
+def test_hxtra_inc_lists_every_setting():
+    inc = pm.hxtra_inc(MODS, setting_ids.by_name())
     for name, s in SETTINGS.items():
         sym = 'SETTING_' + name.replace('.', '_').upper()
         assert f'.equ {sym}, {setting_ids.by_name()[name]}\n' in inc
         assert f'.equ {sym}_MAX, {s.max}\n' in inc
         assert f'.equ {sym}_DEFAULT, {s.default}\n' in inc
-    assert '.macro CUSTOMOS_SETTING_GET' in inc
+    assert '.macro HXTRA_SETTING_GET' in inc
 
 
 @CLANG
-def test_module_assembles_with_customos_inc(tmp_path):
+def test_module_assembles_with_hxtra_inc(tmp_path):
     src = tmp_path / 'm.s'
-    src.write_text('.syntax unified\n.thumb\n.include "customos.inc"\nentry:\n    movs r0, #SETTING_TUNER_LOCK\n'
-                   '    movs r1, #SETTING_TUNER_LOCK_MAX\n    movs r2, #SETTING_TUNER_LOCK_DEFAULT\n    b customos_setting_get\n'
-                   'CUSTOMOS_SETTING_GET\n')
+    src.write_text('.syntax unified\n.thumb\n.include "hxtra.inc"\nentry:\n    movs r0, #SETTING_TUNER_LOCK\n'
+                   '    movs r1, #SETTING_TUNER_LOCK_MAX\n    movs r2, #SETTING_TUNER_LOCK_DEFAULT\n    b hxtra_setting_get\n'
+                   'HXTRA_SETTING_GET\n')
     p = patch()
     p.mods, p.ids = MODS, setting_ids.by_name()
     m = p.module(str(src))
-    assert m.va == BASE + 0x8000 and m['entry'] == m.va and m['customos_setting_get'] == m.va + 8
+    assert m.va == BASE + 0x8000 and m['entry'] == m.va and m['hxtra_setting_get'] == m.va + 8
     assert p.cave.buf[:2] == struct.pack('<H', 0x2000 | setting_ids.by_name()['tuner.lock'])
 
 
@@ -180,7 +180,7 @@ def test_a_feature_with_settings_and_a_shared_hook_builds():
                                   Setting('dir', b'Demo\nDirection', (b'Normal', b'Reverse'))), apply=apply)
     ids = dict(setting_ids.by_name(), **{'demo.pos': 102, 'demo.dir': 128})
     new, on = pm.menu_entry0(e0, MODS + [demo], {'HX_TUNER': '1'}, ids)
-    assert [features.name(m) for m in on] == ['tuner', 'demo']
+    assert [features.name(m) for m in on] == ['tuner', 'splash', 'demo']
     read = reader(new)
     assert read(pm.NAMES_LONG + pm.NAME_LEN * 102, 13) == b'Demo\nPosition'
     tab, entry = pm.limits_entry(102)
@@ -207,3 +207,50 @@ def test_stock_uses_finds_reads_writes_and_loops():
 def test_text_cave_takes_many_settings():
     tables = {pid: (BASE + 0x9000, 255, 0) for pid in pm.MAIN_STORE_IDS[:90]}
     assert len(pm.text_cave(BASE, tables)) > 90 * 20
+
+
+FS_TABLE, FS_STOCK_IDS = pm.STOCK_CATEGORIES['Footswitches'][1], (17, 97, 98, 99, pm.EMPTY_SLOT, pm.EMPTY_SLOT)
+STOCK_TABLES = (0x28e3b540, 0x28e3b5b8)     # every category's page table, from Ins/Outs' to the end of Preferences'
+
+
+def page_table(read, cat, site='lookup'):
+    """The table a built dispatch cave loads for cat: its movw/movt after the cmp/beq for cat."""
+    cave = branch_target(pm.SITES[site][0], read(pm.SITES[site][0], 4))
+    code = read(cave, 64)
+    at = next(i for i in range(0, 60, 2) if code[i:i + 2] == bytes([cat, 0x28 + pm.SITES[site][1]]))
+    target = at + 2 + 4 + 2 * code[at + 2] + 2   # the beq's target, past the ldrb page
+    lo, hi = struct.unpack_from('<2I', code, target)
+    imm = lambda w: ((w >> 16 & 0xff) | (w >> 28 & 7) << 8 | (w >> 10 & 1) << 11 | (w & 0xf) << 12)
+    return imm(lo) | imm(hi) << 16
+
+
+@pytest.mark.firmware
+def test_footswitches_gets_the_hold_pages_and_other_categories_stay_stock():
+    e0 = stock_e0()
+    read, stock = reader(pm.menu_entry0(e0, MODS, {'HX_LONG_PRESS': '1'})[0]), reader(e0)
+    assert read(*STOCK_TABLES[:1], STOCK_TABLES[1] - STOCK_TABLES[0]) == stock(STOCK_TABLES[0], STOCK_TABLES[1] - STOCK_TABLES[0])
+    assert struct.unpack('<6H', read(FS_TABLE, 12)) == FS_STOCK_IDS
+    pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
+    assert struct.unpack('<6I', read(pages, 24)) == (3, 4, 3, 1, 4, 1)
+    assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK, 'no feature with an HXtra page: no HXtra section'
+    ids = setting_ids.by_name()
+    hold = tuple(ids[f'long_press.fs{n}'] for n in range(1, 6))
+    for site in pm.SITES:      # FS5 Function's page takes FS1 and FS2 Hold in its empty slots, then a page of FS3..FS5 Hold
+        assert struct.unpack('<9H', read(page_table(read, 2, site), 18)) == FS_STOCK_IDS[:4] + hold, site
+
+
+@pytest.mark.firmware
+def test_hxtra_section_and_footswitches_pages_together():
+    read, _ = built({'HX_LONG_PRESS': '1', 'HX_BPM': '1'})
+    pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
+    assert struct.unpack('<7I', read(pages, 28)) == (3, 4, 3, 1, 4, 1, 1)
+    ids = setting_ids.by_name()
+    assert struct.unpack('<3H', read(page_table(read, 6), 6)) == tuple(ids[f'bpm.{k}'] for k in ('font', 'color', 'dot'))
+    assert struct.unpack('<5H', read(page_table(read, 2) + 8, 10)) == tuple(ids[f'long_press.fs{n}'] for n in range(1, 6))
+
+
+@pytest.mark.firmware
+def test_menu_must_name_a_stock_category():
+    demo = fake('demo', MENU='Tempo', SETTINGS=(Setting('a', b'A', (b'0', b'1')),))
+    with pytest.raises(SystemExit, match='MENU is True, False or one of Footswitches'):
+        pm.menu_entry0(stock_e0(), [demo], {}, dict(setting_ids.by_name(), **{'demo.a': 0xcc}))

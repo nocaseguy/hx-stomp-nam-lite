@@ -1,8 +1,8 @@
-@ virtual_settings.s - the Global Settings IDs CustomOS serves itself (tools/setting_ids.py VIRTUAL, 0xcc..0xf9): each value is a bit
+@ virtual_settings.s - the Global Settings IDs HXtra serves itself (tools/setting_ids.py VIRTUAL, 0xcc..0xf9): each value is a bit
 @ field of the main-store record of a dead float ID 105..116, which the stock Globals file saves with the other 136 records.
 @ tools/patch_menu.py owns GET_VALUE, the limits getter, the class function and the long-label function for virt_get, virt_limits,
-@ virt_class and virt_label, and its CustomOS turn and click caves enter virt_turn and virt_click. Features store through virt_set
-@ (customos.inc's customos_setting_set), as the stock setter refuses these IDs.
+@ virt_class and virt_label, and its HXtra turn and click caves enter virt_turn and virt_click. Features store through virt_set
+@ (hxtra.inc's hxtra_setting_set), as the stock setter refuses these IDs.
 .syntax unified
 .thumb
 .include "virtual.inc"
@@ -115,7 +115,7 @@ virt_label:                         @ (r0 ID, r1 dst, r2 length): the long label
     pop {r4, r5, r6, pc}
 
 .thumb_func
-virt_turn:                          @ the CustomOS turn, from its cave: r0 view, r1 slot, r2 table, r3 page; r5 the delta
+virt_turn:                          @ the HXtra turn, from its cave: r0 view, r1 slot, r2 table, r3 page; r5 the delta
     push {r0-r3}
     push {r4, r6, r7, lr}
     sub sp, #64                     @ limits record at sp, current value at sp+40, stepped value at sp+48
@@ -179,7 +179,7 @@ turn_stock:
     bx r12
 
 .thumb_func
-virt_click:                         @ the CustomOS click, from its cave: r0 view, r1 slot, r2 table, r3 page; r4 the view
+virt_click:                         @ the HXtra click, from its cave: r0 view, r1 slot, r2 table, r3 page; r4 the view
     push {r0-r3}
     push {r5, r6, r7, lr}
     add.w r5, r3, r3, lsl #1
@@ -199,7 +199,7 @@ virt_click:                         @ the CustomOS click, from its cave: r0 view
     bx r12
 
 .thumb_func
-virt_set:                           @ (r0 ID, r1 value) -> r0 0, or -3 for an ID that is not a virtual setting: customos_setting_set's store
+virt_set:                           @ (r0 ID, r1 value) -> r0 0, or -3 for an ID that is not a virtual setting: hxtra_setting_set's store
     push {r4, lr}
     mov r4, r1
     bl find

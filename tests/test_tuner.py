@@ -14,7 +14,7 @@ MODS = features.load()
 IDS = setting_ids.by_name()
 ACTIVATE, LOCK = IDS['tuner.activate'], IDS['tuner.lock']
 CODE, VIEW, EVENT, TRAMP = 0x28e60000, 0x28500000, 0x28510000, 0x28e70000
-VIRT_SET = 0x28e80000        # the virtual settings engine's store, as customos_setting_set calls it
+VIRT_SET = 0x28e80000        # the virtual settings engine's store, as hxtra_setting_set calls it
 COLOURS = [fn for fn, _ in tuner.KNOB_COLOURS]
 FLOAT_ONE = 0x3f800000
 
@@ -89,7 +89,7 @@ class Page:
         return [regs[:2] for regs in self.m.calls(fn)]
 
 
-def test_settings_stay_off_customos():
+def test_settings_stay_off_hxtra():
     assert tuner.MENU is False
     assert [s.label for s in tuner.SETTINGS] == [b'Activate', b'Lock']
     assert [(s.values, s.default) for s in tuner.SETTINGS] == [((b'Hold', b'Press'), 0), ((b'Off', b'On'), 0)]
@@ -256,10 +256,10 @@ def test_paint_switch_sends_page_4_to_its_paint(m4emu, page, to):
 
 
 @pytest.mark.firmware
-def test_firmware_has_five_tuner_pages_and_no_customos_section_of_its_own():
+def test_firmware_has_five_tuner_pages_and_no_hxtra_section_of_its_own():
     e0 = built_e0({'HX_TUNER': '1'})
     read = reader(e0)
-    assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK and read(pm.TEXT_FN, 4) == pm.TEXT_FN_STOCK, 'no CustomOS section'
+    assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK and read(pm.TEXT_FN, 4) == pm.TEXT_FN_STOCK, 'no HXtra section'
     for s in tuner.SETTINGS:
         assert_virtual(e0, tuner, s)
     for pid in (29, 104):
@@ -275,16 +275,16 @@ def test_firmware_has_five_tuner_pages_and_no_customos_section_of_its_own():
 @pytest.mark.firmware
 def test_without_its_flag_the_tuner_is_stock():
     read, on = built({})
-    assert on == []
-    assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK and read(pm.TEXT_FN, 4) == pm.TEXT_FN_STOCK, 'no CustomOS section'
+    assert on == ['splash']
+    assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK and read(pm.TEXT_FN, 4) == pm.TEXT_FN_STOCK, 'no HXtra section'
     assert read(tuner.NEXT_PAGE, 2) == tuner.NEXT_PAGE_STOCK and read(tuner.PAGE_DOTS, 2) == tuner.PAGE_DOTS_STOCK
     assert read(tuner.TAP_SITE, 4) == pm.thumb_bw(tuner.TAP_SITE, tuner.TAP_CORE) and read(tuner.TURN_FN, 4) == tuner.TURN_FN_STOCK
 
 
 @pytest.mark.firmware
-def test_customos_holds_only_the_other_features_settings():
+def test_hxtra_holds_only_the_other_features_settings():
     read, on = built({'HX_TUNER': '1', 'HX_BPM': '1'})
-    assert on == ['tuner', 'bpm']
+    assert on == ['tuner', 'bpm', 'splash']
     assert read(pm.NAV_CMP, 2) == b'\x06\x2b'
     pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
     assert struct.unpack('<I', read(pages + 4 * 6, 4))[0] == 1, "BPM's three settings: one page"
