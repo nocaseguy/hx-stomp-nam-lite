@@ -50,7 +50,6 @@ The other features' settings are in Global Settings, in a seventh section called
 | Breathing line | **Color** | White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, **Rainbow** (default) | The line's colours. The gradients flow along the line: Fire is red, orange and yellow; Ice blue, cyan and white; Sunset purple, pink and orange; Ocean deep blue, blue and aqua; Aurora green, sky blue and violet; Neon magenta, indigo and cyan; Rainbow every hue. Where the motion dims the line, the colours dim with it. |
 | Breathing line | **Type** | Off, Steady, Pulse, **Breathe** (default), Sine, Cylon, Comet, Heart, Sparkle | How it moves. Breathe slowly fades the whole line in and out. Pulse sends a ring from the middle out to both ends. Sine runs waves along the line. Cylon sweeps a light from end to end and back, slowing at the ends, with a trail behind it. Comet shoots a light across with a long tail. Heart beats lub-dub from the middle. Sparkle twinkles at random. Steady holds the full colour. Off gives back the stock line. |
 | Breathing line | **Speed** | 1 … 10 (default **4**) | One cycle takes 8 s at 1, 4 s at 4, 0.8 s at 10. |
-| DSP meter | **DSP Display** | **Used/All** (default, e.g. `47/75`), Free (`28`), Used% (`63%`) | What the top right corner shows. "All" is 75: the firmware's 90% preset limit less its fixed 15%. |
 
 Every feature's settings are virtual settings: HXtra serves their IDs itself and keeps their values in spare records of the Global Settings store, which the HX Stomp saves with the rest. `tools/setting_ids.py` assigns each its ID and place. A setting no build has stored yet, or whose stored value is out of range, shows its default. Builds before virtual settings kept these settings on real IDs, so the first virtual build starts them on their defaults.
 
@@ -75,11 +74,7 @@ The Home screen shows the tempo at its top left, and a beat dot beside the prese
 
 ### DSP meter
 
-In the Edit view, each block in the signal-flow row shows its share of the DSP in per cent, in black on the block. The top right corner shows the blocks' total, as **DSP Display** says (see [Custom settings](#custom-settings)):
-
-- **Used/All** (default), e.g. `47/75`: what the blocks use, out of 75.
-- **Free**, e.g. `28`: what's left.
-- **Used%**, e.g. `63%`: what the blocks use, as a share of the 75.
+In the Edit view, each block in the signal-flow row shows its share of the DSP in per cent, in black on the block. The top right corner shows the blocks' total out of 75, e.g. `47/75`.
 
 In the model browser, each model shows the share it would take, in white between its icon and its name.
 

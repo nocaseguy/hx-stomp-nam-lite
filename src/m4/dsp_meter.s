@@ -1,5 +1,5 @@
 @ dsp_meter.s - the per-block DSP usage meter: each block in the Edit view's signal-flow row shows its share of the DSP in per cent, in black,
-@ and the top right corner shows their sum against what blocks may use (90% less the firmware's fixed 15%), as Global Settings > HXtra > DSP Display asks,
+@ and the top right corner shows their sum against what blocks may use (90% less the firmware's fixed 15%), as used/75,
 @ in a text widget of our own on the block title's baseline.
 @ The Edit view's top half (0x281282f8) has eight block slots, image widgets at view+0x4a4+0x24k, hidden when empty.
 @ DSP costs are the firmware's own, in hundredths of a per cent (the preset total adds 1500 and must stay within 9000).
@@ -7,7 +7,6 @@
 @ tools/features/dsp_meter.py chains dsp_paint after the Edit view top half's stock paint and dsp_browser after the browser's; patch_menu.py assembles this at build time.
 .syntax unified
 .thumb
-.include "hxtra.inc"
 .equ BUDGET, 75                     @ per cent of the DSP blocks may use: the preset limit 9000 less its fixed 1500, in hundredths
 .equ TOTAL_RIGHT, 316
 .equ TOTAL_TOP, 228                 @ the title's baseline (its top 0xea less ink row 22) plus this font's ink row 16
@@ -15,7 +14,7 @@
 .thumb_func
 dsp_paint:                          @ r0 the framebuffer, r1 the Edit view's top half, after its stock paint
     push {r4-r7, lr}
-    sub sp, #44                     @ 0 the eight slots' DSP costs (-1 for none), 32 the blocks' sum in per cent (-1 for none), 36 DSP Display
+    sub sp, #44                     @ 0 the eight slots' DSP costs (-1 for none), 32 the blocks' sum in per cent (-1 for none)
     mov r4, r0
     mov r5, r1
     movs r6, #0
@@ -67,11 +66,6 @@ summed:
     ldr r3, =0x28e0785d
     blx r3
 costed:
-    movs r0, #SETTING_DSP_METER_DISP
-    movs r1, #SETTING_DSP_METER_DISP_MAX
-    movs r2, #SETTING_DSP_METER_DISP_DEFAULT
-    bl hxtra_setting_get
-    str r0, [sp, #36]
     ldr r3, =0x28e24971             @ the widget lock
     blx r3
     addw r5, r5, #0x4a4
@@ -96,7 +90,6 @@ next:
     cmp r6, #8
     bne slot
     ldr r0, [sp, #32]
-    ldr r1, [sp, #36]
     bl total
     ldr r3, =0x28e24ae9
     blx r3
@@ -270,10 +263,9 @@ label:                              @ r0 a browser row, r1 a number 0..999, r2 i
     add sp, #12
     pop {r5, r6, pc}
 
-total:                              @ r0 the blocks' sum in per cent (-1 for none), r1 DSP Display (Used/All, Free, Used%), r4 the framebuffer
+total:                              @ r0 the blocks' sum in per cent (-1 for none), r4 the framebuffer
     push {r3-r7, lr}                @ under the widget lock
     mov r6, r0
-    mov r5, r1
     adr.w r7, total_widget
     adr.w r0, total_made
     ldrb r1, [r0]
@@ -306,32 +298,13 @@ made:
     cmp r6, #0
     blt show                        @ no DSP model: hidden
     adr.w r1, total_text
-    cmp r5, #2
-    bhs percent
     mov r0, r6
-    cbz r5, show_used
-    rsbs r0, r6, #BUDGET            @ 1: Free
-    it lt
-    movlt r0, #0
-    bl digits
-    b shown
-show_used:                          @ 0: Used/All
     bl digits
     movs r2, #'/'
     strb r2, [r0], #1
     mov r1, r0
     movs r0, #BUDGET
     bl digits
-    b shown
-percent:                            @ 2: Used%, of the budget
-    movs r0, #200
-    mul r0, r6, r0
-    adds r0, #BUDGET
-    movs r2, #BUDGET * 2
-    udiv r0, r0, r2
-    bl digits
-    movs r2, #'%'
-    strb r2, [r0], #1
 shown:
     movs r2, #0
     strb r2, [r0]
@@ -521,7 +494,6 @@ put_out:
     add sp, #16
     pop {r5-r11, pc}
 
-HXTRA_SETTING_GET
 .ltorg
 .balign 4
 style:                              @ the scale and colour put draws with

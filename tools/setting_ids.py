@@ -53,7 +53,7 @@ VIRTUAL = (   # (virtual ID, container ID, first bit, bits, the '<feature>.<key>
     (0xce, 106, 0, 4, 'bpm.font', ''),
     (0xcf, 106, 4, 4, 'bpm.color', ''),
     (0xd0, 106, 8, 4, 'bpm.dot', ''),
-    (0xd1, 107, 0, 4, 'dsp_meter.disp', ''),
+    (0xd1, 107, 0, 4, None, 'dsp_meter.disp (Used/All, Free, Used%) until it was removed; units may hold a value here'),
     (0xd2, 108, 0, 4, 'long_press.fs1', ''),
     (0xd3, 108, 4, 4, 'long_press.fs2', ''),
     (0xd4, 108, 8, 4, 'long_press.fs3', ''),

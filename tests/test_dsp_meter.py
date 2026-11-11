@@ -1,5 +1,5 @@
-"""tools/features/dsp_meter.py and src/m4/dsp_meter.s: the DSP Display setting, the module run in unicorn against a fake DSP model and Edit
-view (each block's per cent, the total in each format and its text widget, rounding and the ends, placement, locks) and a fake model
+"""tools/features/dsp_meter.py and src/m4/dsp_meter.s: the module run in unicorn against a fake DSP model and Edit
+view (each block's per cent, the total as used/75 and its text widget, rounding and the ends, placement, locks) and a fake model
 browser (each listed model's per cent between its icon and name), and the firmware it builds."""
 import os
 import struct
@@ -11,11 +11,10 @@ import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import dsp_meter
-from firmware import assert_virtual, branch_target, built, built_e0, reader
+from firmware import branch_target, built, built_e0, reader
 
 MODS = features.load()
 IDS = setting_ids.by_name()
-DISP = IDS['dsp_meter.disp']
 
 # The fakes, at the addresses the module reads
 DSP_PTR, SLOT_MODEL = 0x28449e78, 0x2812c590
@@ -37,21 +36,19 @@ GLYPH = {tuple(rows): ch for ch, rows in FONT.items()}
 WHITE, BLACK = 0xffffff, 0
 
 
-def test_dsp_disp_setting():
-    s, = dsp_meter.SETTINGS
-    assert (s.key, s.label, s.values, s.default, s.max) == ('disp', b'Display\nDSP', (b'Used/All', b'Free', b'Used%'), 0, 2)
-    assert all(len(v) <= 8 and b'\n' not in v for v in s.values), 'a value shows 8 characters, on one line [verified on unit]'
-    assert DISP == 0xd1, 'a unit keeps a setting\'s value by ID: never move it once a build has used it'
-    assert dsp_meter.FLAG == 'HX_DSP_METER'
+def test_no_settings():
+    """The total is always used/75; the old setting's virtual field stays retired, as units may hold a value in it."""
+    assert not hasattr(dsp_meter, 'SETTINGS') and 'dsp_meter.disp' not in IDS
+    assert {v[0]: v[:5] for v in setting_ids.VIRTUAL}[0xd1] == (0xd1, 107, 0, 4, None)
 
 
 class Meter:
-    """The module in unicorn: blocks in slots, the DSP Display setting, and what paint draws."""
+    """The module in unicorn: blocks in slots, and what paint draws."""
 
     def __init__(self, m4emu):
         code, self.sym = m4emu.assemble('src/m4/dsp_meter.s', MODS, IDS)
         self.m = m4emu.M4(code, CODE)
-        self.fills, self.events, self.setting = [], [], None
+        self.fills, self.events = [], []
         self.widget, self.drawn = {}, []
         self.m.stub(FILL, self._fill)
         for fn, name in TEXT.items():
@@ -59,7 +56,7 @@ class Meter:
         for fn, name in ((WIDGET_LOCK, 'widget lock'), (WIDGET_UNLOCK, 'widget unlock'), (DSP_LOCK, 'dsp lock'),
                          (DSP_UNLOCK, 'dsp unlock')):
             self.m.stub(fn, lambda m, name=name: self.events.append(name))
-        self.m.stub(pm.GET_VALUE, self._get_value)
+        self.m.stub(pm.GET_VALUE, lambda m: self.events.append('get value'))
         self.m.u32(DSP_PTR, DSP)
         self.m.u32(DSP + 0x4400, NODES)
         self.m.u32(DSP + 0x43fc, 0)
@@ -95,14 +92,6 @@ class Meter:
             w['text'] = raw.split(b'\0')[0].decode()
         elif name == 'draw':
             self.drawn.append(w.get('text') if w['visible'] else None)
-
-    def _get_value(self, m):
-        pid, out = m.reg('r0'), m.reg('r1')
-        if pid == DISP and self.setting is not None:
-            m.u32(out + 4, self.setting)
-            m.reg('r0', 0)
-        else:
-            m.reg('r0', -1)
 
     def block(self, idx, cost, handle=None):
         """A block object with this cost behind DSP record idx (0..7 first row, 8..15 second)."""
@@ -234,22 +223,15 @@ def blocks(meter, *costs):
         meter.slot(k, 0x113)
 
 
-@pytest.mark.parametrize('setting, costs, total', [
-    (0, (2345, 1000, 1349), '46/75'), (1, (2345, 1000, 1349), '29'), (2, (2345, 1000, 1349), '61%'),
-    (0, (), '0/75'), (1, (), '75'), (2, (), '0%'),
-    (0, (4000, 4000), '80/75'), (1, (4000, 4000), '0'), (2, (4000, 4000), '107%'),
-    (2, (3700, 3800), '100%'), (1, (3700, 3800), '0'), (2, (3750, 3750), '101%'),
-])
-def test_total_formats(meter, setting, costs, total):
-    """Used/All, Free and Used%, of the 75 per cent blocks may use (9000 less the fixed 1500)."""
+@pytest.mark.parametrize('costs, total', [((2345, 1000, 1349), '46/75'), ((), '0/75'), ((4000, 4000), '80/75')])
+def test_total_is_used_of_75(meter, costs, total):
+    """Of the 75 per cent blocks may use (9000 less the fixed 1500), with no setting read."""
     blocks(meter, *costs)
-    meter.setting = setting
-    assert meter.paint().total() == total
+    assert meter.paint().total() == total and 'get value' not in meter.events
 
 
 def test_total_is_the_sum_of_the_shown_numbers(meter):
     blocks(meter, 149, 149, 149, 2349)       # 1 + 1 + 1 + 23, though the raw sum rounds to 28
-    meter.setting = 0
     m = meter.paint()
     assert m.numbers() == ['1', '1', '1', '23'] and m.total() == '26/75'
 
@@ -257,21 +239,12 @@ def test_total_is_the_sum_of_the_shown_numbers(meter):
 def test_total_counts_a_block_no_slot_shows(meter):
     blocks(meter, 2000)
     meter.block(9, 1000)                     # a second-row block behind slot 1, which shows nothing
-    meter.setting = 0
     assert meter.paint().total() == '30/75'
-
-
-@pytest.mark.parametrize('stored', [None, 3, 200])
-def test_unset_or_out_of_range_setting_shows_the_default(meter, stored):
-    blocks(meter, 2345)
-    meter.setting = stored
-    assert meter.paint().total() == '23/75'
 
 
 def test_total_is_a_text_widget_on_the_title_line(meter):
     """Right-aligned at the corner, in hx21_regularFont and white as the title, on the title's baseline (0xea - 22 = 228 - 16)."""
     blocks(meter, 2345)
-    meter.setting = 0
     w = meter.paint().widget
     assert (w['pos'], w['anchor'], w['font'], w['colour'], w['visible']) == ((316, 228), 8, 1, WHITE, 1)
     assert w['at'] + 0x30 <= w['node'], 'the widget and its node do not overlap'
@@ -290,7 +263,6 @@ def test_widget_is_made_once_and_placed_before_its_first_text(meter):
 def test_every_paint_shows_the_total_then_erases_and_draws_it(meter):
     """setVisible(1) marks it dirty every paint; the erase follows the new text, so it covers the old text and the new."""
     blocks(meter, 2345)
-    meter.setting = 0
     for total in ('23/75', '0/75'):
         if total == '0/75':
             meter.block(0, 0)
@@ -562,10 +534,11 @@ def test_browser_items_are_priced_as_the_model_table_says():
 
 
 @pytest.mark.firmware
-def test_build_serves_dsp_disp_as_a_virtual_setting():
+def test_build_has_no_dsp_setting():
     e0 = built_e0({'HX_DSP_METER': '1'})
-    assert_virtual(e0, dsp_meter, dsp_meter.SETTINGS[0])
-    assert not any(reader(e0)(pm.NAMES_LONG + pm.NAME_LEN * 101, pm.NAME_LEN)), 'its old real ID is left alone'
+    fn, stock = pm.VIRTUAL_HOOKS['get']
+    assert reader(e0)(fn, len(stock)) == stock, 'no virtual setting: GET_VALUE stays stock'
+    assert b'Display\nDSP' not in e0 and not any(reader(e0)(pm.NAMES_LONG + pm.NAME_LEN * 101, pm.NAME_LEN))
 
 
 @pytest.mark.firmware
