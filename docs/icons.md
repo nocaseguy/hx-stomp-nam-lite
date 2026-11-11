@@ -1,6 +1,6 @@
 # Icons: the icon library and a feature section's icon
 
-Each feature with settings is a section of its own in Global Settings, after Displays, with a title and an icon next to it, both from the feature; the strip of section icons across the top shows that icon too. The icon is one of the stock firmware's images, picked by name. This page says how to pick one, which images Global Settings itself uses, and how to see all of them. Status tags are as in [FIRMWARE_NOTES.md](../FIRMWARE_NOTES.md).
+Each feature with settings is a section of its own in Global Settings, after Displays, with a title and an icon next to it, both from the feature; the strip of section icons across the top shows that icon too. The icon is one of the stock firmware's images, picked by name. This page says how to pick one, which images Global Settings itself uses, and how to see all of them. Status tags are as in [research/conventions.md](research/conventions.md).
 
 ## See every icon: the icon library
 

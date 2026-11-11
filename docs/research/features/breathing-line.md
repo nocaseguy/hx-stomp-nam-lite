@@ -1,0 +1,7 @@
+# Breathing line (`HX_BREATHING_LINE`, `tools/features/breathing_line.py`, `src/m4/breathing_line.s`)
+
+An animated Home divider. Status tags as in [conventions.md](../conventions.md).
+
+- **Breathing line** (`HX_BREATHING_LINE`, `tools/features/breathing_line.py`, `src/m4/breathing_line.s`) [verified on unit, from RAM on 2026-11-08: the motions, colour schemes and all three knobs, then on stock IDs 23, 24 and 121, and on 2026-11-09 on its virtual IDs 0xd7..0xd9 (see Virtual settings in [m4/settings.md](../m4/settings.md)); values across a power-cycle not yet tested]: after the Home paint, 80 strips of 4 px are filled straight into the framebuffer with the ROM fill over the divider, each at its stock segment's y and h (anchor 6) and skipped where that segment is hidden, so the selected segment stays 2 px. The LED task's 1 ms tick asks for a repaint (`0x28db8508(0, 1)`) every 25 ms while it runs, and stops 1 s after the last Home paint (another view is up). It holds still, as at Off, until 2 s after the first Home paint, then asks for the paint that starts it (see Boot in [bpm.md](bpm.md)). The phase advances by µs since the last paint times 2^32 / the cycle, so it wraps per cycle and the clock's wrap does not jump. Off marks the four stock nodes dirty (`[node+0x24] = 1`) and keeps asking for one more paint, which redraws the stock line.
+
+The divider and painting: [m4/home-screen.md](../m4/home-screen.md).
