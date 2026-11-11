@@ -137,7 +137,7 @@ What is here is our own work: the patchers and the offsets they patch, the M4 an
 
 ## Requirements
 
-- An **HX Stomp**. The **HX Stomp XL** and the **HX Effects** build too, with NAM A2 Lite only (see [HX Stomp XL](#hx-stomp-xl); on the HX Effects it is in Distortion > Mono). Not the Helix Floor, LT or Rack: their firmware is a different design.
+- An **HX Stomp**. The **HX Stomp XL** and the **HX Effects** build too, with NAM A2 Lite only, but are **UNTESTED** (see [HX Stomp XL and HX Effects](#hx-stomp-xl-and-hx-effects); on the HX Effects NAM is in Distortion > Mono). Not the Helix Floor, LT or Rack: their firmware is a different design.
 - Line 6's firmware 3.80.0 for your unit. The build checks the MD5 and refuses any other file:
   - HX Stomp: `HX_Stomp_v3.80.0_0x103966115.hxf`, MD5 `a2cd8f4ae56f49415380270ebc484bf1`. Download it from [line6.com](https://line6.com/software/readeula.html?rid=12906); you need to sign in with a free Line 6 (Helix) account to get the download.
   - HX Stomp XL: `HX_Stomp_XL_v3.80.0_0x103966115.hxf`, MD5 `329e3a26d60d3de1988b6785fa833ee1`
@@ -193,9 +193,11 @@ If the HX Stomp stops at the splash screen after an install:
 
 This has been done on a real unit after a modified firmware hung at the splash, and it restored stock 3.80.0. It works because the bootloader is left untouched.
 
-## ~HX Stomp XL~
+## ~HX Stomp XL and HX Effects~
 
-⛔️⛔️ Untested ⛔️⛔️ 
+⛔️⛔️ UNTESTED ⛔️⛔️
+
+HXtra has only ever run on an HX Stomp. The XL and HX Effects builds pass the build checks and their pinned MD5s, but no HXtra build has run on either unit, so install one at your own risk and keep the stock file ready for [Recovery](#recovery). Upstream ran earlier NAM A2 Lite builds on both; its notes are in [CHANGELOG.md](CHANGELOG.md). These builds have NAM A2 Lite only, none of the other features, and the HX Effects can't run a build from RAM first: the RAM loader is the HX Stomp's.
 
 ## How it works
 
