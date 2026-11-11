@@ -26,7 +26,7 @@ Keep the Mac's screen unlocked during a run. macOS delivers no audio frames whil
 
 ```sh
 python3 build.py HX_Stomp_v3.80.0_0x103966115.hxf
-python3 tools/hx_smoke.py build/HX_Stomp_v3.80.0_CustomOS.hxf --json smoke.json
+python3 tools/hx_smoke.py build/HX_Stomp_v3.80.0_HXtra.hxf --json smoke.json
 ```
 
 `tools/hx_smoke.py` runs the image from RAM (`tools/hx_ramrun.sh`: it asks the running Stomp to restart in update mode, sends the loader, then the image) and runs these cases. `--list` prints them, and `--only` and `--skip` take names or tags.
@@ -43,7 +43,7 @@ The budget cases read each block's DSP cost from the image itself, so they still
 For a fixed signal instead, `tools/hx_reamp.py` sets the input block to USB 5/6, plays a pluck there with `build/play_mac` and measures the output:
 
 ```sh
-python3 tools/hx_reamp.py build/HX_Stomp_v3.80.0_CustomOS.hxf dry 555:4 555:4,555:5
+python3 tools/hx_reamp.py build/HX_Stomp_v3.80.0_HXtra.hxf dry 555:4 555:4,555:5
 ```
 
 Each case is a list of `preset_id:model` blocks on path A, or `dry` for a volume block alone. In this build, NAM is preset ID 555.
@@ -53,10 +53,10 @@ Each case is a list of `preset_id:model` blocks on path A, or `dry` for a volume
 Does any stock preset leave something running that writes into NAM's memory? `tools/qa/preset_sweep.py` selects each of the unit's 126 presets in turn, then loads NAM alone with the input on USB 5/6 and nothing playing. With no input, NAM outputs a constant (its bias), and any corruption would move or disturb it. `preset_sweep2.py` does the same with three NAMs and a stock EQ, at default knobs and with the tone knobs moved.
 
 ```sh
-python3 tools/qa/preset_sweep.py  build/HX_Stomp_v3.80.0_CustomOS.hxf fwd.jsonl fwd
-python3 tools/qa/preset_sweep.py  build/HX_Stomp_v3.80.0_CustomOS.hxf rev.jsonl rev
+python3 tools/qa/preset_sweep.py  build/HX_Stomp_v3.80.0_HXtra.hxf fwd.jsonl fwd
+python3 tools/qa/preset_sweep.py  build/HX_Stomp_v3.80.0_HXtra.hxf rev.jsonl rev
 python3 tools/qa/sweep_analyze.py fwd.jsonl rev.jsonl
-python3 tools/qa/preset_sweep2.py build/HX_Stomp_v3.80.0_CustomOS.hxf p2_fwd.jsonl fwd
+python3 tools/qa/preset_sweep2.py build/HX_Stomp_v3.80.0_HXtra.hxf p2_fwd.jsonl fwd
 python3 tools/qa/sweep_analyze2.py p2_fwd.jsonl
 ```
 

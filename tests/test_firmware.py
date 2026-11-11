@@ -14,10 +14,10 @@ ROOT = Path(__file__).resolve().parent.parent
 pytestmark = pytest.mark.firmware
 
 # The ten-knob NAM A2 Lite with its tone stack in Amp > NAM on Xenomorph Fuzz Mono's ID 555 (build.py's STEPS),
-# the kernel's --mid-sweep, DSP cost 2275; the HX Stomp's adds tools/patch_menu.py's CustomOS features (the XL's
+# the kernel's --mid-sweep, DSP cost 2275; the HX Stomp's adds tools/patch_menu.py's HXtra entry and boot screen (the XL's
 # and the HX Effects' have none). The XL's has not run on an XL.
 BUILT_MD5 = {
-    "HX_STOMP_HXF": "a37659d04cf97218bd1c470c6519cdad",
+    "HX_STOMP_HXF": "c51c624c93d91f5e510d8f44268e64b4",
     "HX_STOMP_XL_HXF": "8918ab60ebff62ebfccd4fccb2bed85a",     # not run on an XL
     "HX_EFFECTS_HXF": "2efb98791581b67116ba82c5ecd30ea2",      # Distortion > Mono (tools/effects.py); 4d2a4a8a ran on an HX Effects, this not yet
 }

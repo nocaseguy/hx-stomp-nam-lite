@@ -1,6 +1,6 @@
 """The M4 code tools/patch_menu.py generates, run in unicorn (tests/m4emu.py): the shared-hook stub and each kind of chain
-(function pointer, bl call, function entry) with two features on one site, customos_setting_get, and the value text of CustomOS
-settings, including values above a setting's max."""
+(function pointer, bl call, function entry) with two features on one site, hxtra_setting_get, the value text of HXtra
+settings, including values above a setting's max, and the HXtra page titles and icons."""
 import struct
 
 import pytest
@@ -79,11 +79,11 @@ IN_ORDER = [HANDLERS['a', 'before'], HANDLERS['b', 'before'], FN, HANDLERS['a', 
 
 
 def patch():
-    """A Patch over 32 KB of zeros mapped at BASE, without firmware (as in test_customos.py)."""
+    """A Patch over 32 KB of zeros mapped at BASE, without firmware (as in test_hxtra.py)."""
     p = pm.Patch.__new__(pm.Patch)
     p.e0, p.mods, p.ids = bytearray(0x10000), [], {}
     p.segs = [(0, 0, 0x8000, BASE, 0x8000)] * 7
-    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'CustomOS', [], {}
+    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'HXtra', [], {}
     return p
 
 
@@ -168,11 +168,11 @@ def setting_get(stored):
 @pytest.mark.parametrize('stored, value', [(UNSET, 2), (0, 0), (3, 3), (4, 4), (5, 2), (255, 2), (0xffffffff, 2)])
 def test_setting_get_returns_the_default_when_unset_or_above_max(m4emu, tmp_path, stored, value):
     src = tmp_path / 'get.s'
-    src.write_text('.syntax unified\n.thumb\n.include "customos.inc"\nCUSTOMOS_SETTING_GET\n')
+    src.write_text('.syntax unified\n.thumb\n.include "hxtra.inc"\nHXTRA_SETTING_GET\n')
     code, sym = m4emu.assemble(str(src), [], {})
     m = m4emu.M4(code, CAVE)
     m.stub(pm.GET_VALUE, setting_get(stored))
-    assert m.call(CAVE + sym['customos_setting_get'], 104, 4, 2) == value
+    assert m.call(CAVE + sym['hxtra_setting_get'], 104, 4, 2) == value
     assert [args[0] for args in m.calls(pm.GET_VALUE)] == [104]
 
 
@@ -242,3 +242,74 @@ def test_value_text_leaves_other_ids_to_the_stock_function(m4emu):
     assert m.call(CAVE, other, VALUE, DST, pm.VALUE_LEN) == 0x77
     assert seen == [((other, VALUE, DST, pm.VALUE_LEN), m4emu.STACK_TOP - 0x20, [0x1004, 0x1005, m4emu.RETURN | 1])]
     assert m.calls(pm.STRCPY) == []
+
+
+TITLES, VIEW, STOCK_NAME = 0x28e90000, 0x28e91000, 0x28e92000
+PAGE_TITLES = (b'BPM Display', b'Two Pages', b'Two Pages')
+
+
+def title_fn(m4emu):
+    """The title page_cave behind a caller that, as the section paint, holds the view in r6: (stock name, view, section) -> TITLE_SET's
+    r0."""
+    names = {t: TITLES + 0x40 * i for i, t in enumerate(dict.fromkeys(PAGE_TITLES))}
+    table = TITLES + 0x400
+    caller = pm.Asm(CAVE + 0x100)
+    caller.h(0xb540, 0x460e)                # push {r6,lr}; mov r6,r1
+    caller.bl(CAVE)
+    caller.h(0xbd40)                        # pop {r6,pc}
+    m = m4emu.M4(pm.page_cave(CAVE, table, len(PAGE_TITLES), pm.TITLE_SET), CAVE)
+    m.load(caller.base, caller.bytes())
+    for t, va in names.items():
+        m.write(va, t + b'\0')
+    m.write(table, b''.join(struct.pack('<I', names[t]) for t in PAGE_TITLES))
+    m.stub(pm.TITLE_SET)
+    return m, caller.base
+
+
+def title(m, caller, section, page):
+    m.u8(VIEW + 0xa, section)
+    m.u8(VIEW + 0xb, page)
+    m.log.clear()
+    m.call(caller, STOCK_NAME, VIEW, section)
+    [(r0, *_)] = m.calls(pm.TITLE_SET)
+    return r0
+
+
+def test_title_is_the_page_s_in_hxtra(m4emu):
+    m, caller = title_fn(m4emu)
+    for page, want in enumerate(PAGE_TITLES):
+        assert m.read(title(m, caller, 6, page), len(want) + 1) == want + b'\0'
+
+
+@pytest.mark.parametrize('section', range(6))
+def test_title_is_the_stock_name_in_other_sections(m4emu, section):
+    m, caller = title_fn(m4emu)
+    assert title(m, caller, section, 0) == STOCK_NAME
+
+
+@pytest.mark.parametrize('page', [len(PAGE_TITLES), 255])
+def test_title_past_the_last_page_is_the_stock_name(m4emu, page):
+    m, caller = title_fn(m4emu)
+    assert title(m, caller, 6, page) == STOCK_NAME
+
+
+PAGE_ICONS = (0x181, 0x100, 0x48)
+
+
+def test_icon_is_the_page_s_in_hxtra_and_stock_elsewhere(m4emu):
+    m = m4emu.M4(pm.page_cave(CAVE, TITLES, len(PAGE_ICONS), pm.ICON_SET), CAVE)
+    caller = pm.Asm(CAVE + 0x100)
+    caller.h(0xb540, 0x460e)                # push {r6,lr}; mov r6,r1
+    caller.bl(CAVE)
+    caller.h(0xbd40)                        # pop {r6,pc}
+    m.load(caller.base, caller.bytes())
+    m.write(TITLES, b''.join(struct.pack('<I', i) for i in PAGE_ICONS))
+    m.stub(pm.ICON_SET)
+    stock_icon = 0x1f8
+    seen = []
+    for section, page in [(6, 0), (6, 1), (6, 2), (6, 3), (0, 1), (5, 0)]:
+        m.write(VIEW + 0xa, bytes([section, page]))
+        m.log.clear()
+        m.call(caller.base, stock_icon, VIEW, section)
+        seen += [r0 for r0, *_ in m.calls(pm.ICON_SET)]
+    assert seen == [*PAGE_ICONS, stock_icon, stock_icon, stock_icon]

@@ -1,15 +1,21 @@
-"""features - the CustomOS features tools/patch_menu.py builds in: one module a feature, named by its file.
+"""features - the HXtra features tools/patch_menu.py builds in: one module a feature, named by its file.
 
 A feature module may have:
   FLAG       the environment variable that turns it on (HX_BPM=1 python3 build.py ...), a tuple of them (on when any is set), or
              None (the default) for always on; any non-empty value turns it on, and apply(p) reads the value with p.input(FLAG)
   INPUTS     Input()s: the environment variables it reads besides FLAG, or FLAG itself to give its value a kind
-  ORDER      its turn among the features (default 100): the order of their CustomOS pages and of their handlers on a shared hook
+  ORDER      its turn among the features (default 100): the order of their HXtra pages and of their handlers on a shared hook
   CONFLICTS  names of features it cannot be built with
-  SETTINGS   Setting()s on its own CustomOS pages, three to a page; each takes the ID tools/setting_ids.py gives '<feature>.<key>'
+  SETTINGS   Setting()s on its own HXtra pages, three to a page; each takes the ID tools/setting_ids.py gives '<feature>.<key>'
              (a virtual ID, which the engine serves from a bit field: see tools/setting_ids.py VIRTUAL)
-  MENU       False when it shows its SETTINGS itself: they keep their IDs, limits and customos.inc lines but get no CustomOS page,
-             and Global Settings has no CustomOS section when no feature built in has a page there (default True)
+  TITLE      the title of its HXtra pages in Global Settings, on each of them (default: its name in words, breathing_line ->
+             Breathing Line); 1..63 printable ASCII characters
+  ICON       the stock image shown by that title, by name, e.g. 'Icon_Tempo' (default Icon_Displays); a name in
+             tools/patch_menu.py ICONS
+  MENU       False when it shows its SETTINGS itself: they keep their IDs, limits and hxtra.inc lines but get no HXtra page,
+             and Global Settings has no HXtra section when no feature built in has a page there (default True); or a stock
+             category's name (patch_menu.STOCK_CATEGORIES, e.g. 'Footswitches'): its settings fill that category's trailing empty
+             slots, then pages after its own
   apply(p)   its code and hooks, through tools/patch_menu.py's Patch: p.put() (a write no other feature may overlap), p.expect(),
              p.add() (bytes into the code cave), p.module() (an M4 .s assembled at build time), p.chain_ptr(), p.chain_bl() and
              p.chain_entry() (handlers on a hook other features may share), p.own_entry() and p.own_call() (a function start or
@@ -21,10 +27,10 @@ A feature module may have:
              The web build imports every feature file, so a module imports only what Pyodide has at its top, and runs a
              tool such as sips only inside apply(p).
 
-An M4 .s file gets `.include "customos.inc"`, generated at build time: SETTING_<FEATURE>_<KEY> (the ID), ..._MAX and ..._DEFAULT for
-every setting, the macro CUSTOMOS_SETTING_GET, a function customos_setting_get (r0 ID, r1 max, r2 default -> r0 the value, the
-default when it is unset or above max: a unit may hold a value stored by another build), and the macro CUSTOMOS_SETTING_SET, a function
-customos_setting_set (r0 ID, r1 value) for a feature that stores a setting itself: the stock setter refuses virtual IDs.
+An M4 .s file gets `.include "hxtra.inc"`, generated at build time: SETTING_<FEATURE>_<KEY> (the ID), ..._MAX and ..._DEFAULT for
+every setting, the macro HXTRA_SETTING_GET, a function hxtra_setting_get (r0 ID, r1 max, r2 default -> r0 the value, the
+default when it is unset or above max: a unit may hold a value stored by another build), and the macro HXTRA_SETTING_SET, a function
+hxtra_setting_set (r0 ID, r1 value) for a feature that stores a setting itself: the stock setter refuses virtual IDs.
 """
 import importlib
 import os

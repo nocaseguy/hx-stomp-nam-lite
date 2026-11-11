@@ -1,5 +1,5 @@
 """tools/features/breathing_line.py and src/m4/breathing_line.s: the settings and their IDs, the hooks on the firmware, and the
-handlers run in tests/m4emu.py against a model of each Line Motion and Line Color."""
+handlers run in tests/m4emu.py against a model of each Type and Color."""
 import math
 import struct
 
@@ -21,10 +21,11 @@ SINE = [round(127.5 + 127.5 * math.sin(2 * math.pi * a / 256)) for a in range(25
 
 def test_settings_values_defaults_and_ids():
     s = {x.key: x for x in bl.SETTINGS}
+    assert [x.label for x in bl.SETTINGS] == [b'Color', b'Type', b'Speed'], 'one line: a 2-line label shows its name above its page'
     assert s['color'].values == (b'White', b'Red', b'Green', b'Blue', b'Fire', b'Ice', b'Sunset', b'Ocean', b'Aurora', b'Neon',
                                  b'Rainbow')
     assert s['color'].values[s['color'].default] == b'Rainbow' and len(s['color'].values) == len(SCHEMES) + 1
-    assert s['motion'].values == (b'Off', b'Steady', b'Pulse', b'Breathe', b'Sine', b'Cylon', b'Comet', b'Heart', b'Sparkle')
+    assert s['motion'].values == (b'Off', b'Steady', b'Breathe', b'Cylon', b'Comet', b'Heart', b'Sparkle')
     assert s['motion'].values[s['motion'].default] == b'Breathe'
     assert s['speed'].values == tuple(str(n).encode() for n in range(1, 11)) and s['speed'].values[s['speed'].default] == b'4'
     ids = setting_ids.by_name()
@@ -69,6 +70,7 @@ def test_a_build_with_the_gr_meter_hands_the_line_its_shown_word(monkeypatch):
 
 M32 = 0xffffffff
 CENTRE = 632                        # the line's middle in 1/16 strips
+EYE_CORE = 64                       # Cylon's eye: full on 4 strips either side of its centre
 
 
 def fall(d, width):
@@ -103,20 +105,15 @@ def level(motion, strip, t16, cycles=0):
     if motion in (0, 1):
         return 255
     if motion == 2:
-        radius = t16 * (CENTRE + 96) >> 16
-        return fall(abs(abs(at - CENTRE) - radius), 96) * (256 - t) >> 8
-    if motion == 3:
         return (SINE[(t + 192) & 255] ** 2 + 255) >> 8
-    if motion == 4:
-        return (SINE[(strip * 8 - t) & 255] ** 2 + 255) >> 8
-    if motion == 5:
+    if motion == 3:
         eye, trail = SINE[(t + 192) & 255] * 79 * 16 // 255, 2 * abs(SINE[t] - 128) + 32
         behind = eye - at if t < 128 else at - eye
-        return fall2(behind, trail) if behind >= 0 else fall(-behind, 24)
-    if motion == 6:
+        return fall2(max(behind - EYE_CORE, 0), trail) if behind >= 0 else fall(max(-behind - EYE_CORE, 0), 24)
+    if motion == 4:
         behind = (t16 * (80 * 16 + 320) >> 16) - at
         return fall2(behind, 320) if behind >= 0 else fall(-behind, 16)
-    if motion == 7:
+    if motion == 5:
         return max(beat(t), beat(t - 48) * 3 // 4) * (255 - abs(at - CENTRE) * 150 // CENTRE) >> 8
     return sparkle(strip, t, cycles)
 
@@ -132,8 +129,13 @@ def rgb(r, g, b):
 
 
 def dim(c):
-    """3/16 of each channel: a colour at level 0."""
-    return sum(((c >> s & 255) // 8 + (c >> s & 255) // 16) << s for s in (0, 8, 16))
+    """A quarter of each channel: a colour at level 0."""
+    return sum(((c >> s & 255) // 4) << s for s in (0, 8, 16))
+
+
+def lift(lvl):
+    """The level eased out, so the line spends less time near its dimmest."""
+    return 255 - (((255 - lvl) ** 2 + 255) >> 8)
 
 
 def mix(a, b, k):
@@ -148,7 +150,7 @@ def colour(scheme, strip, t16, lvl):
     else:
         stops, seg = SCHEMES[scheme], h * 3 >> 8
         c = mix(stops[seg], stops[(seg + 1) % 3], h * 3 & 255)
-    return mix(dim(c), c, lvl)
+    return mix(dim(c), c, lift(lvl))
 
 
 MOD = 0x28e60000
@@ -223,7 +225,7 @@ def line_gr(m4emu):
 PHASES = (0, 1, 0x1234, 0x3fff, 0x4000, 0x7fff, 0x8000, 0x8001, 0xa000, 0xbfff, 0xc000, 0xfeff, 0xffff)
 
 
-@pytest.mark.parametrize('motion', range(9))
+@pytest.mark.parametrize('motion', range(7))
 def test_level_matches_the_model(line, motion):
     for strip in range(80):
         for t16 in PHASES + tuple(range(0, 0x10000, 0x0f1)):
@@ -236,22 +238,23 @@ def test_level_matches_the_model(line, motion):
 
 
 def test_levels_have_their_shape():
-    pulse = [[level(2, s, t << 8) for s in range(80)] for t in (0, 128, 250)]
-    assert pulse[0][39] > 220 and pulse[0][0] == 0, 'Pulse starts in the middle'
-    assert pulse[1][39] == 0 and max(pulse[1][15:25]) > 100, 'and rings outward, fading'
-    assert max(pulse[2]) < 10
-    assert level(3, 0, 0) == 0 and level(3, 0, 128 << 8) == 255
-    crests = [level(4, s, 0) for s in range(80)]
-    assert sum(1 for s in range(1, 79) if crests[s] >= max(crests[s - 1], crests[s + 1]) and crests[s] > 200) in (2, 3)
-    assert level(5, 0, 0) == 255 and level(5, 79, 0x8000) == 255 and level(5, 40, 0) == 0
-    fast = [level(5, s, 64 << 8) for s in range(80)]
-    assert sum(v > 0 for v in fast[:39]) > 12 and sum(v > 0 for v in fast[41:]) < 3, 'mid-sweep, a long trail behind and none ahead'
-    assert level(6, 10, 0) == 0 and max(level(6, 10, t << 8) for t in range(256)) > 240
-    assert level(7, 39, 6 << 8) > 250 and level(7, 0, 6 << 8) < 110 and level(7, 39, 54 << 8) > 180 and level(7, 39, 200 << 8) == 0
+    assert level(2, 0, 0) == 0 and level(2, 0, 128 << 8) == 255
+    assert level(3, 0, 0) == 255 and level(3, 79, 0x8000) == 255 and level(3, 40, 0) == 0
+    fast = [level(3, s, 64 << 8) for s in range(80)]
+    full = [s for s, v in enumerate(fast) if v == 255]
+    assert len(full) >= 8 and full == list(range(full[0], full[-1] + 1)), 'a wide eye, full on across its middle'
+    assert sum(v > 0 for v in fast[:full[0]]) > 12 and sum(v > 0 for v in fast[full[-1] + 1:]) < 3, 'a long trail behind, a short fade ahead'
+    assert level(4, 10, 0) == 0 and max(level(4, 10, t << 8) for t in range(256)) > 240
+    assert level(5, 39, 6 << 8) > 250 and level(5, 0, 6 << 8) < 110 and level(5, 39, 54 << 8) > 180 and level(5, 39, 200 << 8) == 0
     for cycles in (0, 1, 2):
-        lit = [sum(level(8, s, t << 8, cycles) > 0 for s in range(80)) for t in range(0, 256, 8)]
+        lit = [sum(level(6, s, t << 8, cycles) > 0 for s in range(80)) for t in range(0, 256, 8)]
         assert 0 < min(lit) and max(lit) < 24, 'never dark, and a few strips lit at a time'
-    assert [level(8, s, 0x2000, 0) for s in range(80)] != [level(8, s, 0x2000, 1) for s in range(80)], 'new strips each cycle'
+    assert [level(6, s, 0x2000, 0) for s in range(80)] != [level(6, s, 0x2000, 1) for s in range(80)], 'new strips each cycle'
+
+
+def test_shade_is_brighter_than_the_level():
+    assert dim(0xffffff) == 0x3f3f3f and colour(0, 0, 0, 0) == 0x3f3f3f, 'a quarter of the colour at level 0'
+    assert lift(0) == 0 and lift(255) == 255 and lift(128) > 180, 'half a level shows well over half bright'
 
 
 def test_hue_matches_the_model(line):
@@ -295,7 +298,7 @@ def test_paint_skips_a_hidden_segment(line):
 
 def test_paint_moves_the_phase_by_the_time_since_the_last(line):
     line.paint(motion=2, speed=9)
-    line.now += 400_000                         # half of Line Speed 10's 0.8 s
+    line.now += 400_000                         # half of Speed 10's 0.8 s
     phase = line.data(4)
     fills = line.paint(motion=2, speed=9, color=0)
     assert line.data(4) == (phase + 400_000 * RATES[9]) & 0xffffffff
@@ -317,15 +320,15 @@ def test_paint_uses_the_defaults_for_values_above_max(line):
     fills = line.paint(color=15, motion=12, speed=14)                   # what a 4-bit field holds above each max
     t16 = line.data(4) >> 16
     assert line.data(0) == 1 and len(fills) == 80
-    assert fills[5][5] == colour(len(SCHEMES), 5, t16, level(3, 5, t16))
+    assert fills[5][5] == colour(len(SCHEMES), 5, t16, level(2, 5, t16))
 
 
 def test_paint_counts_cycles_for_sparkle(line):
-    line.paint(motion=8, speed=9)
+    line.paint(motion=6, speed=9)
     counted = []
     for _ in range(4):
-        line.now += 500_000                     # 5/8 of a cycle at Line Speed 10
-        line.paint(motion=8, speed=9)
+        line.now += 500_000                     # 5/8 of a cycle at Speed 10
+        line.paint(motion=6, speed=9)
         counted.append(line.data(5))
     assert counted == [0, 1, 1, 2]
 
@@ -344,7 +347,7 @@ def test_off_draws_nothing_and_hands_the_line_back_to_the_stock_segments(line):
 
 
 def test_line_holds_still_while_a_gr_meter_shows(line_gr):
-    """User decision: the line yields to a compressor's meter, as at Line Motion Off, and runs again once the meter is off."""
+    """User decision: the line yields to a compressor's meter, as at Type Off, and runs again once the meter is off."""
     line_gr.m.u32(GR_SHOWN, 0)
     assert len(line_gr.paint(motion=3)) == 80 and line_gr.data(0) == 1
     line_gr.m.u32(GR_SHOWN, 1)

@@ -4,7 +4,7 @@
 @ the tempo screen would show Extrnl. tools/features/bpm.py chains the handlers; only bpm_ledsend is a hook of its own.
 .syntax unified
 .thumb
-.include "customos.inc"
+.include "hxtra.inc"
 .equ BPM_DOTS, 18                   @ rectangles: 9 a dot
 .equ BPM_DOT_TOP, 237               @ the dots' top (y counts up from the bottom)
 .equ FS_FUNCTIONS, 0x28128a74       @ each footswitch's function, two bytes apart: 1 is TAP
@@ -193,18 +193,18 @@ bpm_before:                         @ before the Home paint (framebuffer, Home v
     movs r0, #SETTING_BPM_DOT
     movs r1, #SETTING_BPM_DOT_MAX
     movs r2, #SETTING_BPM_DOT_DEFAULT
-    bl customos_setting_get
+    bl hxtra_setting_get
     add.w r9, r0, #1                @ the dots shown: 1 left, 2 right, 3 both
     movs r0, #SETTING_BPM_FONT
     movs r1, #SETTING_BPM_FONT_MAX
     movs r2, #SETTING_BPM_FONT_DEFAULT
-    bl customos_setting_get
+    bl hxtra_setting_get
     adr.w r1, bpm_fonts
     ldrb r5, [r1, r0]
     movs r0, #SETTING_BPM_COLOR
     movs r1, #SETTING_BPM_COLOR_MAX
     movs r2, #SETTING_BPM_COLOR_DEFAULT
-    bl customos_setting_get
+    bl hxtra_setting_get
     adr.w r1, bpm_colours
     ldr.w r6, [r1, r0, lsl #2]
     mov r0, r5
@@ -409,7 +409,7 @@ bpm_none:                           @ the digit-only fonts have no dash: nothing
     strb r0, [r4], #1
     b bpm_end
 
-CUSTOMOS_SETTING_GET
+HXTRA_SETTING_GET
 .ltorg
 .balign 4
 bpm_colours:                        @ BPM Color: White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple

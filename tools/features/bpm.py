@@ -3,6 +3,8 @@ from features import Setting
 import patch_menu as pm
 
 FLAG = 'HX_BPM'
+TITLE = 'BPM Display'
+ICON = 'Icon_Tempo'
 ORDER = 20
 SETTINGS = (
     Setting('font', b'BPM\nFont', (b'41 Lite', b'35 Bold', b'28 Bold', b'28 Lite', b'21 Bold', b'21 Reg')),

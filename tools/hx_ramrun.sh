@@ -4,8 +4,8 @@
 # DFU loader (tools/hx_dfu_reboot.py), then the RAM loader goes in and
 # tools/hxf_ram.py runs the image. If the unit is already in DFU, the first
 # step is skipped. Needs dfu-util and pyusb; the loader is tools/ramboot/ (RAM_RUN.md).
-#   tools/hx_ramrun.sh build/HX_Stomp_v3.80.0_CustomOS.hxf
-#   tools/hx_ramrun.sh build/HX_Stomp_XL_v3.80.0_CustomOS.hxf HX_Stomp_XL_v3.80.0_0x103966115.hxf
+#   tools/hx_ramrun.sh build/HX_Stomp_v3.80.0_HXtra.hxf
+#   tools/hx_ramrun.sh build/HX_Stomp_XL_v3.80.0_HXtra.hxf HX_Stomp_XL_v3.80.0_0x103966115.hxf
 set -e
 cd "$(dirname "$0")/.."
 img=${1:?usage: tools/hx_ramrun.sh image.hxf|image.l6ia [stock.hxf]}

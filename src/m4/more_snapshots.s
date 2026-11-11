@@ -17,6 +17,8 @@
 .equ MANAGER, 0x2812c630
 .equ ICON, 0x2812ade8               @ the top view's snapshot icon (image widget): a camera, its number in a circle
 .equ LABELS, 0x2812a4bc             @ the Home view's footswitch labels in Snapshot mode: the same cameras, 0x24 bytes apart
+.equ FS_FUNCTIONS, 0x28128a74       @ each footswitch's function, two bytes apart
+.equ FN_SNAPSHOT, 14                @ snapshot k for footswitch k: Snapshot mode; other modes keep stale cameras in LABELS
 .equ WIDGET_LOCK, 0x28e24971
 .equ WIDGET_UNLOCK, 0x28e24ae9
 .equ REDRAW, 0x28db8509             @ (full, partial): the UI repaints; the layout code ends with (0, 1)
@@ -372,6 +374,11 @@ snaps_paint:                        @ after the top view's paint (framebuffer, v
     b snaps_cameras_paint
 
 snaps_home_paint:                   @ after the Home view's paint (framebuffer, view): over its footswitch labels'
+    ldr r3, =FS_FUNCTIONS
+    ldrb r3, [r3]
+    cmp r3, #FN_SNAPSHOT
+    it ne
+    bxne lr
     movs r1, #2
     adr.w r2, snaps_labels
 

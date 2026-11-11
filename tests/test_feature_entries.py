@@ -60,7 +60,7 @@ def patch(env=None, mods=(), entries=None):
     p = pm.Patch.__new__(pm.Patch)
     p.e0, p.mods, p.ids = bytearray(0x10000), list(mods), {}
     p.segs = [(0, 0, 0x8000, BASE, 0x8000)] * 7
-    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'CustomOS', [], {}
+    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'HXtra', [], {}
     e7, e8 = store()
     p.load = (entries or {7: e7, 8: e8}).__getitem__
     p.values = {features.name(m): features.values(m, env or {}) for m in mods}
@@ -632,6 +632,11 @@ def test_an_owned_text_renderer_sees_its_9th_argument_rewritten(stock, m4emu):
     assert m4.calls(RENDER_FN + 6) == [(1, 2, 3, 4)]
 
 
+def without_splash():
+    """The real features but splash, which is always on and owns the text renderer the demo features take."""
+    return [m for m in features.load() if features.name(m) != 'splash']
+
+
 @pytest.mark.firmware
 def test_patch_menu_writes_entries_7_and_8_and_both_owned_sites(stock, tmp_path, monkeypatch):
     """Through patch_menu(), as build.py runs it: a demo feature, on by either of two variables, with a path input, repaints
@@ -660,7 +665,7 @@ def test_patch_menu_writes_entries_7_and_8_and_both_owned_sites(stock, tmp_path,
     plain, _ = pm.menu_entries(load, env={})
     assert sorted(plain) == [0] and plain[0] == pm.menu_entry0(load(0), env={})[0]
 
-    real = features.load()
+    real = without_splash()
     monkeypatch.setattr(features, 'load', lambda: real + [demo])
     monkeypatch.setenv('HX_DEMO', 'pic.bin')
     monkeypatch.setenv('HX_DEMO_TEXT', 'HXS OS \U0001f3b8')
@@ -714,7 +719,7 @@ def renderer_owner(order=100):
 def test_bpm_builds_beside_an_owned_text_renderer(stock):
     load = lambda n: pa.get_entry_swapped(stock, n)
     alone, _ = pm.menu_entries(load, env={'HX_BPM': '1'})
-    both, on = pm.menu_entries(load, features.load() + [renderer_owner()], {'HX_BPM': '1'})
+    both, on = pm.menu_entries(load, without_splash() + [renderer_owner()], {'HX_BPM': '1'})
     assert [features.name(m) for m in on] == ['bpm', 'demo'] and sorted(both) == [0]
     segs = [pa._parse_e0_segments(e[0]) for e in (alone, both)]
     read = lambda e, sg, va, n: e[0][pa._e0_vaddr_to_foff(sg, va, n):pa._e0_vaddr_to_foff(sg, va, n) + n]

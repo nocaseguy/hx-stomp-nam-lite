@@ -1,5 +1,5 @@
-"""The boot screen: a picture (HX_SPLASH, any picture; HX_SPLASH_FIT fill or fit), the line of text under it (HX_SPLASH_TEXT),
-and that line's glyphs drawn without their black boxes. build.py --splash, --splash-fit and --splash-text set these.
+"""The boot screen: a picture (HX_SPLASH, any picture; HX_SPLASH_FIT fill or fit), the line of text under it (HX_SPLASH_TEXT,
+"HXtra" when unset), and that line's glyphs drawn without their black boxes. Always on. build.py --splash, --splash-fit and --splash-text set these.
 Emoji in the text become colour glyphs of the line's font (pictures from HX_SPLASH_GLYPHS, build.py --splash-glyph, else
 rendered on macOS), and the line is drawn white, the one colour the glyph blitters copy unchanged.
 
@@ -15,9 +15,9 @@ import patch_menu as pm
 import patch_splash as ps
 import splash_emoji
 
-FLAG = ('HX_SPLASH', 'HX_SPLASH_TEXT')
+TEXT = 'HXtra'
 INPUTS = (Input('HX_SPLASH', path=True), Input('HX_SPLASH_FIT', choices=('fill', 'fit'), default='fill'),
-          Input('HX_SPLASH_GLYPHS', path=True, mapping=True))
+          Input('HX_SPLASH_TEXT', default=TEXT), Input('HX_SPLASH_GLYPHS', path=True, mapping=True))
 
 NAME_SITE = 0x28e24cf4                              # the boot view's image name, read only by the literal at 0x28d92924
 TEXT_SITE, TEXT_STOCK = 0x28e24d14, b'   Firmware  \0\0\0' + b'3.80.0\0\0'
@@ -100,7 +100,6 @@ def line(p, text):
 def apply(p):
     if p.input('HX_SPLASH'):
         picture(p, p.input('HX_SPLASH'), p.input('HX_SPLASH_FIT'))
-    if p.input('HX_SPLASH_TEXT'):
-        line(p, p.input('HX_SPLASH_TEXT'))
+    line(p, p.input('HX_SPLASH_TEXT'))
     hook = p.own_entry(RENDER_FN, RENDER_STOCK, 'the text renderer')
     hook.to(p.add(transparent_text_cave(p.next(), hook.stock)))

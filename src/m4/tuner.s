@@ -1,7 +1,7 @@
 @ tuner.s - Tuner Activation and Lock Tuner Settings on a page of the tuner's settings, shown third; tools/features/tuner.py places the hooks.
 .syntax unified
 .thumb
-.include "customos.inc"
+.include "hxtra.inc"
 .equ PAGE, 4                        @ its page at [view+0x74], after the stock ones; tools/features/tuner.py's PAGE
 .equ SHOWN_AT, 2                    @ its place in the order the pages are paged and dotted; tools/features/tuner.py's SHOWN_AT
 .equ STOCK_PAGES, 4
@@ -42,7 +42,7 @@ tuner_tap:                          @ in place of the TAP/Tunr tap's tail call o
     movs r0, #SETTING_TUNER_ACTIVATE
     movs r1, #SETTING_TUNER_ACTIVATE_MAX
     movs r2, #SETTING_TUNER_ACTIVATE_DEFAULT
-    bl customos_setting_get
+    bl hxtra_setting_get
     cmp r0, #PRESS
     bne tap_stock
     movs r0, #5
@@ -248,12 +248,12 @@ knob_get:                           @ r0 knob 0..1 -> r0 its setting's value
     ldrh r0, [r3]
     ldrb r1, [r3, #2]
     ldrb r2, [r3, #3]
-    b customos_setting_get
+    b hxtra_setting_get
 
 knob_set:                           @ r0 knob 0..1, r1 its setting's new value, stored as an int
     adr r3, knobs
     ldrh.w r0, [r3, r0, lsl #2]
-    b customos_setting_set
+    b hxtra_setting_set
 
 .ltorg
 .balign 4
@@ -285,5 +285,5 @@ values:                             @ per knob, 32 bytes: its two values, 16 byt
     .asciz "On"
     .balign 16, 0
 
-CUSTOMOS_SETTING_GET
-CUSTOMOS_SETTING_SET
+HXTRA_SETTING_GET
+HXTRA_SETTING_SET
