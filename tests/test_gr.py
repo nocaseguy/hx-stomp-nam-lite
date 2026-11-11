@@ -321,9 +321,9 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 # ---- the whole GR build, pinned as tests/test_firmware.py pins the default one
 
 GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
-    'HX_GR': '658513cbe5a8d8aae518835931864aa4',
-    'HX_GR HX_FRAMEPROBE': '2954c849762e01c52a0bc9b45fa962ee',
-    'HX_GR HX_CLICK': 'afaa6b0889ef8c036534d42a22818bbb',    # patch_click.py adds a model, which would drop knobs written before it
+    'HX_GR': '4161e757a6e27e1a7ea76dbbeb2fb28f',
+    'HX_GR HX_FRAMEPROBE': 'af6c2f8736cd01a47c22dff65bd58317',
+    'HX_GR HX_CLICK': '746cf431ae1bbb23ea8827b55f137dcc',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 

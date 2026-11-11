@@ -15,9 +15,18 @@ def js_object(name):
 
 
 def py_dict(path, name):
+    """A module-level value of literals, or of names of such values assigned before it."""
     tree = ast.parse((ROOT / path).read_text())
-    node = next(n for n in tree.body if isinstance(n, ast.Assign) and n.targets[0].id == name)
-    return ast.literal_eval(node.value)
+    env = {}
+    for n in tree.body:
+        if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name):
+            try:
+                env[n.targets[0].id] = eval(compile(ast.Expression(n.value), path, "eval"), {"__builtins__": {}}, dict(env))
+            except Exception:
+                continue
+            if n.targets[0].id == name:
+                return env[name]
+    raise KeyError(name)
 
 
 def test_stock_md5_as_build_py():
@@ -31,13 +40,14 @@ def js_value(name):
 
 
 def test_build_steps_as_build_py():
-    for name in ("KERNEL", "MODEL", "FX_MODEL", "IR_TITLE"):
+    for name in ("KERNEL", "STEPS"):
         assert js_value(name) == py_dict("build.py", name), name
 
 
 def test_built_md5_as_firmware_test():
     pinned = py_dict("tests/test_firmware.py", "BUILT_MD5")
-    assert js_object("BUILT_MD5") == {"HX_Stomp": pinned["HX_STOMP_HXF"], "HX_Stomp_XL": pinned["HX_STOMP_XL_HXF"]}
+    assert js_object("BUILT_MD5") == {"HX_Stomp": pinned["HX_STOMP_HXF"], "HX_Stomp_XL": pinned["HX_STOMP_XL_HXF"],
+                                      "HX_Effects": pinned["HX_EFFECTS_HXF"]}
 
 
 def test_sources_cover_the_build():

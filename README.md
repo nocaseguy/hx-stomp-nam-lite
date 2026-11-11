@@ -10,14 +10,14 @@ This repository is a fork of [nocaseguy/hx-stomp-nam-lite](https://github.com/no
 
 [hx-stomp-nam-lite](https://github.com/nocaseguy/hx-stomp-nam-lite), by Derek Bui (nocaseguy), did the hard part: it showed the HX Stomp's firmware can be changed safely. It brought a SHARC assembler and simulator, a NAM A2 Lite kernel written from scratch in SHARC assembly, tools that read and rebuild the `.hxf` container and fix every checksum, a loader that runs a build from RAM without installing it, and an in-browser setup page. It also showed that leaving the bootloader alone keeps a bricked HX Stomp recoverable.
 
-CustomOS forks it at upstream commit `2e80164` and builds on those tools. What it adds:
+CustomOS forks it at upstream commit `2e80164`, has merged upstream up to `01c0bb0`, and builds on those tools. What it adds:
 
 - **New functionality on the Cortex-M4 application** (the HX Stomp's UI and control side), not just the DSP, added as small Thumb-2 code caves that each check the stock bytes they replace.
 - **A feature engine.** Each feature is its own module in `tools/features/`, with its own settings, hooks and tests, and features that hook the same place in the firmware share it instead of overwriting each other (see [How it works](#how-it-works)).
 - **A way for the DSP to talk to the UI.** A DSP routine writes its own values into the unused tail of the frames the DSP already sends the M4, and an M4 hook reads them. This needs no knowledge of Line 6's own message formats.
 - **[FIRMWARE_NOTES.md](FIRMWARE_NOTES.md)**, a shared map of what is known about the 3.80.0 firmware: addresses, formats, techniques that work, dead ends, and what is still open. Every claim is marked verified on the unit, verified offline, or a hypothesis.
 
-The built image is `HX_Stomp_v3.80.0_CustomOS.hxf`. NAM A2 Lite is the same amp as upstream's (preset IDs 147 and 148, the same knobs), so presets made with either build open with the other.
+The built image is `HX_Stomp_v3.80.0_CustomOS.hxf`. NAM A2 Lite is the same block as upstream's: ten knobs and a tone stack in Amp → NAM, on Xenomorph Fuzz Mono's preset ID 555 (that stock model is removed), so HX Edit keeps NAM blocks and presets made with either build open with the other. **Presets saved with an earlier NAM build (preset IDs 147 and 148) don't open NAM A2 Lite in this one:** re-add the block in those presets. Upstream's [CHANGELOG.md](CHANGELOG.md) has the NAM changes.
 
 ## Features
 
@@ -206,7 +206,7 @@ This has been done on a real unit after a modified firmware hung at the splash, 
   - **Other parts:** the image store and fonts (Entries 7 and 8) are changed through `p.entry(n)`, `add_item` and `p.add_glyph` (`tools/image_store.py`), never by hand.
 - **The DSP.** The audio runs on an Analog Devices SHARC ADSP-21469. Kernels are hand-written SHARC assembly, assembled by `tools/sharc/sasm.py` and simulated by `tools/sharc/ssim.py`, with no vendor toolchain. A custom kernel is hooked to an unused DSP primitive.
 - **NAM captures through the IR slots.** The HX Stomp already stores up to 128 User IRs of 2,048 samples and hands them to the DSP unchanged. `nam2ir.py` packs a capture's weights into those samples, behind a small header the kernel recognises.
-- **The amp.** `tools/patch_amp.py` builds the amp's DSP graph, parameter map and menu entries, copied from the Line 6 Clarity amp with its amp stage replaced by the NAM kernel.
+- **The NAM block.** `tools/patch_amp.py` builds the block's DSP graph, parameter map and menu entries on Xenomorph Fuzz Mono's identity, with the NAM kernel as its DSP stage (`build.py`'s `STEPS`).
 
 [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md) has the details: addresses, the M4-to-DSP frame format, the Settings and Home screen internals, and the open problems.
 

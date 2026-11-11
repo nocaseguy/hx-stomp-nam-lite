@@ -30,6 +30,14 @@ IR_SAMPLES = 2048
 # some 3 dB until it is measured on the unit. The kernel gives a model whose
 # file says its capture's input_level_dbu an input trim of STOMP_DBU - that.
 STOMP_DBU = 11.5
+# Loudness normalisation: IR word 6 holds 10^((LOUD_REF - loudness)/20) for a capture whose
+# file gives its loudness (NAM's measure of the model's output, in dB), 0 for none; the
+# kernel multiplies the head's scale by it x 10^((LOUD_TARGET - LOUD_REF)/20) (a DDR2 word,
+# LOUD_GAIN), so a firmware can move the target without converting the captures again.
+# LOUD_REF only sets the range the word holds (loudness above about -42 dB); LOUD_TARGET
+# is the NAM plugin's Normalized level.
+LOUD_REF = -18.0
+LOUD_TARGET = -18.0
 HIST_N = 512
 EQ_BANDS = (("low", 100.0), ("peak", 650.0), ("high", 2500.0), ("high", 5500.0))   # Bass Mid Treble Presence
 IR_LIMIT = 15.8489                # HX Edit refuses a sample beyond +-24 dB (error -8317)
@@ -122,6 +130,23 @@ def level_word(dbu):
     return g
 
 
+def loud_word(db):
+    """IR word 6: 10^((LOUD_REF - db)/20) for a capture of loudness `db`; 0 (left as it is)
+    for None or a capture too quiet for the word (HX Edit's +-15.8: below about -42 dB)."""
+    if db is None:
+        return 0.0
+    g = ssim.b2f(nam_pack.f2b(10.0 ** ((LOUD_REF - db) / 20.0)))
+    return g if 0 < g < IR_LIMIT else 0.0
+
+
+def loud_gain(db):
+    """The kernel's gain on the head's scale for a model of loudness `db` (None: none, x 1),
+    float32 as it computes it."""
+    f = lambda x: ssim.b2f(ssim.f2b(x))
+    g = f(loud_word(db) * f(10.0 ** ((LOUD_TARGET - LOUD_REF) / 20)))
+    return g if g > 0 else 1.0
+
+
 def input_trim(dbu):
     """The kernel's N_TRIM for a model made at `dbu` (None: none), float32 as it
     computes it."""
@@ -130,9 +155,10 @@ def input_trim(dbu):
     return g if g > 0 else 1.0
 
 
-def ir_samples(w, dbu=None):
+def ir_samples(w, dbu=None, loud=None):
     """The 2,048 float samples of a NAM Lite model as a User IR (tools/nam2ir.py):
-    a header (word 5 the capture's input level, level_word(dbu)), then the stream divided by 2^e (exact) so that every sample is
+    a header (word 5 the capture's input level, level_word(dbu); word 6 its loudness,
+    loud_word(loud)), then the stream divided by 2^e (exact) so that every sample is
     within HX Edit's +-15.8 limit (the header too: the word count is stored
     / 1024; 1871.0 itself was refused, -8317); the rest 0 (sample 2047 = 0:
     no tail fade)."""
@@ -141,7 +167,7 @@ def ir_samples(w, dbu=None):
     e = 0
     while peak / 2.0 ** e > 15.5:
         e += 1
-    head = [0.5, -0.5, float(C), 2.0 ** e, N_WEIGHTS / 1024.0, level_word(dbu), 0.0, 0.0]
+    head = [0.5, -0.5, float(C), 2.0 ** e, N_WEIGHTS / 1024.0, level_word(dbu), loud_word(loud), 0.0]
     out = head + [x / 2.0 ** e for x in st]
     assert len(out) < IR_SAMPLES
     assert max(abs(x) for x in out) < IR_LIMIT, "a sample HX Edit would refuse"

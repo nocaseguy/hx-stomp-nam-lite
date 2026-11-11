@@ -24,21 +24,33 @@ var PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/";
 var STOCK_MD5 = {
   "a2cd8f4ae56f49415380270ebc484bf1": "HX_Stomp",
   "329e3a26d60d3de1988b6785fa833ee1": "HX_Stomp_XL",
+  "7c2ebdf1bffb6bcc5f89dda97f91e40c": "HX_Effects",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "fd18c1b0fda16c73c0f096d9b9edbdc7",
-  "HX_Stomp_XL": "fb3a7b523e4b909de9d1e83162acd403",
+  "HX_Stomp": "a37659d04cf97218bd1c470c6519cdad",
+  "HX_Stomp_XL": "8918ab60ebff62ebfccd4fccb2bed85a",
+  "HX_Effects": "2efb98791581b67116ba82c5ecd30ea2",
 };
 
-// build.py's KERNEL, MODEL, FX_MODEL and IR_TITLE (tests/test_web_build.py keeps them equal).
-var KERNEL = "tools/sharc/nam_multi.py";
-var MODEL = ["--clone", "HD2_AmpLine6Clarity", "--name", "HD2_AmpNAMLite", "--display-name", "NAM A2 Lite",
-             "--folder", "NAM", "--preset-id", "147", "--dsp-cost", "2345", "--sdram-words", "0x5000"];
-var FX_MODEL = ["--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion",
-                "--folder", "NAM", "--preset-id", "148", "--dsp-cost", "2345", "--sdram-words", "0x5000"];
-var IR_TITLE = {
-  "HX_Stomp": ["--preset-id", "147", "--fx-preset-id", "148"],
-  "HX_Stomp_XL": ["--preset-id", "147", "--fx-preset-id", "148"],
+// build.py's KERNEL and STEPS (tests/test_web_build.py keeps them equal): per unit, the kernel
+// command and the patch_amp.py steps, each "patch_amp.py CMD IN OUT ARGS..." on the previous output.
+var KERNEL = {"HX_Stomp": ["tools/sharc/nam_multi.py", "--mid-sweep"], "HX_Stomp_XL": ["tools/sharc/nam_multi.py", "--mid-sweep"], "HX_Effects": ["tools/sharc/nam_multi.py", "--mid-sweep", "--effects"]};
+var STEPS = {
+  "HX_Stomp": [
+    ["remove-model", "--preset-id", "555"],
+    ["add-fx-model", "--knobs", "eq", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion", "--folder", "NAM", "--preset-id", "555", "--dsp-cost", "2275", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
+    ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
+    ["ir-title", "--fx-preset-id", "555", "--knob", "6"],
+  ],
+  "HX_Stomp_XL": [
+    ["remove-model", "--preset-id", "555"],
+    ["add-fx-model", "--knobs", "eq", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite", "--category", "distortion", "--folder", "NAM", "--preset-id", "555", "--dsp-cost", "2275", "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
+    ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
+    ["ir-title", "--fx-preset-id", "555", "--knob", "6"],
+  ],
+  "HX_Effects": [
+    ["effects-eq"],
+  ],
 };
 
 // What build.py needs, relative to the repository root.
@@ -48,6 +60,7 @@ var SOURCES = [
   "tools/hxf_ram.py",
   "tools/l6ia_verify.py",
   "tools/patch_amp.py",
+  "tools/effects.py",
   "tools/patch_menu.py",
   "tools/image_store.py",
   "tools/patch_splash.py",
@@ -126,8 +139,8 @@ async function build(stock) {
   var md5 = p.runPython("import hashlib; hashlib.md5(open('/repo/build/stock.hxf','rb').read()).hexdigest()");
   var unit = STOCK_MD5[md5];
   if (!unit) {
-    throw new Error("This is not the stock HX Stomp or HX Stomp XL 3.80.0 firmware (its MD5 is " + md5 +
-                    "). The patch is made for those two files only.");
+    throw new Error("This is not the stock HX Stomp, HX Stomp XL or HX Effects 3.80.0 firmware (its MD5 is " + md5 +
+                    "). The patch is made for those three files only.");
   }
   post({ type: "log", text: "stock firmware: " + unit.replace(/_/g, " ") + " 3.80.0 (MD5 " + md5 + ")\n" });
 
@@ -140,23 +153,16 @@ async function build(stock) {
     return out;
   }
   try {
-    var base = "build/nam_lite_base.l6ia";
-    step(3, "Building the NAM kernel…", [KERNEL, "-o", "build/nam_lite.asm"]);
-    step(4, "Adding the NAM A2 Lite amp…",
-         ["tools/patch_amp.py", "add-model", "build/stock.hxf", base].concat(MODEL));
-    step(4, "Adding the NAM A2 Lite amp…",
-         ["tools/patch_amp.py", "add-fx-model", base, "build/nam_lite_fx.l6ia"].concat(FX_MODEL));
-    p.FS.unlink("/repo/" + base);
-    base = "build/nam_lite_fx.l6ia";
-    if (IR_TITLE[unit]) {
-      step(4, "Adding the NAM A2 Lite amp…",
-           ["tools/patch_amp.py", "ir-title", base, "build/nam_lite_title.l6ia"].concat(IR_TITLE[unit]));
-      p.FS.unlink("/repo/" + base);
-      base = "build/nam_lite_title.l6ia";
-    }
+    step(3, "Building the NAM kernel…", KERNEL[unit].concat(["-o", "build/nam_lite.asm"]));
+    var base = "build/stock.hxf";
+    STEPS[unit].forEach(function (s, k) {
+      var out = "build/nam_lite_" + k + ".l6ia";
+      step(4, "Adding NAM A2 Lite…", ["tools/patch_amp.py", s[0], base, out].concat(s.slice(1)));
+      if (base !== "build/stock.hxf") p.FS.unlink("/repo/" + base);
+      base = out;
+    });
     if (unit === "HX_Stomp") {
-      step(4, "Adding the NAM A2 Lite amp…",
-           ["tools/patch_menu.py", base, "build/nam_lite_menu.l6ia"]);
+      step(4, "Adding NAM A2 Lite…", ["tools/patch_menu.py", base, "build/nam_lite_menu.l6ia"]);
       p.FS.unlink("/repo/" + base);
       base = "build/nam_lite_menu.l6ia";
     }
@@ -186,6 +192,10 @@ async function build(stock) {
 // The RAM run of the built file: what tools/hxf_ram.py run would send. A failure here leaves the
 // build as it is; the page then offers no RAM run.
 function ramPlan(p, step, file) {
+  if (file.indexOf("HX_Effects") === 0) {      // the RAM loader is the HX Stomp's and XL's only
+    post({ type: "log", text: "RAM run: HX Stomp and HX Stomp XL only.\n" });
+    return {};
+  }
   var dir = "/repo/build/ram";
   try {
     step(6, "Checking every checksum and packing the file…",

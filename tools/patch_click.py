@@ -32,7 +32,7 @@ import nam_multi
 
 ASM = os.path.join(SCRIPT_DIR, '..', 'src', 'sharc', 'click.asm')
 NAME, DISPLAY, FOLDER = 'HD2_ClickMetronomeMono', 'Metronome', 'Metronome'
-PRESET_ID = 181                     # the first free one after NAM's 147 and 148; fixed for ever as theirs
+PRESET_ID = 181                     # fixed for ever: presets store it
 DSP_COST = 50
 CLONE = 'HD2_Tremolo60sBiasTremMono'   # a mono modulation with four knobs and a synced pair: no trails, as delays have
 CATEGORY = 5                        # Modulation
@@ -165,10 +165,19 @@ def replace_last_blob(e4, blob_index, words):
     return out
 
 
+def nam_layout():
+    """nam_multi.Layout of build.py's HX Stomp kernel: three slots, --mid-sweep."""
+    midq, nam_multi.MIDQ = nam_multi.MIDQ, True     # main() sets it from --mid-sweep, which build() alone never sees
+    try:
+        return nam_multi.build(3)[1]
+    finally:
+        nam_multi.MIDQ = midq
+
+
 def pm_base(n_insns):
     """Where the kernel goes: right under NAM A2 Lite's cold code, above its slots
-    (nam_multi.Layout of build.py's three slots)."""
-    _, lay = nam_multi.build(3)
+    (nam_layout())."""
+    lay = nam_layout()
     n = n_insns + (n_insns & 1)
     base = lay.cold_pm - n
     nw = nam_multi.NW3 + (base - nam_multi.NW3) * 3 // 2

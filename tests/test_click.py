@@ -1,5 +1,6 @@
 """The Metronome block: its kernel (src/sharc/click.asm) in ssim, and the model and kernel
 tools/patch_click.py adds to the stock firmware."""
+import ast
 import math
 import os
 import random
@@ -81,7 +82,16 @@ def test_kernel_is_code_alone():
     assert [s.kind for s in assemble()[0]] == ['pm']
 
 
-def test_kernel_sits_between_nam_slots_and_cold_code():
+def test_nam_layout_is_that_of_build_py_kernel():
+    tree = ast.parse((ROOT / 'build.py').read_text())
+    kernel = next(ast.literal_eval(n.value) for n in tree.body
+                  if isinstance(n, ast.Assign) and getattr(n.targets[0], 'id', None) == 'KERNEL')
+    assert kernel['HX_Stomp'] == ['tools/sharc/nam_multi.py', '--mid-sweep']
+    assert not nam_multi.MIDQ
+
+
+def test_kernel_sits_between_nam_slots_and_cold_code(monkeypatch):
+    monkeypatch.setattr(nam_multi, 'MIDQ', True)
     _, lay = nam_multi.build(3)
     assert nam_multi.NW3 + (BASE - nam_multi.NW3) * 3 // 2 >= lay.b3_to
     assert BASE + N_CODE + (N_CODE & 1) == lay.cold_pm

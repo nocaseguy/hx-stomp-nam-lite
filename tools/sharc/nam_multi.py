@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """NAM A2 Lite's kernel: up to three blocks at once, each with its own capture.
 
-usage: nam_multi.py [model.nam] [-o out.asm] [--slots 2|3] [--staging b2|b3] [--check]
+usage: nam_multi.py [model.nam] [-o out.asm] [--slots 2|3] [--staging b2|b3] [--no-tone | --mid-sweep] [--effects] [--check]
+
+--mid-sweep: the ten-knob build's tone stack (Bass 150 Hz shelf, Mid a peak at Mid Freq with Q,
+Treble a 2.5 kHz peak, High Cut). --effects: the HX Effects 3.80.0's User IR store.
 
 There is no built-in model: Model 1..128 is a User IR slot, anything else
 silence. model.nam (or nam_lite.placeholder) is the check's test model, in IR
@@ -25,7 +28,9 @@ Memory (normal words):
       the job, layer and clear tables, Drive's and the fade's tables, then NSLOTS
       slots: state, tone stack, the model's 1,943 words, its short rings.
   DDR2 0x324500..: the tone stack's table and STOMP_GAIN (10^(STOMP_DBU/20): a loaded model's IR word 5,
-      10^(-input_level_dbu/20), x this is its slot's input trim, x Drive).
+      10^(-input_level_dbu/20), x this is its slot's input trim, x Drive), then LOUD_GAIN
+      (10^((LOUD_TARGET - LOUD_REF)/20): IR word 6, 10^((LOUD_REF - loudness)/20), x this
+      multiplies the head's scale when the model loads; nam_lite.py).
   Each instance's SDRAM block: its long rings (d >= FAR_D), each with a 16-word
       mirror, HIST (the crossfade's 512 outputs) and the two sentinel words.
 """
@@ -58,6 +63,7 @@ REP = 0xE4860                     # the kit report area (kit-probe plays these 1
 DDR2 = 0x324500
 DDR2_END = 0x328000
 IR_FLAG, IR_TOP = 0x2AB56E, 0x2ABDED
+IR_EFFECTS = (0x2A912C, 0x2A99AB)     # the HX Effects 3.80.0's User IR store (--effects)
 N_STREAM = nam_lite.N_WEIGHTS + C * (1 + NL)        # 1,943: weights, then the silence state
 HIST_N = 512
 MAGIC = 0x6E6D6D31                # "nmm1": the report's word 0 and the read chains' sentinel
@@ -69,7 +75,7 @@ TCB = 6                           # EP TCB: CP, EMEP, EIEP, ICEP, IMEP, IIEP (HR
 TCB_EI, TCB_IC, TCB_II = 2, 3, 5
 SB_WORDS = C * 6 * 16             # a staging buffer: [channel][tap][16]
 JOB = 8
-T_SIZE = 17
+T_SIZE = 18
 
 DMAC0, EIEP0, EMEP0, ECEP0, IIEP0, IMEP0, ICEP0, CPEP0 = 0x180B, 0x1820, 0x1821, 0x1822, 0x1823, 0x1824, 0x1825, 0x1826
 DEN, TRAN, CHEN, DFLSH, DMAS, CHS, EXTS = 1, 2, 4, 0x20, 1 << 20, 1 << 21, 1 << 24
@@ -77,18 +83,36 @@ EP0IMSK = 0x2000
 
 # slot state (offsets in a slot)
 S = dict(S_OWNER=0, S_LAST=1, S_INIT=2, S_SIG=3, S_GAIN=4, S_G1=5, S_MG=6, S_MR=7, S_HW=8, S_T=9,
-         S_SEQ=10, S_HHW=11, S_SDR=12, S_FRESH=13, S_EQDIRTY=14, S_TRIM=15, S_EQIDX=16, S_EQC=20, S_EQS=40, S_LW=48)
-S_STREAM = 72
+         S_SEQ=10, S_HHW=11, S_SDR=12, S_FRESH=13, S_EQDIRTY=14, S_TRIM=15, S_EQIDX=16, S_EQC=20, S_EQS=40, S_LW=48,
+         S_SELF=71, S_DMB=72, S_PMB=73)   # S_SELF: the slot's own address; S_DMB, S_PMB: its owner's
+                                          # DM and PM rings (DM_LAYERS, PM_LAYERS)
+S_STREAM = 74
 ST = dict(ST_RECH=0, ST_HEAD=3, ST_SCALE=52, ST_SIL=nam_lite.N_WEIGHTS)
 REPW = dict(R_MAGIC=0, R_CALLS=1, R_TIMEOUTS=2, R_SKIPS=3, R_LOADS=4, R_CLAIMS=5, R_OWNERS=6, R_POLLS=9,
             R_MAXPOLLS=10, R_BACKOFF=11, R_NOSLOT=12, R_NOSDR=13, R_DMAC=14, R_ICEP=15)
 T = dict(T_RB=0, T_STRIDE=1, T_L=2, T_LW=3, T_K=4, T_S=5, T_WT=6, T_KD=7, T_FAR=8, T_RPOS=9, T_KS=10,
-         T_D=11, T_SB=12, T_OB=13, T_WA=14, T_SIL=15, T_NW=16)
+         T_D=11, T_SB=12, T_OB=13, T_WA=14, T_SIL=15, T_NW=16, T_BS=17)   # T_BS: the slot word with a near ring's base
 J = dict(J_TYPE=0, J_READY=1, J_ROW=2, J_CHAIN=3, J_FLAG=4, J_CP=5, J_N=6)
 SIGCHK_N = 64                     # the kernel's model-check period (nam_multi_kernel.asm .equ)
 P = dict(P_SLOT=12, P_SEEN=13, P_MET=14, P_PHASE=15, P_SIGN=18)   # P_PHASE: the Polarity knob (patch_amp
 # pid 15); P_SIGN: calls to the model's next check (16, 17: the meter test images')
 FAR_D = {2: 41, 3: 17}            # with 3 slots the d = 17 rings go to SDRAM too, to fit
+# DM rings: the smallest far layers' rings (up to DM_LAYERS of them) go instead into the
+# instance's own DM block above the stock words (I0 + 0x92, even, to I0 + dm_words): no DMA
+# staging for them. The stock graph carves that block from the slot's DM budget per the
+# model member's word 13 (dm_words; hx_firmware research/KIT_HEAP_USE.md), not zeroed: the
+# load writes their silence state like the other near rings. The Distortion entry's mono FX
+# slot allows dm_words 0x38b at most, so DM_MAX (words for rings) keeps both entries alike.
+DM_LAYERS = 2
+DM_BASE = 0x92                    # the rings start at (I0 + DM_BASE) & ~1, past the 0x91 stock words
+DM_MAX = 0x38B - DM_BASE - 1
+# PM rings: the next smallest far layer's ring in the instance's PM block (I8, Block 3: 0xE33C4
+# for an amp, 0xE1B15 for the Distortion entry on the unit) above its 13 stock words, from
+# (I8 + PM_BASE) & ~1, the member's word 14 (pm_words) making it that long (the mono FX slot
+# allows 0x14e, the Amp harness 0x1fa).
+PM_LAYERS = 1
+PM_BASE = 0xE
+PM_MAX = 0x14E - PM_BASE - 1
 
 
 def rup16(x):
@@ -122,9 +146,9 @@ def names():
     return list(S) + list(ST) + list(REPW) + list(T) + list(J) + list(P) + [
         "SAVE", "REP", "G_SDR", "G_JOBS", "G_LEVEL", "J_NEXT", "J_BUSY", "J_DONE", "EVENTS", "DMA_FAIL", "J_CHKADR",
         "J_CHKVAL", "FLAGL", "SLOTTAB", "NSLOTS", "IN", "X", "HS", "TABLE", "NLAYERS", "JOBS", "NJOBS", "CLR",
-        "NCLR", "DRIVE_TAB", "FADE_TAB", "EQ_TAB", "STOMP_GAIN", "LBUF", "LBUF_N", "LCH", "LCH_CP",
+        "NCLR", "DRIVE_TAB", "FADE_TAB", "EQ_TAB", "STOMP_GAIN", "LOUD_GAIN", "LBUF", "LBUF_N", "LCH", "LCH_CP",
         "FARTAB", "WADDR", "NFAR", "S_STREAM", "S_HB0", "S_HB1", "S_HB2", "HIST_OFF", "SENT_OFF", "SENT2_OFF",
-        "SDR_NEED", "MAGIC", "POLLMAX", "LPOLLMAX", "BACKOFF_N", "T_MAX", "N_STREAM", "KM1", "T_SIZE",
+        "SDR_NEED", "DM_BASE", "PM_BASE", "MAGIC", "POLLMAX", "LPOLLMAX", "BACKOFF_N", "T_MAX", "N_STREAM", "KM1", "T_SIZE",
         "TCB_EI", "TCB_IC", "TCB_II", "IR_FLAG", "IR_TOP", "DMAC0", "EIEP0", "EMEP0", "ICEP0", "IIEP0", "IMEP0",
         "CPEP0", "DFLSH", "DEN_CHEN", "TRAN", "BUSYM", "EXTSM", "EP0IMSK", "HXK_ENTRY_INST", "HXK_INST_SDRAM",
         "HXK_INST_SDRAM_END", "COLD_PM", "WBUF", "HEADL"]
@@ -137,7 +161,8 @@ def equs(v):
 class Layout:
     """Every address of the kernel's memory, for `slots` slots."""
 
-    def __init__(self, slots=3, n_code=None, backoff=BACKOFF_N, staging="b2", n_cold=None, wbuf=None):
+    def __init__(self, slots=3, n_code=None, backoff=BACKOFF_N, staging="b2", n_cold=None, wbuf=None,
+                 dm_layers=DM_LAYERS, pm_layers=PM_LAYERS):
         """staging: "b2" puts the staging buffers in Block 2 after the code (the far layers'
         tap reads then never meet their weights' block); "b3" in Block 3, which leaves
         Block 2 free after the code for another module (kit-probe)."""
@@ -146,7 +171,25 @@ class Layout:
         self.n_cold = code_sizes()[1] if n_cold is None else n_cold
         n = self.n_code
         self.b2_data = NW0 + (CODE - NW0) * 3 // 2 + -(-(n + (n & 1)) * 3 // 2)
-        self.far = [i for i, (k, d) in enumerate(zip(KERNEL, DILATION)) if k == 6 and d >= self.far_d]
+        far = [i for i, (k, d) in enumerate(zip(KERNEL, DILATION)) if k == 6 and d >= self.far_d]
+        ring = [(k - 1) * d + 16 for k, d in zip(KERNEL, DILATION)]
+        dsz = lambda i: C * (ring[i] + (ring[i] & 1) + 2)
+        self.dml, used = [], 0
+        for i in sorted(far, key=lambda i: (ring[i], i)):
+            if len(self.dml) < dm_layers and used + dsz(i) <= DM_MAX:
+                self.dml.append(i)
+                used += dsz(i)
+        self.dml.sort()
+        self.dm_words = DM_BASE + 1 + used if self.dml else 0   # the model member's word 13 needed
+        self.pml, used = [], 0
+        for i in sorted((i for i in far if i not in self.dml), key=lambda i: (ring[i], i)):
+            if len(self.pml) < pm_layers and used + dsz(i) <= PM_MAX:
+                self.pml.append(i)
+                used += dsz(i)
+        self.pml.sort()
+        self.pm_words = PM_BASE + 1 + used if self.pml else 0   # the model member's word 14 needed
+        self.own = {i: "S_DMB" for i in self.dml} | {i: "S_PMB" for i in self.pml}
+        self.far = [i for i in far if i not in self.own]
         F = self.nfar = len(self.far)
         self.groups = []                  # far layers next to each other: one write-back each
         for j, i in enumerate(self.far):
@@ -232,7 +275,7 @@ class Layout:
         take("WADDR", F)
         near = [i for i in range(NL) if i not in self.far]
         self.nclr = 3 + 3 * len(near)
-        take("CLR", 3 * self.nclr)
+        take("CLR", 4 * self.nclr)
         take("DRIVE_TAB", 101)
         take("FADE_TAB", 18)
         self.alloc = alloc
@@ -241,8 +284,12 @@ class Layout:
         h0 += h0 & 1                                     # (even: the slots' bases are even too)
         self.hb = [h0 + (HEADL + 2) * j for j in range(C)]
         o = self.hb[-1] + HEADL + 2
-        self.near_off = {}
+        self.near_off, self.dm_off, od = {}, {}, {"S_DMB": 0, "S_PMB": 0}
         for i in near:
+            if i in self.own:
+                self.dm_off[i] = od[self.own[i]]
+                od[self.own[i]] += C * (self.nring[i] + 2)
+                continue
             self.near_off[i] = o
             o += C * (self.nring[i] + 2)
         o += o & 1
@@ -270,17 +317,18 @@ class Layout:
         # DDR2 (shared): the tone stack's table
         self.eq_tab = DDR2
         self.stomp_gain = self.eq_tab + 4 * 101 * 5      # 10^(STOMP_DBU/20) (nam_lite.py)
-        self.ddr2_to = self.stomp_gain + 1
+        self.loud_gain = self.stomp_gain + 1               # 10^((LOUD_TARGET - LOUD_REF)/20)
+        self.ddr2_to = self.loud_gain + 1
         assert self.ddr2_to <= DDR2_END
         v.update(SAVE=alloc["SAVE"], REP=REP, SLOTTAB=alloc["SLOTTAB"], NSLOTS=slots, IN=alloc["IN"], X=alloc["X"],
                  HS=alloc["HS"], TABLE=alloc["TABLE"], NLAYERS=NL, JOBS=alloc["JOBS"], NJOBS=F + len(self.groups), CLR=alloc["CLR"],
                  NCLR=self.nclr, DRIVE_TAB=alloc["DRIVE_TAB"], FADE_TAB=alloc["FADE_TAB"], EQ_TAB=self.eq_tab,
-                 STOMP_GAIN=self.stomp_gain, COLD_PM=self.cold_pm, WBUF=self.wbuf, HEADL=HEADL,
+                 STOMP_GAIN=self.stomp_gain, LOUD_GAIN=self.loud_gain, COLD_PM=self.cold_pm, WBUF=self.wbuf, HEADL=HEADL,
                  LBUF=self.sb[0], LBUF_N=2 * SB_WORDS, LCH=alloc["LCH"],
                  LCH_CP=(alloc["LCH"] + TCB_II) & 0x7FFFF, FARTAB=alloc["FARTAB"],
                  WADDR=alloc["WADDR"], NFAR=F, S_STREAM=S_STREAM, S_HB0=self.hb[0], S_HB1=self.hb[1],
                  S_HB2=self.hb[2], HIST_OFF=self.hist_off, SENT_OFF=self.sent_off, SENT2_OFF=self.sent_off + 1,
-                 SDR_NEED=self.sdr_need, MAGIC=MAGIC, POLLMAX=POLLMAX, LPOLLMAX=LPOLLMAX, BACKOFF_N=backoff,
+                 SDR_NEED=self.sdr_need, DM_BASE=DM_BASE, PM_BASE=PM_BASE, MAGIC=MAGIC, POLLMAX=POLLMAX, LPOLLMAX=LPOLLMAX, BACKOFF_N=backoff,
                  T_MAX=T_MAX, N_STREAM=N_STREAM, KM1=5, T_SIZE=T_SIZE, TCB_EI=TCB_EI, TCB_IC=TCB_IC,
                  TCB_II=TCB_II, IR_FLAG=IR_FLAG, IR_TOP=IR_TOP, DMAC0=DMAC0, EIEP0=EIEP0, EMEP0=EMEP0,
                  ICEP0=ICEP0, IIEP0=IIEP0, IMEP0=IMEP0, CPEP0=CPEP0, DFLSH=DFLSH, DEN_CHEN=DEN | CHEN, TRAN=TRAN,
@@ -339,7 +387,8 @@ class Layout:
                 row[T["T_SIL"]] = S_STREAM + nam_lite.N_WEIGHTS + C + C * i
             else:
                 L = self.nring[i]
-                row[T["T_RB"]] = self.near_off[i]
+                row[T["T_RB"]] = self.dm_off[i] if i in self.own else self.near_off[i]
+                row[T["T_BS"]] = S[self.own.get(i, "S_SELF")]
                 row[T["T_STRIDE"]] = L + 2
                 row[T["T_L"]] = L
                 row[T["T_S"]] = d
@@ -350,10 +399,11 @@ class Layout:
         put(al["TABLE"], tab)
         put(al["FARTAB"], [al["TABLE"] + T_SIZE * i for i in self.far])
         put(al["WADDR"], [0] * F)
-        clr = [(self.hb[c], HEADL + 1, c) for c in range(C)]
-        for i in sorted(self.near_off):
+        clr = [(self.hb[c], HEADL + 1, c, S["S_SELF"]) for c in range(C)]
+        for i in sorted(list(self.near_off) + list(self.own)):
+            off, bs = (self.dm_off[i], S[self.own[i]]) if i in self.own else (self.near_off[i], S["S_SELF"])
             for c in range(C):
-                clr.append((self.near_off[i] + c * (self.nring[i] + 2), self.nring[i] + 1, C + C * i + c))
+                clr.append((off + c * (self.nring[i] + 2), self.nring[i] + 1, C + C * i + c, bs))
         assert len(clr) == self.nclr
         put(al["CLR"], [x for r in clr for x in r])
         put(al["DRIVE_TAB"], [nam_pack.f2b(10.0 ** ((step - 50) * 0.4 / 20)) for step in range(101)])
@@ -389,8 +439,9 @@ class Layout:
                          (self.wch[j] + TCB_II) & 0x7FFFF, len(grp), 0]
         put(al["JOBS"], jobs)
         # DDR2: the tone stack's table
-        put(self.eq_tab, nam_lite.eq_table())
+        put(self.eq_tab, eq_table_midq() if MIDQ else nam_lite.eq_table())
         put(self.stomp_gain, [nam_pack.f2b(10.0 ** (nam_lite.STOMP_DBU / 20))])
+        put(self.loud_gain, [nam_pack.f2b(10.0 ** ((nam_lite.LOUD_TARGET - nam_lite.LOUD_REF) / 20))])
         return mem
 
     def claims(self):
@@ -413,6 +464,8 @@ class Layout:
                 "X, IN": f"{self.v_x():#x}.. ({'Block 2' if self.xhi_b2 else 'Block 3'})",
                 "WBUF": f"{self.wbuf:#x}.. ({'Block 2' if self.wbuf_b2 else 'Block 3'})",
                 "slot words": self.slot_size, "sdram words needed": self.sdr_need,
+                "dm rings": f"layers {self.dml}, dm_words {self.dm_words:#x}",
+                "pm rings": f"layers {self.pml}, pm_words {self.pm_words:#x}",
                 "DDR2": f"{DDR2:#x}..{self.ddr2_to:#x}"}
 
 
@@ -554,6 +607,162 @@ NODMA = (("pump:\n", "pump:\n    RTS;                                // (nodma)\
          ("    R9 = POLLMAX;\nn_ew:", "    JUMP n_ewd;                         // (nodma)\n    R9 = POLLMAX;\nn_ew:"))
 
 
+# no-tone (the 4-knob NAM: no Bass/Mid/Treble/Presence knobs, so nothing writes DM(8..11, I0)):
+# the knob flags are cleared as usual, the knobs not read, and the four bands are left out of the
+# per-sample loop (32 instructions a sample: on the unit 0.5% of the DSP a block, 1.7% for three).
+# The check's reference leaves them out too (Pipe; flat bands would only turn -0.0 into +0.0).
+NO_TONE = False
+NOTONE = (("    DM(3, I0) = R0;\n    DM(S_EQDIRTY, I6) = R0;\n    I3 = I0;\n",
+           "    DM(3, I0) = R0;\n    DM(S_EQDIRTY, I6) = R0;\n    JUMP n_eqdone;                      // (no-tone)\n    I3 = I0;\n"),)
+NOTONE_BANDS = ("      DM(I0, M0) = F0;                  // into HIST; then the four bands",
+                "      DM(I4, M0) = F10, F4 = PM(I8, M9);    // (b0 of band 0 again: the buffers are circular)\n")
+
+
+def _no_bands(src):
+    """The per-sample loop without the four bands: from the line after the HIST store (and its
+    comment) to the last band's line; F0 goes on to the output unchanged."""
+    a = src.index(NOTONE_BANDS[0])
+    a = src.index("\n", src.index("\n", a) + 1) + 1          # past the store and the comment line
+    b = src.index(NOTONE_BANDS[1], a) + len(NOTONE_BANDS[1])
+    bands = [l for l in src[a:b].splitlines() if l.strip() and not l.strip().startswith("//")]
+    assert src.count(NOTONE_BANDS[1]) == 1 and len(bands) == 32 and src[a:b].count("PM(I8, M9)") == 20
+    return src[:a] + "      // (no-tone: no bands, F0 to the output)\n" + src[b:]
+
+
+# mid-sweep (the ten-knob build: Mid Freq and Q knobs): the Mid band is a
+# peak at the Mid Freq knob (DM(19, I0), a float in Hz) with the Q knob's Q (DM(20, I0), an int
+# 0..2), computed when a knob moves (mid_eq, cold code): sin and cos of w0 by series (w0 < 0.53 for
+# 4 kHz), A and 1/A from a 101-step table where the Mid band's EQ_TAB part was (EQ_TAB + 505), 1/a0
+# by RECIPS and three Newton steps (the unit's seed has 7 bits). Treble is a peak at 2.5 kHz (Q 0.7)
+# instead of the release's shelf (TREBLE), Bass a shelf at 150 Hz (BASS), and Presence's knob a High Cut
+# (HICUT, a low-pass; 10.0 off).
+MIDQ = False
+MID_HZ = (150.0, 3000.0)                 # the Mid Freq knob's range (clamped): from the Bass shelf's corner
+MID_Q = (0.7, 1.4, 2.8)                  # the Q knob's three values
+MID_OFF = 505
+W_PER_HZ = 2 * math.pi / 48000.0
+SIN_C = (-1.0 / 5040, 1.0 / 120, -1.0 / 6)
+COS_C = (1.0 / 40320, -1.0 / 720, 1.0 / 24, -0.5)
+MID_TEST = {(0.8, 0.3, 0.6, 0.2): (1800.0, 1), (0.3, 0.7, 0.45, 0.9): (120.0, 2), (0.5, 0.5, 0.5, 0.5): (650.0, 0)}
+
+
+TREBLE = ("peak", 2500.0)                # (mid-sweep) Treble a peak (Q 0.7), not a shelf: Presence alone above ~5 kHz
+HICUT = (2000.0, 20000.0)               # (mid-sweep) Presence's knob is High Cut: a low-pass (Q 0.707) from
+                                         # 2 kHz (step 0) to 20 kHz (step 99), log; step 100 (10.0) is off
+
+
+def hicut_coefficients(step, fs=48000.0):
+    """High Cut at knob step 0..100: RBJ low-pass, Butterworth Q, normalised (b0, b1, b2, -a1, -a2)."""
+    if step >= 100:
+        return [1.0, 0.0, 0.0, 0.0, 0.0]
+    f0 = HICUT[0] * (HICUT[1] / HICUT[0]) ** (step / 99)
+    w0 = 2 * math.pi * f0 / fs
+    c, al = math.cos(w0), math.sin(w0) / (2 * math.sqrt(0.5))
+    a0 = 1 + al
+    return [(1 - c) / 2 / a0, (1 - c) / a0, (1 - c) / 2 / a0, 2 * c / a0, -(1 - al) / a0]
+
+
+BASS = ("low", 150.0)                    # (mid-sweep) Bass a shelf at 150 Hz (the release's 100 Hz is mostly below a guitar cab)
+
+
+def eq_table_midq():
+    """EQ_TAB of the mid-sweep kernel: Bass a shelf at 150 Hz, Treble a peak at 2.5 kHz, the fourth
+    band (the release's Presence) High Cut, the Mid band's part holding mid_table()."""
+    tab = nam_lite.eq_table()
+    tab[0: 505] = [nam_pack.f2b(x) for step in range(101)
+                   for x in nam_lite.eq_coefficients(*BASS, (step - 50) * 0.24)]
+    tab[MID_OFF: MID_OFF + 205] = mid_table()
+    tab[2 * 505: 3 * 505] = [nam_pack.f2b(x) for step in range(101)
+                             for x in nam_lite.eq_coefficients(*TREBLE, (step - 50) * 0.24)]
+    tab[3 * 505: 4 * 505] = [nam_pack.f2b(x) for step in range(101) for x in hicut_coefficients(step)]
+    return tab
+
+
+def _lit(x):
+    """x as a float32 literal sasm turns into exactly that float32."""
+    return repr(f32(x))
+
+
+def mid_table():
+    """MID_TAB: per Mid step 0..100 A and 1/A (-12 .. +12 dB), then 0.5/Q per Q value."""
+    out = []
+    for step in range(101):
+        db = (step - 50) * 0.24
+        out += [nam_pack.f2b(10 ** (db / 40)), nam_pack.f2b(10 ** (-db / 40))]
+    return out + [nam_pack.f2b(0.5 / q) for q in MID_Q]
+
+
+def mid_coefficients(k, hz, q):
+    """mid_eq in float32, op for op: (b0, b1, b2, -a1, -a2)."""
+    tab = [ssim.b2f(v) for v in mid_table()]
+    step = min(100, max(0, int(f32(f32(f32(k) * 100.0) + 0.5))))
+    A, iA = tab[2 * step], tab[2 * step + 1]
+    hq = tab[202 + min(2, max(0, q))]
+    f = min(max(f32(hz), f32(MID_HZ[0])), f32(MID_HZ[1]))
+    w = f32(f * f32(W_PER_HZ))
+    w2 = f32(w * w)
+    sn = f32(w2 * f32(SIN_C[0]))
+    for c in SIN_C[1:]:
+        sn = f32(w2 * f32(sn + f32(c)))
+    sn = f32(w * f32(sn + 1.0))
+    cs = f32(w2 * f32(COS_C[0]))
+    for c in COS_C[1:]:
+        cs = f32(w2 * f32(cs + f32(c)))
+    cs = f32(cs + 1.0)
+    al = f32(sn * hq)
+    aA, adA = f32(al * A), f32(al * iA)
+    a0 = f32(1.0 + adA)
+    r = ssim.b2f(ssim.recips_hw(ssim.f2b(a0))) if ssim.RECIPS_HW else f32(1.0 / a0)
+    for _ in range(3):
+        r = f32(r * f32(2.0 - f32(a0 * r)))
+    b1 = f32(f32(cs * -2.0) * r)
+    return [f32(f32(1.0 + aA) * r), b1, f32(f32(1.0 - aA) * r), -b1, f32(f32(adA - 1.0) * r)]
+
+
+def _mid_src(src):
+    """The mid-sweep kernel: read the three Mid knobs before the band loop frees I0, then mid_eq."""
+    a = "    LCNTR = 4, DO n_eqk UNTIL LCE;\n"
+    b = "n_eqk: NOP;\nn_eqdone:\n"
+    assert src.count(a) == 1 and src.count(b) == 1
+    src = src.replace(a, "    R10 = DM(9, I0);                    // (mid-sweep) Mid, Mid Freq (Hz), Q (0..2)\n"
+                         "    R11 = DM(19, I0);\n    R12 = DM(20, I0);\n" + a)
+    src = src.replace(b, "n_eqk: NOP;\n    CALL mid_eq;                        // (mid-sweep) the Mid band\nn_eqdone:\n")
+    L = lambda x: _lit(x)
+    sub = [
+        "", "// ---- (mid-sweep) the Mid band: a peak at Mid Freq with Q, from F10 (Mid), F11 (Hz), R12 (Q)",
+        "mid_eq:",
+        "    F0 = 100.0;", "    F0 = F10 * F0;", "    F1 = 0.5;", "    F0 = F0 + F1;", "    R0 = TRUNC F0;",
+        "    R1 = 0;", "    R0 = MAX(R0, R1);", "    R1 = 100;", "    R0 = MIN(R0, R1);",
+        "    R0 = R0 + R0;", f"    R1 = EQ_TAB + {MID_OFF};", "    R0 = R0 + R1;", "    I2 = R0;",
+        "    F2 = DM(0, I2);                     // A", "    F3 = DM(1, I2);                     // 1/A",
+        "    R1 = 0;", "    R12 = MAX(R12, R1);", "    R1 = 2;", "    R12 = MIN(R12, R1);",
+        f"    R1 = EQ_TAB + {MID_OFF + 202};", "    R1 = R1 + R12;", "    I2 = R1;",
+        "    F4 = DM(0, I2);                     // 0.5/Q",
+        f"    F1 = {L(MID_HZ[0])};", "    F11 = MAX(F11, F1);", f"    F1 = {L(MID_HZ[1])};", "    F11 = MIN(F11, F1);",
+        f"    F1 = {L(W_PER_HZ)};", "    F5 = F11 * F1;                      // w0", "    F6 = F5 * F5;",
+        f"    F1 = {L(SIN_C[0])};", "    F7 = F6 * F1;"]
+    for c in SIN_C[1:]:
+        sub += [f"    F1 = {L(c)};", "    F7 = F7 + F1;", "    F7 = F6 * F7;"]
+    sub += ["    F1 = 1.0;", "    F7 = F7 + F1;", "    F7 = F5 * F7;                      // sin w0",
+            f"    F1 = {L(COS_C[0])};", "    F8 = F6 * F1;"]
+    for c in COS_C[1:]:
+        sub += [f"    F1 = {L(c)};", "    F8 = F8 + F1;", "    F8 = F6 * F8;"]
+    sub += ["    F1 = 1.0;", "    F8 = F8 + F1;                      // cos w0",
+            "    F7 = F7 * F4;                      // alpha", "    F9 = F7 * F2;                      // alpha A",
+            "    F10 = F7 * F3;                     // alpha / A", "    F11 = F1 + F10;                    // a0",
+            "    F12 = RECIPS F11;", "    F0 = 2.0;"]
+    for _ in range(3):
+        sub += ["    F13 = F11 * F12;", "    F13 = F0 - F13;", "    F12 = F12 * F13;"]
+    sub += ["    F13 = F1 + F9;", "    F13 = F13 * F12;                   // b0",
+            "    F0 = -2.0;", "    F8 = F8 * F0;", "    F8 = F8 * F12;                     // b1 (-a1 = -b1)",
+            "    F9 = F1 - F9;", "    F9 = F9 * F12;                     // b2",
+            "    F10 = F10 - F1;", "    F10 = F10 * F12;                   // -a2",
+            "    R0 = I6;", "    R1 = S_EQC + 5;", "    R0 = R0 + R1;", "    I2 = R0;",
+            "    DM(0, I2) = F13;", "    DM(1, I2) = F8;", "    DM(2, I2) = F9;", "    F8 = -F8;",
+            "    DM(3, I2) = F8;", "    DM(4, I2) = F10;", "    RTS;", ""]
+    return src + "\n".join(sub)
+
+
 def _variant(src, meter=False, nodma=False, prof=None):
     if prof:
         src = _prof(src, *prof)
@@ -563,10 +772,12 @@ def _variant(src, meter=False, nodma=False, prof=None):
         src = src.replace("// METER_EXIT\n", METER_POLLS_EXIT)
     elif meter:
         src = src.replace("// METER_ENTRY\n", METER_ENTRY).replace("// METER_EXIT\n", METER_EXIT)
-    for a, b in (NODMA if nodma else ()):
+    for a, b in (NODMA if nodma else ()) + (NOTONE if NO_TONE else ()):
         assert src.count(a) == 1, a
         src = src.replace(a, b)
-    return src
+    if MIDQ:
+        src = _mid_src(src)
+    return _no_bands(src) if NO_TONE else src
 
 
 def build(slots=3, backoff=BACKOFF_N, staging="b2", meter=False, nodma=False, prof=None, wbuf=None):
@@ -725,11 +936,15 @@ class Pipe:
         self.st = [[0.0, 0.0] for _ in range(4)]
 
     def knobs(self, knobs):
-        tab = nam_lite.eq_table()
+        tab = eq_table_midq() if MIDQ else nam_lite.eq_table()
         self.co = []
         for band, k in enumerate(knobs):
             i = min(100, max(0, int(f32(f32(f32(k) * 100.0) + 0.5))))
+            if band > 3:
+                break
             self.co.append([ssim.b2f(v) for v in tab[(band * 101 + i) * 5: (band * 101 + i) * 5 + 5]])
+        if MIDQ:
+            self.co[1] = mid_coefficients(knobs[1], knobs[4], knobs[5])
 
     def cut(self):
         self.mg = 0 if self.fresh else 17
@@ -752,7 +967,7 @@ class Pipe:
                 self.mr = (self.mr - 1) % HIST_N
             self.hist[self.hw] = ssim.f2b(x)
             self.hw = (self.hw + 1) % HIST_N
-            for (b0, b1, b2, na1, na2), z in zip(self.co, self.st):
+            for (b0, b1, b2, na1, na2), z in zip(() if NO_TONE else self.co, self.st):   # (no-tone: no bands)
                 y = f(f(b0 * x) + z[0])
                 z[0] = f(f(f(b1 * x) + f(na1 * y)) + z[1])
                 z[1] = f(f(b2 * x) + f(na2 * y))
@@ -784,7 +999,7 @@ MAX_STEADY = 33000                # instructions a steady block, at most (Kernel
 
 class Inst:
     """An instance as the stock graph makes one: its DM block (I0, 145 words zeroed,
-    DM(3) = 1), PM block (I8), call-list entry (I3) -> instance struct -> SDRAM block
+    DM(3) = 1, then dm_words - 145 stale words for the DM rings; odd I0s too), PM block (I8), call-list entry (I3) -> instance struct -> SDRAM block
     (stale: random words), and what it should play."""
 
     def __init__(self, rig, name, i0, i8, entry, sdram, sdram_words):
@@ -792,9 +1007,13 @@ class Inst:
         sim = rig.sim
         for k in range(145):
             sim.wr(i0 + k, 0)
+        for k in range(145, max(145, rig.lay.dm_words)):   # the DM rings' words: stale
+            sim.dm[i0 + k] = rig.rnd.getrandbits(32)
         sim.wr(i0 + 3, 1)
         for k in range(13):
             sim.wr(i8 + k, 0)
+        for k in range(13, max(13, rig.lay.pm_words)):   # the PM rings' words: stale
+            sim.dm[i8 + k] = rig.rnd.getrandbits(32)
         sim.wr(entry + 2, entry + 0x10)
         sim.wr(entry + 0x10 + 6, sdram)
         sim.wr(entry + 0x10 + 7, sdram + sdram_words)
@@ -820,9 +1039,14 @@ class Inst:
             self.model = model
             sim.wr(self.i0 + 7, model if isinstance(model, int) else ssim.f2b(model))
         if eq is not None:
+            if MIDQ and len(eq) == 4:       # (mid-sweep: Mid Freq and Q with them)
+                eq = tuple(eq) + MID_TEST.get(tuple(eq), (650.0, 0))
             self.eq = eq
-            for j, k in enumerate(eq):
+            for j, k in enumerate(eq[:4]):
                 sim.wr(self.i0 + 8 + j, ssim.f2b(k))
+            if MIDQ:
+                sim.wr(self.i0 + 19, ssim.f2b(eq[4]))
+                sim.wr(self.i0 + 20, eq[5])
         sim.wr(self.i0 + 3, 1)
 
     def call(self, block, label):
@@ -856,7 +1080,7 @@ class Rig:
 
     def inst(self, name, k):
         """Instance k (0..7): blocks far apart, an SDRAM block of the manifest's size."""
-        return Inst(self, name, 0xB3000 + 0x400 * k, 0x91000 + 0x200 * k, 0xB6000 + 0x40 * k,
+        return Inst(self, name, 0xB3000 + 0x400 * k + (k & 1), 0x91000 + 0x200 * k + (k & 1), 0xB6000 + 0x40 * k,
                     0x400000 + 0x10000 * k, self.lay.sdram_words())
 
     def call(self, inst, block, label):
@@ -980,10 +1204,13 @@ class KernelCheck:
         sim = self.rig.sim
         # each slot model's capture at its own input level (IR word 5): the kernel trims
         # each block's input by STOMP_DBU - that; the test model in slot 1 (no level) by nothing
+        # and at its own loudness (IR word 6): the kernel scales its head's output by
+        # 10^((LOUD_TARGET - loudness)/20); slots 1 and 9 (none) by nothing
         self.dbu = {id(self.w): None, id(self.w2): 15.0, id(self.w3): 6.0, id(self.w4): None}
+        self.loud = {id(self.w2): -12.0, id(self.w3): -30.0}
         set_ir(sim, 1, nam_lite.ir_samples(self.w, None))
-        set_ir(sim, 3, nam_lite.ir_samples(self.w2, 15.0))
-        set_ir(sim, 7, nam_lite.ir_samples(self.w3, 6.0))
+        set_ir(sim, 3, nam_lite.ir_samples(self.w2, 15.0, -12.0))
+        set_ir(sim, 7, nam_lite.ir_samples(self.w3, 6.0, -30.0))
         set_ir(sim, 9, nam_lite.ir_samples(self.w4, None))
         cab = [ssim.f2b(rnd.uniform(-1, 1) * math.exp(-k / 300)) for k in range(2048)]
         set_ir(sim, 5, cab)
@@ -1012,9 +1239,12 @@ class KernelCheck:
         w from the silence state on sig, fading in."""
         inst.pipe.cut()
         self.expect(inst, sig[0], f"{label} (load)", None, kind="load")
-        inst.player = Player(inst, w, sig[1:], nam_lite.input_trim(self.dbu.get(id(w))))
+        g = nam_lite.loud_gain(self.loud.get(id(w)))
+        wl = list(w[:-1]) + [f32(f32(w[-1]) * g)] if g != 1.0 else w   # the head's scale x its gain
+        inst.player = Player(inst, wl, sig[1:], nam_lite.input_trim(self.dbu.get(id(w))))
         inst.sig = sig[1:]
-        inst.pipe.knobs(inst.eq)
+        if not NO_TONE:                  # (no-tone: the kernel never reads the knobs, the stack stays flat)
+            inst.pipe.knobs(inst.eq)
 
     def play(self, inst, label, n=1):
         for _ in range(n):
@@ -1254,6 +1484,15 @@ def main():
             sys.exit(f"{src[0]}: {c} channels, NAM A2 Lite has {C}")
     else:
         w = nam_lite.placeholder()
+    global NO_TONE
+    NO_TONE = "--no-tone" in args
+    global MIDQ
+    MIDQ = "--mid-sweep" in args
+    if MIDQ and NO_TONE:
+        sys.exit("--mid-sweep needs the tone stack (not --no-tone)")
+    if "--effects" in args:
+        global IR_FLAG, IR_TOP
+        IR_FLAG, IR_TOP = IR_EFFECTS
     asm, lay = build(slots, staging=opt("--staging") or "b2")
     if "-o" in sys.argv:
         open(sys.argv[sys.argv.index("-o") + 1], "w").write(asm)
