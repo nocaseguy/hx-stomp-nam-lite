@@ -1,12 +1,6 @@
-"""DSP meter: each block in the Edit view shows its share of the DSP in per cent, and the top right corner the blocks' total (DSP Disp);
+"""DSP meter: each block in the Edit view shows its share of the DSP in per cent, and the top right corner the blocks' total as used/75;
 the model browser shows each listed model's share between its icon and name."""
-from features import Setting
-
 FLAG = 'HX_DSP_METER'
-TITLE = 'DSP Display'
-SETTINGS = (
-    Setting('disp', b'DSP\nDisp', (b'Used/All', b'Free', b'Used%')),     # a value shows 8 characters, on one line
-)
 
 EDIT_PAINT_LIT, EDIT_PAINT = 0x28d96da0, 0x28dc27f9     # the Edit view top half's paint function (block slots), as registered
 BROWSER_PAINT_LIT, BROWSER_PAINT = 0x28d96df0, 0x28dc4dd1   # the model browser's paint function, as registered

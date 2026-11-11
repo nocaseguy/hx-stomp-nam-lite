@@ -1,5 +1,5 @@
 """The M4 code tools/patch_menu.py generates, run in unicorn (tests/m4emu.py): the shared-hook stub and each kind of chain
-(function pointer, bl call, function entry) with two features on one site, customos_setting_get, the value text of CustomOS
+(function pointer, bl call, function entry) with two features on one site, hxtra_setting_get, the value text of HXtra
 settings, including values above a setting's max, and the HXtra page titles and icons."""
 import struct
 
@@ -79,11 +79,11 @@ IN_ORDER = [HANDLERS['a', 'before'], HANDLERS['b', 'before'], FN, HANDLERS['a', 
 
 
 def patch():
-    """A Patch over 32 KB of zeros mapped at BASE, without firmware (as in test_customos.py)."""
+    """A Patch over 32 KB of zeros mapped at BASE, without firmware (as in test_hxtra.py)."""
     p = pm.Patch.__new__(pm.Patch)
     p.e0, p.mods, p.ids = bytearray(0x10000), [], {}
     p.segs = [(0, 0, 0x8000, BASE, 0x8000)] * 7
-    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'CustomOS', [], {}
+    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'HXtra', [], {}
     return p
 
 
@@ -168,11 +168,11 @@ def setting_get(stored):
 @pytest.mark.parametrize('stored, value', [(UNSET, 2), (0, 0), (3, 3), (4, 4), (5, 2), (255, 2), (0xffffffff, 2)])
 def test_setting_get_returns_the_default_when_unset_or_above_max(m4emu, tmp_path, stored, value):
     src = tmp_path / 'get.s'
-    src.write_text('.syntax unified\n.thumb\n.include "customos.inc"\nCUSTOMOS_SETTING_GET\n')
+    src.write_text('.syntax unified\n.thumb\n.include "hxtra.inc"\nHXTRA_SETTING_GET\n')
     code, sym = m4emu.assemble(str(src), [], {})
     m = m4emu.M4(code, CAVE)
     m.stub(pm.GET_VALUE, setting_get(stored))
-    assert m.call(CAVE + sym['customos_setting_get'], 104, 4, 2) == value
+    assert m.call(CAVE + sym['hxtra_setting_get'], 104, 4, 2) == value
     assert [args[0] for args in m.calls(pm.GET_VALUE)] == [104]
 
 
@@ -245,7 +245,7 @@ def test_value_text_leaves_other_ids_to_the_stock_function(m4emu):
 
 
 TITLES, VIEW, STOCK_NAME = 0x28e90000, 0x28e91000, 0x28e92000
-PAGE_TITLES = (b'BPM Display', b'Long Press', b'Long Press')
+PAGE_TITLES = (b'BPM Display', b'Two Pages', b'Two Pages')
 
 
 def title_fn(m4emu):

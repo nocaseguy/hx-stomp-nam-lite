@@ -1,13 +1,13 @@
 @ dsp_meter.s - the per-block DSP usage meter: each block in the Edit view's signal-flow row shows its share of the DSP in per cent, in black,
-@ and the top right corner shows their sum against what blocks may use (90% less the firmware's fixed 15%), as Global Settings > CustomOS > DSP Disp asks,
+@ and the top right corner shows their sum against what blocks may use (90% less the firmware's fixed 15%), as used/75,
 @ in a text widget of our own on the block title's baseline.
 @ The Edit view's top half (0x281282f8) has eight block slots, image widgets at view+0x4a4+0x24k, hidden when empty.
 @ DSP costs are the firmware's own, in hundredths of a per cent (the preset total adds 1500 and must stay within 9000).
-@ The model browser (0x281299d0) lists five models a page, each with its category's icon: dsp_browser centres each model's cost in white between its icon and name.
+@ The model browser (0x281299d0) lists five models a page, each with its category's icon: dsp_browser centres each model's cost in white between its icon and name,
+@ and shows the total where the Edit view does.
 @ tools/features/dsp_meter.py chains dsp_paint after the Edit view top half's stock paint and dsp_browser after the browser's; patch_menu.py assembles this at build time.
 .syntax unified
 .thumb
-.include "customos.inc"
 .equ BUDGET, 75                     @ per cent of the DSP blocks may use: the preset limit 9000 less its fixed 1500, in hundredths
 .equ TOTAL_RIGHT, 316
 .equ TOTAL_TOP, 228                 @ the title's baseline (its top 0xea less ink row 22) plus this font's ink row 16
@@ -15,7 +15,7 @@
 .thumb_func
 dsp_paint:                          @ r0 the framebuffer, r1 the Edit view's top half, after its stock paint
     push {r4-r7, lr}
-    sub sp, #44                     @ 0 the eight slots' DSP costs (-1 for none), 32 the blocks' sum in per cent (-1 for none), 36 DSP Disp
+    sub sp, #44                     @ 0 the eight slots' DSP costs (-1 for none), 32 the blocks' sum in per cent (-1 for none)
     mov r4, r0
     mov r5, r1
     movs r6, #0
@@ -46,32 +46,12 @@ first_row:
     adds r6, #1
     cmp r6, #8
     bne cost
-    movs r6, #0
-    str r6, [sp, #32]
-sum:                                @ each block rounded as shown, so the shown numbers add up to the sum
-    mov r0, r6
-    bl cost_of
-    cmp r0, #0
-    blt summed
-    adds r0, #50
-    movs r2, #100
-    udiv r0, r0, r2
-    ldr r1, [sp, #32]
-    add r1, r0
-    str r1, [sp, #32]
-summed:
-    adds r6, #1
-    cmp r6, #16
-    bne sum
+    bl sum_blocks
+    str r0, [sp, #32]
     movs r0, #0
     ldr r3, =0x28e0785d
     blx r3
 costed:
-    movs r0, #SETTING_DSP_METER_DISP
-    movs r1, #SETTING_DSP_METER_DISP_MAX
-    movs r2, #SETTING_DSP_METER_DISP_DEFAULT
-    bl customos_setting_get
-    str r0, [sp, #36]
     ldr r3, =0x28e24971             @ the widget lock
     blx r3
     addw r5, r5, #0x4a4
@@ -96,7 +76,6 @@ next:
     cmp r6, #8
     bne slot
     ldr r0, [sp, #32]
-    ldr r1, [sp, #36]
     bl total
     ldr r3, =0x28e24ae9
     blx r3
@@ -113,20 +92,22 @@ next:
 .thumb_func
 dsp_browser:                        @ r0 the framebuffer, r1 the model browser, after its stock paint
     push {r4-r8, lr}
-    sub sp, #8                      @ 0 the browser level, 4 a model's browser item, then its cost
+    sub sp, #16                     @ 0 the browser level, 4 a model's browser item, then its cost, 8 the blocks' sum
     mov r4, r0
     mov r5, r1
-    ldrb r2, [r1, #0x40]
+    bl blocks_total
+    str r0, [sp, #8]
+    ldrb r2, [r5, #0x40]
     cmp r2, #MODELS
     beq models
+    ldr r3, =0x28e24971
+    blx r3
     adr.w r3, drawn                 @ no widget covers the labels, so leaving the model list must wipe them
     ldr r2, [r3]
     cmp r2, #0
-    beq browser_out
+    beq browser_total
     movs r2, #0
     str r2, [r3]
-    ldr r3, =0x28e24971
-    blx r3
     movs r8, #0
 wipe_all:
     mov r0, r8
@@ -137,7 +118,7 @@ wipe_all:
     add r8, r8, #1
     cmp r8, #ROWS
     bne wipe_all
-    b browser_unlock
+    b browser_total
 models:
     adr.w r3, drawn
     movs r2, #1
@@ -196,12 +177,13 @@ next_item:
     add r8, r8, #1
     cmp r8, #ROWS
     bne item
-browser_unlock:
+browser_total:                      @ in the Edit view's corner, which the browser leaves free
+    ldr r0, [sp, #8]
+    bl total
     ldr r3, =0x28e24ae9
     blx r3
-browser_out:
     movs r0, #0
-    add sp, #8
+    add sp, #16
     pop {r4-r8, pc}
 
 edge:                               @ r0 a browser row, r5 the browser -> r0 the x just right of its icon, within 0..NAMES_X - 1
@@ -270,10 +252,9 @@ label:                              @ r0 a browser row, r1 a number 0..999, r2 i
     add sp, #12
     pop {r5, r6, pc}
 
-total:                              @ r0 the blocks' sum in per cent (-1 for none), r1 DSP Disp (Used/All, Free, Used%), r4 the framebuffer
+total:                              @ r0 the blocks' sum in per cent (-1 for none), r4 the framebuffer
     push {r3-r7, lr}                @ under the widget lock
     mov r6, r0
-    mov r5, r1
     adr.w r7, total_widget
     adr.w r0, total_made
     ldrb r1, [r0]
@@ -306,32 +287,13 @@ made:
     cmp r6, #0
     blt show                        @ no DSP model: hidden
     adr.w r1, total_text
-    cmp r5, #2
-    bhs percent
     mov r0, r6
-    cbz r5, show_used
-    rsbs r0, r6, #BUDGET            @ 1: Free
-    it lt
-    movlt r0, #0
-    bl digits
-    b shown
-show_used:                          @ 0: Used/All
     bl digits
     movs r2, #'/'
     strb r2, [r0], #1
     mov r1, r0
     movs r0, #BUDGET
     bl digits
-    b shown
-percent:                            @ 2: Used%, of the budget
-    movs r0, #200
-    mul r0, r6, r0
-    adds r0, #BUDGET
-    movs r2, #BUDGET * 2
-    udiv r0, r0, r2
-    bl digits
-    movs r2, #'%'
-    strb r2, [r0], #1
 shown:
     movs r2, #0
     strb r2, [r0]
@@ -356,6 +318,44 @@ show:
     ldr r3, =0x28e24c31             @ draw(fb, fb, widget)
     blx r3
     pop {r3-r7, pc}
+
+blocks_total:                       @ -> r0 the blocks' sum in per cent, or -1 with no DSP model; takes and releases the DSP model lock
+    push {r3, r4, r7, lr}
+    ldr r7, =0x28449e78
+    ldr r7, [r7]
+    mvn r4, #0
+    cbz r7, blocks_none
+    movs r0, #0
+    ldr r3, =0x28e07845
+    blx r3
+    bl sum_blocks
+    mov r4, r0
+    movs r0, #0
+    ldr r3, =0x28e0785d
+    blx r3
+blocks_none:
+    mov r0, r4
+    pop {r3, r4, r7, pc}
+
+sum_blocks:                         @ r7 the DSP model, under its lock -> r0 the blocks' sum in per cent
+    push {r4-r6, lr}
+    movs r4, #0
+    movs r6, #0
+sum:                                @ each block rounded as shown, so the shown numbers add up to the sum
+    mov r0, r6
+    bl cost_of
+    cmp r0, #0
+    blt summed
+    adds r0, #50
+    movs r2, #100
+    udiv r0, r0, r2
+    add r4, r0
+summed:
+    adds r6, #1
+    cmp r6, #16
+    bne sum
+    mov r0, r4
+    pop {r4-r6, pc}
 
 cost_of:                            @ r0 a block record's index, r7 the DSP model -> r0 the block's cost (hundredths of a per cent), or -1
     movs r2, #0x54
@@ -521,7 +521,6 @@ put_out:
     add sp, #16
     pop {r5-r11, pc}
 
-CUSTOMOS_SETTING_GET
 .ltorg
 .balign 4
 style:                              @ the scale and colour put draws with

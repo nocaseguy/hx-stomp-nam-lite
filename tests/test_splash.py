@@ -95,11 +95,19 @@ def build(stock, env, cwd=None):
     return entries, [features.name(m) for m in on]
 
 
+def test_default_text_is_plain_ascii():
+    assert splash.TEXT == "HXtra" and all(" " <= c <= "~" for c in splash.TEXT)
+
+
 @pytest.mark.firmware
-def test_off_without_inputs(stock):
+def test_default_text_without_inputs(stock):
     entries, on = build(stock, {})
-    assert "splash" not in on and set(entries) == {0}
-    assert reader(entries[0])(splash.RENDER_FN, 6) == splash.RENDER_STOCK
+    assert "splash" in on and set(entries) == {0}
+    e0 = entries[0]
+    assert reader(e0)(splash.TEXT_SITE, len(splash.TEXT_STOCK)) == b"HXtra".ljust(len(splash.TEXT_STOCK), b"\0")
+    assert int.from_bytes(reader(e0)(splash.VERSION_LITERAL, 4), "little") == splash.TEXT_SITE + len("HXtra")
+    # no emoji: the line keeps its stock grey
+    assert int.from_bytes(reader(e0)(splash.TEXT_COLOUR_LITERAL, 4), "little") == splash.TEXT_COLOUR
 
 
 @pytest.mark.firmware
@@ -139,11 +147,11 @@ def test_full_screen(tmp_path, stock):
 
 @pytest.mark.firmware
 def test_text(stock):
-    entries, _ = build(stock, {"HX_SPLASH_TEXT": "CustomOS 3.80.0"})
+    entries, _ = build(stock, {"HX_SPLASH_TEXT": "HXtra 3.80.0"})
     assert set(entries) == {0}
     e0 = entries[0]
-    assert reader(e0)(splash.TEXT_SITE, len(splash.TEXT_STOCK)) == b"CustomOS 3.80.0".ljust(len(splash.TEXT_STOCK), b"\0")
-    assert int.from_bytes(reader(e0)(splash.VERSION_LITERAL, 4), "little") == splash.TEXT_SITE + len("CustomOS 3.80.0")
+    assert reader(e0)(splash.TEXT_SITE, len(splash.TEXT_STOCK)) == b"HXtra 3.80.0".ljust(len(splash.TEXT_STOCK), b"\0")
+    assert int.from_bytes(reader(e0)(splash.VERSION_LITERAL, 4), "little") == splash.TEXT_SITE + len("HXtra 3.80.0")
 
 
 @pytest.mark.firmware

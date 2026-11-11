@@ -30,7 +30,7 @@ A feature with no `ICON` gets `Icon_Displays`, the icon HXtra has shown since it
 
 | Image | Size | Index | Used for |
 | --- | --- | --- | --- |
-| `Icon_Displays` | 30×21 | 0x48 | HXtra pages with no `ICON` (DSP Display, Long Press) |
+| `Icon_Displays` | 30×21 | 0x48 | the pages of a feature with no `ICON` |
 | `Icon_Tempo` | 22×29 | 0x181 | BPM Display |
 | `Icon_DualIR` | 28×22 | 0x100 | Breathing Line |
 
