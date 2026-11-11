@@ -157,6 +157,7 @@ MOD = 0x28e60000
 SEGMENTS, NODES = 0x2812a594, 0x2812b000
 REDRAW, GET_VALUE, CLOCK, LOCK, UNLOCK, FILL = 0x28db8508, 0x28e1f844, 0x28da6458, 0x28e24970, 0x28e24ae8, 0x100017e8
 IDS = {'color': 0xd7, 'motion': 0xd8, 'speed': 0xd9}
+START_MS = 2000                     # the line starts this long after the first Home paint
 _code = {}
 
 
@@ -173,6 +174,7 @@ class Line:
         self.m.stub(FILL, lambda m: self.fills.append((m.reg('r0'), m.reg('r1'), m.reg('r2'), m.reg('r3'), *m.stack_args(3))))
         for k in range(4):
             self.segment(k, h=1)
+        self.set_data(6, START_MS + 1)
 
     def segment(self, k, h=1, visible=1):
         w = SEGMENTS + 0x1c * k
@@ -372,6 +374,18 @@ def test_tick_asks_for_a_repaint_every_25_ms_while_running(line):
     assert ticks(line, 100) == 0, 'no paint yet'
     line.paint(motion=3)
     assert ticks(line, 100) == 4
+
+
+def test_line_starts_2_s_after_the_first_home_paint(line):
+    """User decision: the BPM shows at 1 s and the line starts at 2 s, as both starting together glitched at boot."""
+    line.set_data(6, 0)
+    assert ticks(line, 3000) == 0, 'no Home paint yet'
+    assert line.paint(motion=3) == [] and line.data(0) == 0
+    assert ticks(line, START_MS - 1) == 0
+    assert line.paint(motion=3) == [], 'a later paint does not restart the count'
+    assert ticks(line, 1) == 1, 'a paint to start the line'
+    assert len(line.paint(motion=3)) == 80 and line.data(0) == 1
+    assert ticks(line, 25) == 1 and line.data(6) == START_MS + 1
 
 
 def test_tick_stops_once_the_home_view_stops_painting(line):

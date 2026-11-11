@@ -12,6 +12,7 @@
 .equ STRIPS_A_SEGMENT, 20
 .equ FRAME_MS, 25
 .equ HOME_GONE_MS, 1000             @ no Home paint for this long: another view is up, so no more repaint requests
+.equ START_MS, 2000                 @ after the first Home paint: a second after bpm.s shows, as both at once glitch at boot
 .equ CENTRE, 632                    @ the line's middle, strip 39.5, in 1/16 strips as every distance below
 .equ EYE_CORE, 4 * 16               @ Cylon's eye: full on this far either side of its centre
 .equ EYE_FRONT, 24                  @ and fading over this ahead of the core
@@ -23,6 +24,17 @@
 
 bl_tick:                            @ after the LED task's 1 ms sleep: a repaint every FRAME_MS while the line runs and the Home view is up
     adr.w r0, bl_data
+    ldr r1, [r0, #24]
+    cbz r1, bl_ticked
+    movw r2, #START_MS
+    cmp r1, r2
+    bhi bl_started
+    adds r1, #1
+    str r1, [r0, #24]
+    cmp r1, r2
+    bhi bl_redraw                   @ START_MS since the first Home paint: a paint to start the line
+    bx lr
+bl_started:
     ldr r1, [r0]
     cbz r1, bl_ticked
     ldr r1, [r0, #4]
@@ -37,6 +49,7 @@ bl_tick:                            @ after the LED task's 1 ms sleep: a repaint
     blo bl_frame
     movs r1, #0
     str r1, [r0, #8]
+bl_redraw:
     movs r0, #0
     movs r1, #1
     ldr r3, =0x28db8509             @ the redraw request the layout code ends with: (0, 1)
@@ -53,19 +66,29 @@ bl_paint:                           @ after the Home paint (framebuffer): the st
     adr.w r9, bl_data
     movs r0, #0
     str r0, [r9, #4]
+    ldr r0, [r9, #24]
+    cbnz r0, bl_booting
+    movs r0, #1
+    str r0, [r9, #24]
+bl_booting:
     movs r0, #SETTING_BREATHING_LINE_MOTION
     movs r1, #SETTING_BREATHING_LINE_MOTION_MAX
     movs r2, #SETTING_BREATHING_LINE_MOTION_DEFAULT
     bl hxtra_setting_get
     movs r6, r0
+    ldr r1, [r9, #24]
+    movw r2, #START_MS
+    cmp r1, r2
+    it ls
+    movls r6, #0                    @ too soon after boot: the line holds still, as at Type Off
 .if GR_SHOWN
     ldr r1, =GR_SHOWN               @ a compressor's meter shows: the line holds still, as at Type Off
     ldr r1, [r1]
     cmp r1, #0
     it ne
     movne r6, #0
-    cmp r6, #0
 .endif
+    cmp r6, #0
     bne bl_animate
     ldr r5, [r9]
     cmp r5, #1
@@ -458,7 +481,8 @@ bl_schemes:                         @ Color's three stops but Rainbow's; a plain
     .word 0x00ff70, 0x00b0ff, 0x9a00ff  @ Aurora: green, sky blue, violet
     .word 0xff00d0, 0x5000ff, 0x00f0ff  @ Neon: magenta, indigo, cyan
 bl_data:                            @ 0 running (0 no, 1 yes, 2 one more paint for the stock line), 4 ms since the last Home paint,
-    .word 0, 0, 0, 0, 0, 0          @ 8 ms into the frame, 12 the clock at the last paint (µs), 16 the phase (2^32 a cycle), 20 cycles
+    .word 0, 0, 0, 0, 0, 0, 0       @ 8 ms into the frame, 12 the clock at the last paint (µs), 16 the phase (2^32 a cycle), 20 cycles,
+                                    @ 24 1 + ms since the first Home paint, up to START_MS + 1 (0 before it)
 bl_sine:                            @ 128 + 127.5 sin(2 pi i / 256), rounded
     .byte 128, 131, 134, 137, 140, 143, 146, 149, 152, 155, 158, 162, 165, 167, 170, 173
     .byte 176, 179, 182, 185, 188, 190, 193, 196, 198, 201, 203, 206, 208, 211, 213, 215
