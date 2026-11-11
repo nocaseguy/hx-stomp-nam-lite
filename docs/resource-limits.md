@@ -16,8 +16,8 @@ The HX Stomp has two processors. The **M4** (LPC4350, the CPU) runs the screen, 
 | --- | --- | --- | --- |
 | SHARC internal RAM | **568 words** (NAM, 3 slots); 2,720 (2 slots) | DSP code, DSP state | verified offline |
 | Preset model IDs (1..832) | **8** | each new model | verified offline |
-| Entry 2 partition (DSP boot stream, 512 KiB) | **9.5 KB** (NAM build) | DSP code and tables | verified offline |
-| Entry 3 partition (model database) | **53 KB** | models (~1.8 KB), knobs (~1 KB per model) | verified offline |
+| Entry 2 partition (DSP boot stream, 512 KiB) | **9.5 KB** (NAM build); **2.3 KB** with `HX_GR=1 HX_CLICK=1` | DSP code and tables | verified offline |
+| Entry 3 (model database) | **under 11 KB** past the default build's `0xf0d00` bytes: by `0xf3888` the unit drops every amp and preamp (the partition itself has 53 KB) | models (~1.8 KB), knobs (~1 KB per model) | verified on unit |
 | Blob 0 buffer (DSP composite library) | 88,551 words (~27 more cloned composites) | models | verified offline |
 | DSP time per preset | M4 admits up to 90%; 15% always taken | blocks in a preset | verified offline |
 | M4 code space (segment 6) | **1.73 MB** before the RAM-run hook at `0x29000000`; ~3.1 MB installed (4 MiB image cap) | caves, relocated tables | verified offline |
@@ -39,7 +39,7 @@ The HX Stomp has two processors. The **M4** (LPC4350, the CPU) runs the screen, 
 
 - Stock fills internal Blocks 0 (`0x92000..0x9e000`) and 1 (`0xb2000..0xbe000`). It leaves only Block 2's tail (`0xc7674..0xc8000`, 2,444 words) and Block 3 above `0xe4842` (14,270 words).
 - NAM takes those gaps: 13 words are left in Block 2. Block 3 has 555 words left at 3 slots and 2,707 at 2.
-- **The GR meter's DSP side** (`frame_probe.asm`: 600 instructions + 336 words) is loaded at the NAM kernel's own addresses (`0xc4ef8` / `0xe4850`). `build.py` builds one or the other, so **a GR build has no NAM kernel**. With NAM at 2 slots, the GR code fits in Block 3.
+- **The GR meter's DSP side** (`frame_probe.asm`: 600 instructions + 336 words) sits in Block 3 right above NAM's slots, so `HX_GR=1` builds NAM with two slots (`build.py` `GR_SLOTS`); `patch_comp.dsp_place()` puts it there and fails the build if it reaches the Metronome's kernel. About 1,070 words stay free between them.
 - DDR2 (external RAM) is plentiful. Heap 4 is `0x328000..0xed7000` (12.2M words; decoded by hand from VISA immediates near Entry 2 word 41908). The other regions are listed in `patch_amp.py` (`HEAP6_MOVED`, `SHARC_BLOB0_*`, `SLOT_SDRAM`).
 
 ### Models [verified offline]

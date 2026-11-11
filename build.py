@@ -10,7 +10,7 @@ The input is Line 6's own firmware file for your unit, version 3.80.0
 repository: the build reads it, adds NAM A2 Lite and writes a new .hxf
 (default build/<unit>_v3.80.0_HXtra.hxf) for Line 6 Updater.
 
-NAM A2 Lite runs as up to three blocks at once, each playing its own capture
+NAM A2 Lite runs as up to three blocks at once (two with HX_GR=1), each playing its own capture
 from a User IR slot. The block's title shows the selected IR's name.
 Amp > NAM > NAM A2 Lite, ten knobs: Input, Treble, Output, Polarity, Bass,
 Mid, Model, Mid Freq, Q, High Cut (on the HX Effects: Distortion > Mono). The XL and HX Effects builds
@@ -25,7 +25,8 @@ Steps:
   3. tools/patch_amp.py patch: the kernel into the SHARC boot stream
      (HX Stomp only, first: tools/patch_menu.py, the HXtra features of tools/features; --splash, --splash-fit,
      --splash-text and --splash-glyph are the splash feature's HX_SPLASH, HX_SPLASH_FIT, HX_SPLASH_TEXT and HX_SPLASH_GLYPHS;
-     with HX_CLICK=1, then tools/patch_click.py: the Metronome block)
+     with HX_CLICK=1, then tools/patch_click.py: the Metronome block; with HX_GR=1, last,
+     tools/patch_comp.py: the GR meter's compressor knobs and DSP code)
   4. tools/l6ia_verify.py: every checksum of the result
   5. tools/hxf.py pack: the .hxf
 """
@@ -54,6 +55,7 @@ STOCK_MD5 = {
 KERNEL = {"HX_Stomp": ["tools/sharc/nam_multi.py", "--mid-sweep"],
           "HX_Stomp_XL": ["tools/sharc/nam_multi.py", "--mid-sweep"],
           "HX_Effects": ["tools/sharc/nam_multi.py", "--mid-sweep", "--effects"]}
+GR_SLOTS = ["--slots", "2"]     # NAM's third slot is the room the GR meter's DSP code takes (tools/patch_comp.py)
 NAM_EQ = [
     ["remove-model", "--preset-id", "555"],
     ["add-fx-model", "--knobs", "eq", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite",
@@ -64,6 +66,12 @@ NAM_EQ = [
 ]
 STEPS = {"HX_Stomp": NAM_EQ, "HX_Stomp_XL": NAM_EQ, "HX_Effects": [["effects-eq"]]}
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def kernel(unit, gr=None):
+    """KERNEL[unit], with GR_SLOTS on an HX Stomp build with the GR meter (gr, else HX_GR)."""
+    gr = os.environ.get("HX_GR") if gr is None else gr
+    return KERNEL[unit] + (GR_SLOTS if gr and unit == "HX_Stomp" else [])
 
 
 def run(*args):
@@ -110,11 +118,7 @@ def main():
     titled = os.path.join(build, "nam_lite_title.l6ia")
     py = sys.executable
 
-    probe = os.environ.get("HX_FRAMEPROBE") and unit == "HX_Stomp"
-    if probe:
-        asm = os.path.join(HERE, "src", "sharc", "frame_probe.asm")
-    else:
-        run(py, *KERNEL[unit], "-o", asm, *([] if "--no-check" in argv else ["--check"]))
+    run(py, *kernel(unit), "-o", asm, *([] if "--no-check" in argv else ["--check"]))
     src = stock
     for k, step in enumerate(STEPS[unit]):
         dst = os.path.join(build, f"nam_lite_{k}.l6ia")
@@ -126,9 +130,7 @@ def main():
     if unit == "HX_Stomp":
         run(py, "tools/patch_menu.py", base, titled, "--cwd", os.getcwd())
         os.replace(titled, base)
-    wrap = ["--wrap-prim", "0x271a:0x8d9c9", "--wrap-prim", "0x2719:0x8d342",
-                                  "--wrap-prim", "0x2710:0x8d342"] if probe else []
-    run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm, *wrap)
+    run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm)
     if os.environ.get("HX_CLICK") and unit == "HX_Stomp":
         run(py, "tools/patch_click.py", image, titled)
         os.replace(titled, image)

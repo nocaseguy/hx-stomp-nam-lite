@@ -17,6 +17,9 @@ Goal: a completely custom firmware for the HX Stomp, built in small steps, each 
 - The repo is a **binary patcher**: `build.py` reads the user's stock `.hxf` and writes `build/HX_Stomp_v3.80.0_HXtra.hxf`.
 - Test on the unit by running the image from RAM (nothing is written to the Stomp; power-cycle restores the installed firmware). See [RAM_RUN.md](RAM_RUN.md).
 - **A RAM run keeps the application's eMMC writes in SDRAM** (`hxf_ram.py run` prints `writes: ram`, the default): Global Settings, presets and IRs changed during the run are gone at power-off, so a value set in a RAM run never reaches the next boot. To test anything that must survive a power-cycle (a setting's persistence), run with `hxf_ram.py run <build> --stock <stock .hxf> --writes pass`: writes outside the firmware overlay then go to the real eMMC (they change the unit's real settings), while the firmware itself still runs from RAM. `hxboot` has no flag for it; run its steps by hand with `--writes pass` on the last one.
+- **`[!] the loader could not start the eMMC (status 0x10b): not checked` is harmless** [verified on unit]: every `hxboot` prints it, and the run still starts and reads presets normally. It means only that the loader skipped its own comparison of the eMMC with the stock file.
+- **Killing an `hx_ctl.py` session in the middle of a preset sweep leaves the front panel stuck** [verified on unit, 2026-11-11]: the Edit view's knob stops moving between blocks and every preset shows the same blocks, while USB still answers; a power-cycle clears it. Let a sweep finish, or close its session.
+- **An Entry 3 too large makes the unit drop every amp and preamp** [verified on unit, 2026-11-11]: every preset with an amp or preamp block loads with 0 blocks (46 of 46 on the dev unit; the other 44 load), and an amp placed alone into an empty preset over USB is dropped too. Bisected with `hx_ctl.py` preset sweeps: Entry 3 at `0xf0d00` bytes (the default build) loads amps; the same Entry 3 zero-padded to `0xf3888` does not, so it is the size, not the contents. The limit lies between the two; no constant in that range is in the M4 code. `HX_GR`'s knobs grew it to `0xf3888` (on main too, before `gr-with-nam`); `patch_comp.py` now puts the string section back in the stock tables' dead place at `0x200`, which brings a GR build to `0xd9c88`; amp presets load again on the unit (image `efc35f01…`, `HX_GR=1 HX_CLICK=1 HX_DSP_METER=1`, 2026-11-11). An `HX_CLICK=1` build (no GR) is at `0xf10f0`, between the two: untested.
 - **Always build to `build/HX_Stomp_v3.80.0_HXtra.hxf`.** Earlier "freezes" were the user running a stale, differently named file. Tell the user the MD5 of what you built.
 - The user hates repeated manual readings ("I cannot be providing reading after reading after reading"). Prefer making unknowns **runtime parameters** (Global Settings knobs) so one image can test several hypotheses.
 - Do not install anything on the user's machine. Do not commit or push unless told. Do not add attribution lines to commits.
@@ -317,7 +320,7 @@ The list a block's model is chosen from. Found by disassembly; the per-model cos
 
 | Tool | Purpose |
 | --- | --- |
-| `build.py` | Whole pipeline. `HX_FRAMEPROBE=1` swaps in `src/sharc/frame_probe.asm` and wraps the compressor cores `0x271a` and `0x2719`. |
+| `build.py` | Whole pipeline. `HX_GR=1` builds NAM with two slots (`GR_SLOTS`) and runs `tools/patch_comp.py` last. |
 | `tools/l6ia.py`, `tools/l6ia_verify.py`, `tools/hxf.py` | Container parse/rebuild/verify/pack. |
 | `tools/patch_amp.py` | Add models, IR titles, SHARC kernel, `--wrap-prim`. |
 | `tools/patch_menu.py` | The feature categories of Global Settings and the engine that builds in the features of `tools/features/`. |
@@ -325,7 +328,7 @@ The list a block's model is chosen from. Found by disassembly; the per-model cos
 | `tools/image_store.py` | Reads the image store: Entry 7's image and font records, Entry 8's items. |
 | `tools/setting_ids.py` | The Global Settings IDs HXtra uses, one line each; `free` lists candidates. |
 | `tools/patch_divider.py` | Home divider 2 px green. |
-| `tools/patch_comp.py` | GR knobs on compressor models (`HX_GR=1` builds; after add-model and add-fx-model). |
+| `tools/patch_comp.py` | GR knobs on compressor models, and `src/sharc/frame_probe.asm` in Block 3 above NAM's two slots, wrapping the cores `0x271a`, `0x2719` and `0x2710` (`HX_GR=1` builds; after add-model and add-fx-model). |
 | `tools/patch_splash.py` | Boot pictures: a 320x181 or full-screen 320x240 PNG as is, any other picture converted with macOS `sips` (fill or fit), packed for the image store; `export` saves the picture an image has now. The feature that builds them in, with the text and the renderer hook, is `tools/features/splash.py` (`build.py --splash`, `--splash-fit`, `--splash-text`; `hxsplash <picture> ["text"]` in the author's shell builds and RAM-runs it). |
 | `tools/splash_emoji.py` | Emoji for the boot line: text split into emoji, an emoji's picture as a glyph of `hx21_regularFont`; used by `tools/features/splash.py`. |
 | `tools/splash_topo.py` | A 320x240 boot picture: neon contour lines of a seeded random terrain. |
@@ -333,7 +336,7 @@ The list a block's model is chosen from. Found by disassembly; the per-model cos
 | `tools/m4asm.py` | Assemble a Thumb-2 `.s` with Apple clang: its `.text` and symbols; refuses relocations. |
 | `tools/sharc/sasm.py`, `ssim.py` | SHARC assembler and simulator. |
 | `tools/hxf_ram.py`, `tools/ramboot/` | Run an image from RAM over USB. |
-| `src/sharc/frame_probe.asm` | DSP-side wrapper and frame-tail writer (test image). |
+| `src/sharc/frame_probe.asm` | DSP-side wrapper and frame-tail writer of the GR meter, beside the NAM kernel. |
 | `src/m4/gr_meter.s` | M4 receive hook, Home constructor and paint hooks: the ten-light GR meter and its Position, Direction and Thickness settings. |
 | `tools/gr_meter.hex` | Generated by `python3 tools/m4asm.py src/m4/gr_meter.s \| tail -1 > tools/gr_meter.hex`. |
 | `tools/features/dsp_meter.py`, `src/m4/dsp_meter.s` | The DSP meter: each block's DSP cost and the blocks' total in the Edit view (`HX_DSP_METER=1`). |
@@ -346,12 +349,10 @@ Build commands:
 ```sh
 # normal build
 python3 build.py HX_Stomp_v3.80.0_0x103966115.hxf
-# gain-reduction meter experiment
-HX_GR=1 HX_FRAMEPROBE=1 python3 build.py HX_Stomp_v3.80.0_0x103966115.hxf
+# gain-reduction meter (NAM keeps two blocks)
+HX_GR=1 python3 build.py HX_Stomp_v3.80.0_0x103966115.hxf
 # per-block DSP usage meter
 HX_DSP_METER=1 python3 build.py HX_Stomp_v3.80.0_0x103966115.hxf
-# word-probe experiment (shows frame words on screen)
-HX_PROBE=1 HX_FRAMEPROBE=1 python3 build.py HX_Stomp_v3.80.0_0x103966115.hxf
 # BPM on the Home screen
 HX_BPM=1 python3 build.py HX_Stomp_v3.80.0_0x103966115.hxf
 ```
@@ -441,7 +442,7 @@ The tempo at the top left of the Home screen and a beat dot, all **[verified on 
 
 ## Not yet done (when the user asks to commit the feature)
 
-- Remove or integrate the experiment switches (`HX_PROBE`, `HX_GR`, `HX_FRAMEPROBE`). GR knobs on the other compressor blocks; several compressors at once (now the last knob turned wins).
+- `HX_FRAMEPROBE` is folded into `HX_GR`, which keeps NAM at two blocks. GR knobs on the other compressor blocks; several compressors at once (now the last knob turned wins).
 - Update `README.md`, `tests/test_firmware.py` (`BUILT_MD5`), `web/firmware-worker.js` (`BUILT_MD5`, sources; it must also run `patch_divider.py`). The pins still match commit `07b38cc` (`3670f1662290098c3071e64aa25c88eb`), but the divider patch is already in the working-tree build, so the pin is stale there.
 - At the time this file was written, the divider patch, `m4asm.py`, the GR/probe sources, and the `patch_amp.py`/`patch_menu.py`/`build.py` changes were **uncommitted in the working tree** of the author's checkout. Check `git status` before assuming they exist.
 
