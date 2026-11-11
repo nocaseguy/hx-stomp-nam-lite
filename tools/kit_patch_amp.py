@@ -535,7 +535,7 @@ def _e0_vaddr_to_foff(segs, vaddr, length=4):
 
 
 def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=None, preset_id=None, dsp_cost=None,
-                     n_params=None, folder=None, fx=False):
+                     n_params=None, folder=None, fx=False, src_category=None):
     """Update the Cortex-M4 main application (Entry 0, HX Stomp or XL v3.80.0; addresses below are the Stomp's) for a new model:
       1. Static Model Table (823 x 12 B @ 0x28017994 -> 824 x 12 B):
          appends {new_name_idx, preset_id, 0, src_dsp_cost}, choosing a free
@@ -551,7 +551,9 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
          With `folder` (category, name), the model goes not into that category's
          lists but into a new browser folder (subcategory) of its own there, as
          Preamp's one-item "Mic": the category's subcategory count + 1, the name,
-         a one-item list (data only, no code changes).
+         a one-item list (data only, no code changes). With `src_category`, the folder
+         may be in another category: the source's item from src_category's lists goes
+         there instead (an effect under Looper keeps its own block kind).
       All relocated tables are appended to the end of seg[6] (at 0x28e3fadc+), which is
       unused SDRAM well below the bootloader's 0x29f00000 ceiling."""
     e0 = bytearray(e0)
@@ -660,7 +662,7 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
                 matched_item[14:40] = dname_bytes
                 struct.pack_into('<2I', matched_item, 40, 1, 0)
                 break
-        if matched_item is not None and folder and idx // 4 == folder[0]:
+        if matched_item is not None and folder and idx // 4 == (folder[0] if src_category is None else src_category):
             if btype_folder is None and c_idx == -1:
                 btype_folder = bytes(matched_item)
         elif matched_item is not None:
@@ -668,7 +670,7 @@ def add_model_entry0(e0, src_name_idx, new_name_idx, display_name, short_name=No
             reloc_lists.append((idx, idx // 4, idx % 4, lcnt + 1, bytes(lraw)))
     if folder:
         cat, fname = folder
-        assert btype_folder is not None, f'the source model is in no list of category {cat}'
+        assert btype_folder is not None, f'the source model is in no list of category {cat if src_category is None else src_category}'
         nsub = vu32(A.SUBCAT_CNT + 4 * cat)
         fbytes = fname.encode('latin1')[:25].ljust(26, b'\x00')
         have = [s for s in range(nsub) if vread(A.SUBCAT_NAMES + 104 * cat + 26 * s, 26) == fbytes]

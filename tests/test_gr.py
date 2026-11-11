@@ -323,7 +323,7 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
     'HX_GR': 'c4b19e70f5500e5e8b763951add88b38',
     'HX_GR HX_FRAMEPROBE': '036990f9e12e633e835326cadad63c91',
-    'HX_GR HX_CLICK': '2024b31e6e0c95ff8080deebd4714490',    # patch_click.py adds a model, which would drop knobs written before it
+    'HX_GR HX_CLICK': 'cc11ea7fbb974242a964027001e2c348',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
@@ -341,7 +341,8 @@ def test_gr_build(tmp_path, flags):
     r = subprocess.run([sys.executable, str(ROOT / 'build.py'), stock, '-o', str(out), '--no-check'],
                        capture_output=True, text=True, cwd=ROOT, env=env)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert 'ALL OK' in r.stdout and 'Entry 0: features gr, splash\n' in r.stdout
+    shown = 'gr, metronome, splash; Entry 7; Entry 8' if 'HX_CLICK' in flags else 'gr, splash'     # the Metronome's off icon
+    assert 'ALL OK' in r.stdout and f'Entry 0: features {shown}\n' in r.stdout
     assert r.stdout.count(': Mtr Position, Mtr Direction, Mtr Thickness on slots') == len(pc.COMP_MODELS)
     assert hashlib.md5(out.read_bytes()).hexdigest() == GR_BUILT_MD5[flags]
 

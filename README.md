@@ -21,17 +21,18 @@ The built image is `HX_Stomp_v3.80.0_HXtra.hxf`. NAM A2 Lite is the same block a
 
 ## Features
 
-Each feature is a module in `tools/features/`. They are off by default, and the build adds them when their switch is set (an environment variable, or a `build.py` option). Switches combine. Every feature here has run on an HX Stomp from RAM. 
+Each feature is a module in `tools/features/`; the Metronome's block itself, with its DSP code, is added by `tools/patch_click.py`. They are off by default, and the build adds them when their switch is set (an environment variable, or a `build.py` option). Switches combine. Every feature here has run on an HX Stomp from RAM. 
 
-| Feature | Switch | What it does |
-|---|---|---|
-| **Tuner** | `HX_TUNER=1` | Tuner Activation and Lock Tuner Settings, on a third page of the tuner's own settings. See [Tuner settings](#tuner-settings). |
-| **BPM** | `HX_BPM=1` | The tempo at the top left of the Home screen, and a beat dot that blinks with the TAP footswitch's ring. See [BPM](#bpm). |
-| **DSP meter** | `HX_DSP_METER=1` | Each block in the Edit view shows its share of the DSP in per cent, and the top right corner shows the blocks' total. In the model browser, each model shows the share it would take, and the total shows there too. See [DSP meter](#dsp-meter). |
-| **Breathing line** | `HX_BREATHING_LINE=1` | Just for fun: the line across the middle of the Home screen comes alive in the colours, motion and speed you pick (Breathe, Cylon, Comet, Heart, Sparkle). See [Breathing line](#breathing-line). |
-| **Long press** | `HX_LONG_PRESS=1` | In Stomp mode, hold a footswitch for 1 s for a second action: the tuner, FS4 or FS5, or a virtual footswitch FS6–FS10. A tap still toggles the switch's own blocks. See [Long press](#long-press). |
-| **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). |
-| **Boot screen** | `--splash`, `--splash-text` | The boot text reads "HXtra". Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). |
+| Feature | Switch | What it does | Where is it? |
+|---|---|---|---|
+| **Tuner** | `HX_TUNER=1` | Two more tuner settings: Tuner Activation (open the tuner with a press instead of a hold) and Lock Tuner Settings. See [Tuner settings](#tuner-settings). | The tuner's own settings, on a third page: open the tuner and page right past Trails, Offsets and String 6. |
+| **BPM** | `HX_BPM=1` | Shows the tempo, and a beat dot that blinks with the TAP footswitch's ring. See [BPM](#bpm). | Home screen: the tempo at the top left, the dot beside the preset number. Settings: Global Settings > BPM Display. |
+| **DSP meter** | `HX_DSP_METER=1` | Shows each block's share of the DSP in per cent and the blocks' total, and in the model browser, the share each model would take. See [DSP meter](#dsp-meter). | Edit view: on each block, the total at the top right. Model browser: between each model's icon and its name, the total at the top right. No settings. |
+| **Breathing line** | `HX_BREATHING_LINE=1` | Just for fun: the line comes alive in the colours, motion and speed you pick (Breathe, Cylon, Comet, Heart, Sparkle). See [Breathing line](#breathing-line). | Home screen: the line across the middle, between the signal flow and the knobs. Settings: Global Settings > Breathing Line. |
+| **Long press** | `HX_LONG_PRESS=1` | Hold a footswitch for 1 s for a second action: the tuner, FS4 or FS5, or a virtual footswitch FS6–FS10. A tap still toggles the switch's own blocks. See [Long press](#long-press). | FS1–FS5, in Stomp footswitch mode. Settings: Global Settings > Footswitches, pages 2 and 3 (FS1 Hold Function … FS5 Hold Function). |
+| **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). | The snapshot footswitches, with Footswitch Mode on Snapshot; in 4–6, the camera icon at the top right and the footswitch labels show the bank. No settings. |
+| **Metronome** | `HX_CLICK=1` | A block that plays a click on every beat of the tempo, with an optional accent on the downbeat. HX Stomp only. See [Metronome](#metronome). | Model browser: Looper > Metronome > Metronome. Its settings are the block's knobs: Time, Level, Accent and Thru. |
+| **Boot screen** | `--splash`, `--splash-text` | Your own boot picture and boot text, with emoji. Without them, the boot text reads "HXtra". See [Boot screen](#boot-screen-hx-stomp-only). | The screen at power-on, once the firmware starts. Set when you build: no settings on the HX Stomp. |
 
 ```sh
 HX_TUNER=1 HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
@@ -106,6 +107,20 @@ With Footswitch Mode on Snapshot, the three footswitches select snapshots 1–3 
 - **Saving:** a save keeps all six with the preset. Saving while in 4–6, you hear the matching snapshot of 1–3 for a moment, as the save writes 1–3 first.
 - **Stock firmware and HX Edit:** a preset saved with 4–6 still loads on a stock firmware, as snapshots 1–3, and the stock firmware drops 4–6 if it saves the preset again. HX Edit opens, exports and imports these presets, but its exports (`.hlx`) and backups (`.hxb`) hold snapshots 1–3 only. Snapshots 4–6 live on the HX Stomp.
 - **What else changes:** pressing the lit snapshot footswitch no longer does what Reselect Snapshot says. Next and previous snapshot, MIDI CC 69 and HX Edit's snapshot buttons work within the bank you're in.
+
+### Metronome
+
+A click track in time with the tempo, as a block: add it from the model browser, Looper > Metronome > Metronome, anywhere in the signal flow. It is a mono effect block, listed under Looper so it's easy to find; it isn't a looper. In the signal flow it is teal, lit when on and dim when off, and its icon is a metronome.
+
+| Knob | Values | What it does |
+|---|---|---|
+| **Time** | a note value, synced to the tempo (**1/4** by default), as a delay's Time | The beat: 100 ms to 8 s. |
+| **Level** | −60 … +6 dB (default **−14**) | The click's volume. |
+| **Accent** | **Off** (default), 2 … 12 | Every nth beat is a downbeat, a higher click (2 kHz instead of 1 kHz). |
+| **Thru** | Off, **On** (default) | On passes your signal with the click under it; Off gives the click alone. |
+
+- **The beat** starts when the block does, and a new tempo or Time counts from the last beat. Tapping the tempo doesn't yet move the beat onto your taps, and [BPM](#bpm)'s dot blinks with the TAP ring, not with the click.
+- **Presets** store the block as model 181, as the earlier builds that listed it under Modulation did, so presets made with them keep it.
 
 ### Boot screen (HX Stomp only)
 
