@@ -4,7 +4,7 @@ HXtra is a custom firmware for the Line 6 HX Stomp, built by patching the stock 
 
 ## 👉 [Get HXtra: the web setup page](https://wisemandenny.github.io/hxtra/web/)
 
-**[wisemandenny.github.io/hxtra](https://wisemandenny.github.io/hxtra/web/)** builds HXtra in your browser from your own Line 6 firmware file, with every feature, and walks you through installing it. Nothing is uploaded, and there is nothing to install. To build it yourself instead, see [Build](#build).
+**[wisemandenny.github.io/hxtra](https://wisemandenny.github.io/hxtra/web/)** builds HXtra in your browser from your own Line 6 firmware file, with every feature, and walks you through installing it. Nothing is uploaded, and you don't need to install anything on your computer. To build it yourself instead, see [Build](#build).
 
 This repository is a fork of [nocaseguy/hx-stomp-nam-lite](https://github.com/nocaseguy/hx-stomp-nam-lite), which runs **Neural Amp Modeler (NAM) A2 Lite** captures on the HX Stomp. That work is all still here. HXtra takes the same approach further, using the tools that taught the HX Stomp a new amp model to implement new functionality across the rest of the firmware. It grows in small steps, and each one is run on a real HX Stomp from RAM before it is kept.
 
