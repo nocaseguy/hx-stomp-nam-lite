@@ -1,7 +1,7 @@
 name: pages
 
-# Publishes the setup page (web/) for a release, with the files the in-browser build reads (tools/, src/m4/) in the
-# repository's own layout, and the release's m4cache.json (tools/release.py attaches it) at the root: the page is at /web/.
+# Publishes the setup page (web/) for a release, with the files the in-browser build reads (build.py, tools/, src/m4/,
+# src/sharc/: tests/test_web_build.py checks they cover web/firmware-worker.js's SOURCES) in the repository's own layout, and the release's m4cache.json (tools/release.py attaches it) at the root: the page is at /web/.
 # Only a release publishes it, so the page always matches a release, not whatever is on main.
 on:
   release:
@@ -37,8 +37,8 @@ jobs:
       - name: site
         run: |
           mkdir -p _site/src
-          cp -r web tools LICENSE NOTICE _site/
-          cp -r src/m4 _site/src/
+          cp -r web tools build.py LICENSE NOTICE _site/
+          cp -r src/m4 src/sharc _site/src/
           find _site -name __pycache__ -prune -exec rm -rf {} +
           gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p m4cache.json -D _site
           printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=web/"><title>HXtra Setup</title><a href="web/">HXtra Setup</a>\n' > _site/index.html
