@@ -374,6 +374,15 @@ def test_tick_asks_for_a_repaint_every_25_ms_while_running(line):
     assert ticks(line, 100) == 4
 
 
+def test_tick_counts_its_25_ms_from_any_home_paint(line):
+    """Another feature's paint (the BPM dot's) restarts the frame, so no two paints come closer than that."""
+    line.paint(motion=3)
+    assert ticks(line, 20) == 0
+    line.paint(motion=3)
+    assert ticks(line, 24) == 0
+    assert ticks(line, 1) == 1
+
+
 def test_tick_stops_once_the_home_view_stops_painting(line):
     line.paint(motion=3)
     assert ticks(line, 2000) == 40, 'a second of frames, then the Home view is taken to be gone'

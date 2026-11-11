@@ -7,7 +7,7 @@
 .include "hxtra.inc"
 .equ BPM_DOTS, 18                   @ rectangles: 9 a dot
 .equ BPM_DOT_TOP, 237               @ the dots' top (y counts up from the bottom)
-.equ PAINT_GAP, 10                  @ ms: a paint sooner can start before the last frame's copy into the next buffer ends, half-drawing the dot
+.equ PAINT_GAP, 20                  @ ms: two paints closer than about a screen refresh showed the dot half old, half new colour [verified on unit]
 .equ FS_FUNCTIONS, 0x28128a74       @ each footswitch's function, two bytes apart: 1 is TAP
 
 bpm_written:                        @ after the settings store's write (ID, value, how): the Home view only repaints on request

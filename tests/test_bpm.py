@@ -387,7 +387,7 @@ def test_tick_repaints_every_20_ms_for_the_first_1500_ms(m4):
     assert times == list(range(20, 1501, 20))
 
 
-def test_a_turn_soon_after_a_paint_repaints_10_ms_after_it(m4):
+def test_a_turn_soon_after_a_paint_repaints_20_ms_after_it(m4):
     """With the breathing line painting every 25 ms, the dot showed half lit, half dark on the unit, and only with the line on."""
     before(m4)
     painted(m4)
@@ -398,7 +398,7 @@ def test_a_turn_soon_after_a_paint_repaints_10_ms_after_it(m4):
         m4.call('bpm_tick')
         if m4.called(REDRAW):
             times.append(ms)
-    assert times == [10] and m4.data(4)[0] == 1
+    assert times == [20] and m4.data(4)[0] == 1
 
 
 def test_a_paint_in_between_drops_a_held_repaint(m4):

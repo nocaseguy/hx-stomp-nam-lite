@@ -53,6 +53,7 @@ bl_paint:                           @ after the Home paint (framebuffer): the st
     adr.w r9, bl_data
     movs r0, #0
     str r0, [r9, #4]
+    str r0, [r9, #8]                @ frames count from any Home paint: a line paint soon after the BPM's tore its dot [verified on unit]
     movs r0, #SETTING_BREATHING_LINE_MOTION
     movs r1, #SETTING_BREATHING_LINE_MOTION_MAX
     movs r2, #SETTING_BREATHING_LINE_MOTION_DEFAULT
