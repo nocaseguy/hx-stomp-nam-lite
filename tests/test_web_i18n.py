@@ -43,7 +43,8 @@ class _Keys(HTMLParser):
 
 def english():
     p = _Keys()
-    p.feed(PAGE[PAGE.index("<body>"):PAGE.index("<script")])
+    body = PAGE.index("<body>")
+    p.feed(PAGE[body:PAGE.index("<script", body)])
     en = dict(p.out)
     en.update(json.loads(PAGE.split("var EN = ")[1].split("};")[0] + "}"))
     return en

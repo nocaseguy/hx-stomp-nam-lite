@@ -2,6 +2,10 @@
 
 HXtra is a custom firmware for the Line 6 HX Stomp, built by patching the stock 3.80.0 firmware on your own computer.
 
+## 👉 [Get HXtra: the web setup page](https://wisemandenny.github.io/hxtra/web/)
+
+**[wisemandenny.github.io/hxtra](https://wisemandenny.github.io/hxtra/web/)** builds HXtra in your browser from your own Line 6 firmware file, with every feature, and walks you through installing it. Nothing is uploaded, and you don't need to install anything on your computer. To build it yourself instead, see [Build](#build).
+
 This repository is a fork of [nocaseguy/hx-stomp-nam-lite](https://github.com/nocaseguy/hx-stomp-nam-lite), which runs **Neural Amp Modeler (NAM) A2 Lite** captures on the HX Stomp. That work is all still here. HXtra takes the same approach further, using the tools that taught the HX Stomp a new amp model to implement new functionality across the rest of the firmware. It grows in small steps, and each one is run on a real HX Stomp from RAM before it is kept.
 
 > **Unofficial and experimental.** Not affiliated with, endorsed by or supported by Line 6 or Yamaha Guitar Group. Installing modified firmware is at your own risk and may void your warranty. Read [Install](#install) and [Recovery](#recovery) before you start.
@@ -21,7 +25,7 @@ The built image is `HX_Stomp_v3.80.0_HXtra.hxf`. NAM A2 Lite is the same block a
 
 ## Features
 
-Each feature is a module in `tools/features/`; the Metronome's block itself, with its DSP code, is added by `tools/patch_click.py`. They are off by default, and the build adds them when their switch is set (an environment variable, or a `build.py` option). Switches combine. Every feature here has run on an HX Stomp from RAM. 
+Each feature is a module in `tools/features/`; the Metronome's block itself, with its DSP code, is added by `tools/patch_click.py`. They are off by default, and the build adds them when their switch is set (an environment variable, or a `build.py` option). Switches combine. Every feature here has run on an HX Stomp from RAM. The [setup page](#build-in-the-browser) builds all of them.
 
 | Feature | Switch | What it does | Where is it? |
 |---|---|---|---|
@@ -32,6 +36,7 @@ Each feature is a module in `tools/features/`; the Metronome's block itself, wit
 | **Long press** | `HX_LONG_PRESS=1` | Hold a footswitch for 1 s for a second action: the tuner, FS4 or FS5, or a virtual footswitch FS6–FS10. A tap still toggles the switch's own blocks. See [Long press](#long-press). | FS1–FS5, in Stomp footswitch mode. Settings: Global Settings > Footswitches, pages 2 and 3 (FS1 Hold Function … FS5 Hold Function). |
 | **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). | The snapshot footswitches, with Footswitch Mode on Snapshot; in 4–6, the camera icon at the top right and the footswitch labels show the bank. No settings. |
 | **Metronome** | `HX_CLICK=1` | A block that plays a click on every beat of the tempo, with an optional accent on the downbeat. HX Stomp only. See [Metronome](#metronome). | Model browser: Looper > Metronome > Metronome. Its settings are the block's knobs: Time, Level, Accent and Thru. |
+| **GR meter** | `HX_GR=1` | A gain-reduction meter on the Home screen, lit by the compressor you turn it on in. With it, NAM A2 Lite runs up to two blocks instead of three. HX Stomp only. | Knobs on the Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester and Red Squeeze compressors: Mtr Pos (Middle, Top, Left, Bottom, Right), Mtr Dir (Normal, Reverse) and Mtr Thk (0 … 20; 0, the default, is off). |
 | **Boot screen** | `--splash`, `--splash-text` | The stock boot picture reads "HXtra STOMP" and the boot text "v1.0.0". Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). | The screen at power-on, once the firmware starts. Set when you build: no settings on the HX Stomp. |
 
 ```sh
@@ -182,6 +187,24 @@ The build is deterministic. The default HX Stomp build (no switches) has MD5 `86
 
 A default build changes only 5 of the 15 parts of the firmware: the main application, the DSP program, the model list, the DSP graph library and the image store (the boot picture; emoji in the boot text also change the font table). **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
+## Build in the browser
+
+The setup page, **[wisemandenny.github.io/hxtra](https://wisemandenny.github.io/hxtra/web/)**, does the same build in the browser, with nothing uploaded: you drop your stock `.hxf` and download `HX_Stomp_v3.80.0_HXtra.hxf`, with every feature on, the Metronome block included. It also runs the build from RAM and converts `.nam` captures, and it reads in 10 languages. It runs `build.py`'s own commands in [Pyodide](https://pyodide.org) (`web/firmware-worker.js`); its builds have the same MD5s as `build.py`'s.
+
+The browser has no clang to assemble the features' M4 code, so each release brings that code made in advance: `tools/m4cache.py` runs the page's features on the stock file and keeps what each module assembled to, in `m4cache.json`, with the MD5 of the build, and `tools/m4asm.py` reads it when `HX_M4_CACHE` names it. The page compares its build with that MD5 and says **Verified**. The page runs `build.py`'s other steps for them too: the Metronome block (`tools/patch_click.py`), and the GR meter's knobs and DSP code (`tools/patch_comp.py`, with NAM on two slots). A copy of the page served from a checkout (`python3 -m http.server`, then `/web/`) has no `m4cache.json` and builds without features, unless you make one: `python3 tools/m4cache.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf -o m4cache.json`.
+
+The page is published only for a release, never from `main`, so it always matches one; see [Releases](#releases).
+
+## Releases
+
+On a Mac, from a clean checkout of the pushed commit to release (usually `main`):
+
+```sh
+python3 tools/release.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf v1.0.0
+```
+
+It makes the release's `m4cache.json` (about 15 s), then creates the GitHub release `v1.0.0` of that commit with the file attached (`gh release create`, notes generated from the pull requests). Publishing the release starts `.github/workflows/pages.yml`, which publishes the setup page of that tag with the release's `m4cache.json`. `--dry-run` only makes `build/m4cache.json`. It refuses a tag the boot text doesn't show (`tools/features/splash.py` `TEXT`), a checkout with changes, and a commit that isn't pushed. To publish a release's page again, run the workflow by hand with its tag. The repository's Pages are set to deploy from workflows, and its `github-pages` environment lets `v*` tags deploy as well as `main`.
+
 ## Try it first, from RAM
 
 You can run the built firmware from the HX Stomp's memory for one session before you install it. Nothing is written to the HX Stomp, and turning it off and on brings back what is installed. The HX Stomp must have stock 3.80.0 installed. This is how every HXtra change is tested.
@@ -263,7 +286,9 @@ docs/research/INDEX.md        what is known about the 3.80.0 firmware: the index
 tools/patch_menu.py           HXtra: the feature engine, the Global Settings section and its caves (HX Stomp)
 tools/features/               the features: tuner.py, bpm.py, breathing_line.py, dsp_meter.py, long_press.py, more_snapshots.py, splash.py
 tools/setting_ids.py          which setting ID each feature's setting uses
-tools/m4asm.py                assembles a feature's src/m4/*.s with Apple's clang
+tools/m4asm.py                assembles a feature's src/m4/*.s with Apple's clang, or takes it from a release's m4cache.json
+tools/m4cache.py              a release's m4cache.json: the M4 code of the setup page's features
+tools/release.py              makes a release: its m4cache.json on a GitHub release, which publishes the setup page
 src/m4/                       the features' M4 code (tuner.s, bpm.s, breathing_line.s, dsp_meter.s, long_press.s, more_snapshots.s)
 tools/image_store.py          the image store (Entries 7 and 8): images, fonts, items
 tools/icon_library.py         the icon library: every stock icon drawn from your firmware file (docs/icons.md)
@@ -281,7 +306,7 @@ tools/sharc/entry4_blob.py    DSP graph library parser
 tools/sharc/sasm.py, ssim.py  SHARC assembler and simulator
 src/sharc/nam_a2.asm          reference NAM A2 implementation for the check
 src/ramboot/                  the RAM loader and its eMMC overlay hook (C, Cortex-M4; make -C src/ramboot)
-web/                          the setup page: build, RAM run and converter in the browser
+web/                          the setup page: build, RAM run and converter in the browser (published per release: .github/workflows/pages.yml)
 tests/                        pytest: unit, M4 code in unicorn (m4emu.py), web parity, kernel (slow), firmware (firmware.py; needs a stock .hxf)
 ```
 

@@ -181,6 +181,6 @@ def test_plan_of_the_build(tmp_path):
                        capture_output=True, text=True, cwd=ROOT)
     assert r.returncode == 0, r.stdout + r.stderr
     regions, checks, summary = hxf_ram.plan(str(out), stock)
-    assert [i for i, *_ in summary["changed"]] == [2, 3, 4]
+    assert [i for i, *_ in summary["changed"]] == [2, 3, 4, 8]       # 8: the boot picture
     assert summary["end"] <= hxf_ram.RB_STAGE_BASE
     assert sum(len(b) for _, b, _ in regions) < 4 << 20

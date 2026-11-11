@@ -744,7 +744,7 @@ def test_patch_menu_writes_entries_7_and_8_and_both_owned_sites(stock, tmp_path,
     demo = fake('demo', FLAG=('HX_DEMO', 'HX_DEMO_TEXT'), INPUTS=(Input('HX_DEMO', path=True),), apply=apply)
     load = lambda n: pa.get_entry_swapped(stock, n)
     plain, _ = pm.menu_entries(load, env={})
-    assert sorted(plain) == [0] and plain[0] == pm.menu_entry0(load(0), env={})[0]
+    assert sorted(plain) == [0, 8] and plain[0] == pm.menu_entry0(load(0), env={}, others=load)[0]    # 8: the boot picture
 
     real = without_splash()
     monkeypatch.setattr(features, 'load', lambda: real + [demo])

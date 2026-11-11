@@ -1,0 +1,50 @@
+name: pages
+
+# Publishes the setup page (web/) for a release, with the files the in-browser build reads (tools/, src/m4/) in the
+# repository's own layout, and the release's m4cache.json (tools/release.py attaches it) at the root: the page is at /web/.
+# Only a release publishes it, so the page always matches a release, not whatever is on main.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release to publish again
+        required: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}web/
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: site
+        run: |
+          mkdir -p _site/src
+          cp -r web tools LICENSE NOTICE _site/
+          cp -r src/m4 _site/src/
+          find _site -name __pycache__ -prune -exec rm -rf {} +
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p m4cache.json -D _site
+          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=web/"><title>HXtra Setup</title><a href="web/">HXtra Setup</a>\n' > _site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

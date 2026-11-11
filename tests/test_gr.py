@@ -411,8 +411,8 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 # ---- the whole GR build, pinned as tests/test_firmware.py pins the default one
 
 GR_BUILT_MD5 = {
-    'HX_GR': 'cdcd4c4c91314d888bb22230a455cc31',
-    'HX_GR HX_CLICK': '117441e871126b0cb5a9566ca64a9579',    # patch_click.py adds a model, which would drop knobs written before it
+    'HX_GR': '7f9d6aed355dd6142201064e3ea11c98',
+    'HX_GR HX_CLICK': '3284dca1bb0c567822992c54f3f425ed',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
@@ -430,7 +430,7 @@ def test_gr_build(tmp_path, flags):
     r = subprocess.run([sys.executable, str(ROOT / 'build.py'), stock, '-o', str(out), '--no-check'],
                        capture_output=True, text=True, cwd=ROOT, env=env)
     assert r.returncode == 0, r.stdout + r.stderr
-    shown = 'gr, metronome, splash; Entry 7; Entry 8' if 'HX_CLICK' in flags else 'gr, splash'     # the Metronome's off icon
+    shown = 'gr, metronome, splash; Entry 7; Entry 8' if 'HX_CLICK' in flags else 'gr, splash; Entry 8'     # the Metronome's off icon; the boot picture
     assert 'ALL OK' in r.stdout and f'Entry 0: features {shown}\n' in r.stdout
     assert r.stdout.count(': Mtr Position, Mtr Direction, Mtr Thickness on slots') == len(pc.COMP_MODELS)
     assert hashlib.md5(out.read_bytes()).hexdigest() == GR_BUILT_MD5[flags]
@@ -490,8 +490,9 @@ def test_gr_feature_chains_its_three_hooks():
     import features.gr as gr
     e0 = pa.get_entry_swapped(stock_l6ia(), 0)
     mods = features.load()
-    plain, _ = pm.menu_entry0(e0, mods, {})
-    new, on = pm.menu_entry0(e0, mods, {'HX_GR': '1'})
+    others = lambda n: pa.get_entry_swapped(stock_l6ia(), n)     # the boot picture reads Entry 8
+    plain, _ = pm.menu_entry0(e0, mods, {}, others=others)
+    new, on = pm.menu_entry0(e0, mods, {'HX_GR': '1'}, others=others)
     assert 'gr' in [features.name(m) for m in on]
     segs, psegs = pa._parse_e0_segments(new), pa._parse_e0_segments(plain)
 
