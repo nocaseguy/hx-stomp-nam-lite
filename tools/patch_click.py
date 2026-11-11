@@ -48,7 +48,7 @@ CLAMP = (0.00035, 8.0)              # Simple Delay's 0x54 node: Time's range
 # so SyncSelect1 and TempoSync1 keep its slots too. Types: 3 float, 2 int, 1 bool.
 ACCENT_LABELS = [('displayType', 'list'), ('1', 'Off')] + [(str(k), str(k)) for k in range(2, 13)]
 PARAMS = ((1, 'Time', 'Time', 5, 3, None, None, 0.5, None),
-          (2, 'Level', 'Level', 6, 3, None, None, 0.0, None),
+          (2, 'Level', 'Level', 6, 3, None, None, -14.0, None),
           (3, 'Accent', None, 7, 2, 1, 12, 1, ACCENT_LABELS),
           (4, 'Thru', None, 8, 1, 0, 0, 1, [('false', 'Off'), ('true', 'On')]),
           (10, 'SyncSelect1', 'SyncSelect1', None, 2, None, None, 6, None),
@@ -211,7 +211,8 @@ def add_click(l6ia_bytes, log=print):
     new_e4 = replace_last_blob(new_e4, blob, click_blob(comp, params))
     log(f"[+] Entry 4: Metronome blob {blob} on composite {comp:#x} (primitive {PRIM[0]:#06x})")
 
-    drop = tuple(k for k in kit.FX_MODEL_META_DROP if k != 'displayParamCount')
+    # no category: block category 0x19, which tools/features/metronome.py makes Metronome, with Icon_Tempo
+    drop = tuple(k for k in kit.FX_MODEL_META_DROP if k != 'displayParamCount') + ('category',)
     new_e3, model_id, _ = kit.add_model_entry3(e3, src, NAME, DISPLAY, blob, params, drop_meta=drop)
     chk = kit.parse_entry3_full(new_e3)
     m = chk['models'][model_id]

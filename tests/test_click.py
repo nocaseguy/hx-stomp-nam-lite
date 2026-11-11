@@ -278,7 +278,7 @@ def test_the_model_and_its_knobs(built):
     _, out, info = built
     m = kit.parse_entry3_full(kit.get_entry_swapped(out, 3))['models'][info['model_id']]
     assert (m['name'], m['displayName']) == (patch_click.NAME, 'Metronome')
-    assert m['meta']['category'] == 'modulation' and m['meta']['displayParamCount'] == '4'
+    assert 'category' not in m['meta'] and m['meta']['displayParamCount'] == '4'     # block category 0x19: features/metronome.py
     p = {q['name']: q for q in m['params']}
     assert [(q['name'], q['slot'], q['type']) for q in m['params']] == [
         ('Time', 1, 3), ('Level', 2, 3), ('Accent', 3, 2), ('Thru', 4, 1), ('SyncSelect1', 10, 2), ('TempoSync1', 11, 1)]
@@ -287,7 +287,7 @@ def test_the_model_and_its_knobs(built):
     assert p['SyncSelect1']['meta']['persistent'] == 'note' and p['SyncSelect1']['meta']['6'] == '1/4'
     word = lambda x: struct.unpack('<I', struct.pack('<f', x))[0]
     assert (word(p['SyncSelect1']['default']), word(p['TempoSync1']['default'])) == (6, 1)   # 1/4, synced
-    assert p['Time']['default'] == 0.5 and (p['Level']['min'], p['Level']['max']) == (-60.0, 6.0)
+    assert p['Time']['default'] == 0.5 and (p['Level']['min'], p['Level']['max'], p['Level']['default']) == (-60.0, 6.0, -14.0)
     assert p['Accent']['meta']['1'] == 'Off' and p['Accent']['meta']['12'] == '12'
     assert word(p['Thru']['default']) == 1
 

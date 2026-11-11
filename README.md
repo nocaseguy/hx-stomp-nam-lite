@@ -21,7 +21,7 @@ The built image is `HX_Stomp_v3.80.0_HXtra.hxf`. NAM A2 Lite is the same block a
 
 ## Features
 
-Each feature is a module in `tools/features/`, except the Metronome, a DSP block added by `tools/patch_click.py`. They are off by default, and the build adds them when their switch is set (an environment variable, or a `build.py` option). Switches combine. Every feature here has run on an HX Stomp from RAM. 
+Each feature is a module in `tools/features/`; the Metronome's block itself, with its DSP code, is added by `tools/patch_click.py`. They are off by default, and the build adds them when their switch is set (an environment variable, or a `build.py` option). Switches combine. Every feature here has run on an HX Stomp from RAM. 
 
 | Feature | Switch | What it does | Where is it? |
 |---|---|---|---|
@@ -110,12 +110,12 @@ With Footswitch Mode on Snapshot, the three footswitches select snapshots 1–3 
 
 ### Metronome
 
-A click track in time with the tempo, as a block: add it from the model browser, Looper > Metronome > Metronome, anywhere in the signal flow. It is a mono effect block, listed under Looper so it's easy to find; it isn't a looper.
+A click track in time with the tempo, as a block: add it from the model browser, Looper > Metronome > Metronome, anywhere in the signal flow. It is a mono effect block, listed under Looper so it's easy to find; it isn't a looper. In the signal flow it is teal, lit when on and dim when off, and its icon is a metronome.
 
 | Knob | Values | What it does |
 |---|---|---|
 | **Time** | a note value, synced to the tempo (**1/4** by default), as a delay's Time | The beat: 100 ms to 8 s. |
-| **Level** | −60 … +6 dB (default **0**) | The click's volume. |
+| **Level** | −60 … +6 dB (default **−14**) | The click's volume. |
 | **Accent** | **Off** (default), 2 … 12 | Every nth beat is a downbeat, a higher click (2 kHz instead of 1 kHz). |
 | **Thru** | Off, **On** (default) | On passes your signal with the click under it; Off gives the click alone. |
 
