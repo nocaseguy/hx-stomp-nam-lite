@@ -1,6 +1,6 @@
-# HX Stomp HXtra
+# HXtra
 
-A custom firmware for the Line 6 HX Stomp, built by patching the stock 3.80.0 firmware on your own computer.
+HXtra is a custom firmware for the Line 6 HX Stomp, built by patching the stock 3.80.0 firmware on your own computer.
 
 This repository is a fork of [nocaseguy/hx-stomp-nam-lite](https://github.com/nocaseguy/hx-stomp-nam-lite), which runs **Neural Amp Modeler (NAM) A2 Lite** captures on the HX Stomp. That work is all still here. HXtra takes the same approach further, using the tools that taught the HX Stomp a new amp model to implement new functionality across the rest of the firmware. It grows in small steps, and each one is run on a real HX Stomp from RAM before it is kept.
 
@@ -86,7 +86,7 @@ Just for fun: the line across the middle of the Home screen, between the signal 
 
 - **Where it shows:** on the Home screen only. Other screens stay stock, and the line stops animating while you're on them.
 - **The selected part of the line** is still thicker, as on the stock line, and **Off** gives the stock line back.
-- **Settings** (Global Settings > HXtra): Color, Type and Speed. See [Custom settings](#custom-settings).
+- **Settings** (Global Settings > Breathing Line): Color, Type and Speed. See [Custom settings](#custom-settings).
 
 ### Long press
 
@@ -148,6 +148,8 @@ What is here is our own work: the patchers and the offsets they patch, the M4 an
 ## Build
 
 ```sh
+git clone https://github.com/wisemandenny/hxtra.git
+cd hxtra
 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
 ```
 
