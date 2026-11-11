@@ -8,6 +8,10 @@ A feature module may have:
   CONFLICTS  names of features it cannot be built with
   SETTINGS   Setting()s on its own CustomOS pages, three to a page; each takes the ID tools/setting_ids.py gives '<feature>.<key>'
              (a virtual ID, which the engine serves from a bit field: see tools/setting_ids.py VIRTUAL)
+  TITLE      the title of its CustomOS pages in Global Settings, on each of them (default: its name in words, breathing_line ->
+             Breathing Line); 1..63 printable ASCII characters
+  ICON       the stock image shown by that title, by name, e.g. 'Icon_Tempo' (default Icon_Displays); a name in
+             tools/patch_menu.py ICONS
   MENU       False when it shows its SETTINGS itself: they keep their IDs, limits and customos.inc lines but get no CustomOS page,
              and Global Settings has no CustomOS section when no feature built in has a page there (default True)
   apply(p)   its code and hooks, through tools/patch_menu.py's Patch: p.put() (a write no other feature may overlap), p.expect(),

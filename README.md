@@ -39,7 +39,7 @@ HX_TUNER=1 HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/
 
 ### Custom settings
 
-The other features' settings are in Global Settings, in a seventh section called **CustomOS**, after Displays (press right past Displays). It has no icon in the section strip, so none is lit while you are in it. Each feature that's built in has its own page there. A build with none of them has no CustomOS section.
+The other features' settings are in Global Settings, in a seventh section called **CustomOS**, after Displays (press right past Displays). It has no icon in the section strip, so none is lit while you are in it. Each feature that's built in has its own page there, titled with the feature's name (BPM Display, Breathing Line, DSP Display, Long Press) and, for some, an icon of its own (see [Icons](docs/icons.md), which also makes an icon library of every stock icon from your firmware file). A build with none of them has no CustomOS section.
 
 | Feature | Setting | Values | What it does |
 |---|---|---|---|
@@ -242,6 +242,7 @@ tools/setting_ids.py          which setting ID each feature's setting uses
 tools/m4asm.py                assembles a feature's src/m4/*.s with Apple's clang
 src/m4/                       the features' M4 code (tuner.s, bpm.s, breathing_line.s, dsp_meter.s, long_press.s, more_snapshots.s)
 tools/image_store.py          the image store (Entries 7 and 8): images, fonts, items
+tools/icon_library.py         the icon library: every stock icon drawn from your firmware file (docs/icons.md)
 tools/patch_splash.py         boot screen pictures; splash_topo.py draws one, splash_emoji.py and emoji_png.swift make emoji glyphs
 tools/patch_amp.py            inspect / add-model / ir-title / patch
 tools/nam2ir.py               .nam -> User IR .wav

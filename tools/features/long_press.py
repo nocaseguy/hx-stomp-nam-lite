@@ -4,6 +4,7 @@ from features import Setting
 import patch_menu as pm
 
 FLAG = 'HX_LONG_PRESS'
+TITLE = 'Long Press'
 VALUES = (b'Off', b'Tuner', b'FS4', b'FS5', b'FS6', b'FS7', b'FS8', b'FS9', b'FS10')
 VIRTUAL_CC = 20                     # FS6..FS10 are MIDI CC 20..24 (undefined in the MIDI spec), as Bypass Assign > MIDI In sets them
 # FS1..FS5 Hold default to FS6..FS10 (values 4..8): virtual settings read their default until first set.

@@ -3,6 +3,7 @@ the model browser shows each listed model's share between its icon and name."""
 from features import Setting
 
 FLAG = 'HX_DSP_METER'
+TITLE = 'DSP Display'
 SETTINGS = (
     Setting('disp', b'DSP\nDisp', (b'Used/All', b'Free', b'Used%')),     # a value shows 8 characters, on one line
 )

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>HX Stomp Icon Library</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+  /* Layout: one reading column of sections, each a wrapping grid of LCD tiles at 2x */
+  :root {
+    --bg: #eef0f2; --panel: #ffffff; --fg: #1c2127; --muted: #5c6773; --line: #d5dae0;
+    --lcd: #050607; --accent: #c8102e; --fit: #1f7a4d;
+    --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #111418; --panel: #191d22; --fg: #e6e9ec; --muted: #9aa5b1; --line: #2a3038;
+    --lcd: #000000; --accent: #ff4d5e; --fit: #4cc38a; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #111418; --panel: #191d22; --fg: #e6e9ec; --muted: #9aa5b1; --line: #2a3038;
+    --lcd: #000000; --accent: #ff4d5e; --fit: #4cc38a; color-scheme: dark }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55;
+    padding-left: 16px; padding-right: 16px; padding-block: 32px 64px; }
+  main { max-width: 1100px; margin: 0 auto; display: grid; gap: 40px; }
+  header { display: grid; gap: 10px; }
+  h1 { font-family: var(--display); font-weight: 700; font-size: 2.2rem; line-height: 1.1; margin: 0; text-wrap: balance; letter-spacing: .01em; }
+  h2 { font-family: var(--display); font-weight: 700; font-size: 1.45rem; margin: 0; text-wrap: balance; }
+  .eyebrow { font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  p { margin: 0; max-width: 68ch; color: var(--muted); }
+  p strong, p code { color: var(--fg); }
+  code { font-family: var(--mono); font-size: .88em; }
+  section { display: grid; gap: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .tile { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+  .lcd { background: var(--lcd); height: 116px; display: grid; place-items: center; }
+  .lcd img { image-rendering: pixelated; max-width: 100%; height: auto; }
+  figcaption { padding: 8px 10px 10px; display: grid; gap: 2px; min-width: 0; }
+  .nm { font-family: var(--mono); font-size: .78rem; font-weight: 500; overflow-wrap: anywhere; }
+  .meta { font-family: var(--mono); font-size: .72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .fits .meta::after { content: " · fits"; color: var(--fit); }
+  .tag { justify-self: start; margin-top: 4px; font-family: var(--mono); font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); border: 1px solid currentColor; border-radius: 3px; padding: 0 5px; }
+  .tag.in { color: var(--fit); }
+  .tools { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+  .tools input[type=search] { font: inherit; font-family: var(--mono); font-size: .85rem; padding: 7px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--fg); min-width: 0; width: 240px; max-width: 100%; }
+  .tools label { display: flex; gap: 6px; align-items: center; font-size: .9rem; color: var(--muted); }
+  input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .count { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">HX Stomp 3.80.0 · Entry 7 image store · {{N_IMAGES}} images</span>
+    <h1>HX Stomp Icon Library</h1>
+    <p>Every icon-like image in your stock firmware, drawn at 2× from its pixels by <code>tools/icon_library.py</code>. Each tile gives the image's name, its size in pixels and its index (the number the firmware uses for it). A CustomOS feature picks its pages' icon by name with <code>ICON</code>; a name tagged <strong>in ICONS</strong> works as it is, any other needs its line in <code>ICONS</code> in <code>tools/patch_menu.py</code> (see <code>docs/icons.md</code>). An image marked <strong>fits</strong> is no bigger than 30×29, the size of the stock section icons; bigger ones may run into the title.</p>
+  </header>
+
+  <section>
+    <span class="eyebrow">Shown by stock Global Settings</span>
+    <h2>Section icon by the title</h2>
+    <p>One per section, from the list at <code>0x28e3b5b8</code>. A CustomOS page shows its feature's <code>ICON</code> here, or the Displays icon when the feature names none.</p>
+    {{TITLE}}
+  </section>
+
+  <section>
+    <span class="eyebrow">Shown by stock Global Settings</span>
+    <h2>Section strip across the top</h2>
+    <p>Each section has a normal and a lit (<code>Sel</code>) picture, from the lists at <code>0x28e3b5f8</code> and <code>0x28e3b628</code>. The strip has only six places, so CustomOS has none.</p>
+    {{STRIP}}
+  </section>
+
+  <section>
+    <span class="eyebrow">Not drawn by Global Settings</span>
+    <h2>Unused section-style pictures</h2>
+    <p><code>Icon_*Sel</code> and the <code>Setup_*</code> set look like section icons, but the Global Settings screen never draws them. Other screens may use them.</p>
+    {{UNUSED}}
+  </section>
+
+  <section>
+    <span class="eyebrow">Not drawn by Global Settings</span>
+    <h2>Every other icon</h2>
+    <p>{{N_OTHERS}} more <code>Icon_*</code> images, used elsewhere in the firmware (block categories, snapshots, switches, I/O). {{N_FITS}} of them fit the section icon's size.</p>
+    <div class="tools">
+      <input type="search" id="q" placeholder="Filter by name, e.g. tempo" aria-label="Filter icons by name">
+      <label for="fitonly"><input type="checkbox" id="fitonly"> Only icons that fit</label>
+      <span class="count" id="count"></span>
+    </div>
+    <div id="others">{{OTHERS}}</div>
+  </section>
+</main>
+
+<script>
+  const q = document.getElementById('q'), fit = document.getElementById('fitonly'), count = document.getElementById('count');
+  const tiles = [...document.querySelectorAll('#others .tile')];
+  function apply() {
+    const s = q.value.trim().toLowerCase();
+    let n = 0;
+    for (const t of tiles) {
+      const show = (!s || t.dataset.name.includes(s)) && (!fit.checked || t.classList.contains('fits'));
+      t.hidden = !show;
+      if (show) n++;
+    }
+    count.textContent = `${n} of ${tiles.length}`;
+  }
+  q.addEventListener('input', apply);
+  fit.addEventListener('change', apply);
+  apply();
+</script>
+</html>

@@ -2,6 +2,8 @@
 from features import Setting, gr
 
 FLAG = 'HX_BREATHING_LINE'
+TITLE = 'Breathing Line'
+ICON = 'Icon_DualIR'
 SETTINGS = (
     Setting('color', b'Line\nColor', (b'White', b'Red', b'Green', b'Blue', b'Fire', b'Ice', b'Sunset', b'Ocean', b'Aurora', b'Neon',
                                        b'Rainbow'), default=10),
