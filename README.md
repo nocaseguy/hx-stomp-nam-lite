@@ -39,14 +39,14 @@ HX_TUNER=1 HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/
 
 ### Custom settings
 
-The other features' settings are in Global Settings, in a seventh section called **HXtra**, after Displays (press right past Displays). It has no icon in the section strip, so none is lit while you are in it. Each feature that's built in has its own page there. A build with none of them has no HXtra section. Long press's settings are in **Footswitches** instead, on two pages after its own.
+The other features' settings are in Global Settings, in a seventh section called **HXtra**, after Displays (press right past Displays). It has no icon in the section strip, so none is lit while you are in it. Each feature that's built in has its own page there. A build with none of them has no HXtra section. Long press's settings are in **Footswitches** instead, after FS5 Function.
 
 | Feature | Setting | Values | What it does |
 |---|---|---|---|
 | BPM | **BPM Font** | **41 Lite** (default), 35 Bold, 28 Bold, 28 Lite, 21 Bold, 21 Reg | The tempo's font |
 | BPM | **BPM Color** | **White** (default), Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple | The tempo's and the dot's colour |
 | BPM | **BPM Dot Pos** | **Left** (default), Right, Both | Where the beat dot sits, beside the preset number |
-| Long press | **FS1 Hold** … **FS5 Hold** | Off, Tuner, FS4, FS5, FS6 … FS10 (defaults FS6 … FS10) | What holding that footswitch for 1 s does. FS4 and FS5 are external switches. In Global Settings > Footswitches, pages 3 and 4. |
+| Long press | **FS1 Hold Function** … **FS5 Hold Function** | Off, Tuner, FS4, FS5, FS6 … FS10 (defaults FS6 … FS10) | What holding that footswitch for 1 s does. FS4 and FS5 are external switches. In Global Settings > Footswitches, pages 2 and 3, after FS5 Function. |
 | Breathing line | **Color** | White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, **Rainbow** (default) | The line's colours. The gradients flow along the line: Fire is red, orange and yellow; Ice blue, cyan and white; Sunset purple, pink and orange; Ocean deep blue, blue and aqua; Aurora green, sky blue and violet; Neon magenta, indigo and cyan; Rainbow every hue. Where the motion dims the line, the colours dim with it. |
 | Breathing line | **Type** | Off, Steady, **Breathe** (default), Cylon, Comet, Heart, Sparkle | How it moves. Breathe slowly fades the whole line in and out. Cylon sweeps a wide light from end to end and back, slowing at the ends, with a trail behind it. Comet shoots a light across with a long tail. Heart beats lub-dub from the middle. Sparkle twinkles at random. Steady holds the full colour. Off gives back the stock line. |
 | Breathing line | **Speed** | 1 … 10 (default **4**) | One cycle takes 8 s at 1, 4 s at 4, 0.8 s at 10. |
@@ -90,7 +90,7 @@ Just for fun: the line across the middle of the Home screen, between the signal 
 
 ### Long press
 
-In Stomp footswitch mode, each of FS1–FS5 can have a Hold action (Global Settings > Footswitches, pages 3 and 4). Holding the switch for 1 s runs it; a tap still toggles the switch's own blocks, on release instead of on press, since the press can't tell yet whether it will become a hold.
+In Stomp footswitch mode, each of FS1–FS5 can have a Hold action (Global Settings > Footswitches, pages 2 and 3: FS1 Hold Function … FS5 Hold Function). Holding the switch for 1 s runs it; a tap still toggles the switch's own blocks, on release instead of on press, since the press can't tell yet whether it will become a hold.
 
 - **Tuner** opens the tuner, as holding TAP does.
 - **FS4, FS5** press that footswitch, as an external switch would.

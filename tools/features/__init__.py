@@ -10,7 +10,8 @@ A feature module may have:
              (a virtual ID, which the engine serves from a bit field: see tools/setting_ids.py VIRTUAL)
   MENU       False when it shows its SETTINGS itself: they keep their IDs, limits and hxtra.inc lines but get no HXtra page,
              and Global Settings has no HXtra section when no feature built in has a page there (default True); or a stock
-             category's name (patch_menu.STOCK_CATEGORIES, e.g. 'Footswitches'): its pages follow that category's own
+             category's name (patch_menu.STOCK_CATEGORIES, e.g. 'Footswitches'): its settings fill that category's trailing empty
+             slots, then pages after its own
   apply(p)   its code and hooks, through tools/patch_menu.py's Patch: p.put() (a write no other feature may overlap), p.expect(),
              p.add() (bytes into the code cave), p.module() (an M4 .s assembled at build time), p.chain_ptr(), p.chain_bl() and
              p.chain_entry() (handlers on a hook other features may share), p.own_entry() and p.own_call() (a function start or

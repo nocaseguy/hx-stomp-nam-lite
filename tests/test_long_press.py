@@ -124,7 +124,7 @@ def h(m4emu):
 def test_hold_settings():
     assert len(long_press.SETTINGS) == 5
     for n, s in zip((1, 2, 3, 4, 5), long_press.SETTINGS):
-        assert (s.key, s.label, s.default) == (f'fs{n}', f'Hold\nFS{n}'.encode(), n + 3), 'FS1..FS5 Hold default to FS6..FS10'
+        assert (s.key, s.label, s.default) == (f'fs{n}', f'Function\nFS{n} Hold'.encode(), n + 3), 'FS1..FS5 Hold default to FS6..FS10'
         assert s.values == (b'Off', b'Tuner', b'FS4', b'FS5', b'FS6', b'FS7', b'FS8', b'FS9', b'FS10')
         assert all(len(v) <= 8 for v in s.values)
     assert HOLD_IDS == [0xd2, 0xd3, 0xd4, 0xd5, 0xd6], 'a unit keeps a setting\'s value by ID: never move it once a build has used it'

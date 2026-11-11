@@ -50,7 +50,7 @@ ARRAYS = {   # name: (stock address, new entry, literal pool words that point at
 }
 CAT_NAME = b'HXtra'
 # Stock categories a feature's MENU may name: (category, its page table, as each dispatch's own literal loads it). The table is
-# copied with the feature's pages after its own, since the next category's table follows it.
+# copied with the features' settings in its trailing empty slots and on pages after it, since the next category's table follows it.
 STOCK_CATEGORIES = {'Footswitches': (2, 0x28e3b550)}
 # Sites that switch on the category with `cmp rN,#5; bhi exit; tbb`: (hook, cat reg, page reg, table reg, tbb, exit, stub).
 # The stub is category 2's generic case entered after its table load: it sets the slot in r4 itself, which some cases leave to the category.
@@ -714,9 +714,10 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None, virtual=No
         menu = getattr(m, 'MENU', True)
         if isinstance(menu, str) and menu not in STOCK_CATEGORIES:
             raise SystemExit(f'patch-menu: {features.name(m)}: MENU is True, False or one of {", ".join(STOCK_CATEGORIES)}')
-        if menu:
-            pages = extra.setdefault(STOCK_CATEGORIES[menu][0], []) if isinstance(menu, str) else settings
-            pages += mine + [(EMPTY_SLOT, None)] * (-len(mine) % 3)
+        if isinstance(menu, str):
+            extra.setdefault(STOCK_CATEGORIES[menu][0], []).extend(mine)
+        elif menu:
+            settings += mine + [(EMPTY_SLOT, None)] * (-len(mine) % 3)
 
     for tab in (NAMES_LONG, NAMES_SHORT):
         if p.read(tab + NAME_LEN * 22, 8) != b'Main LCD':
@@ -788,15 +789,25 @@ def add_virtual(p, virt, packing):
 
 
 def add_category(p, settings, virt=None, extra=None):
-    """The HXtra section of Global Settings when settings has pages ((ID, setting) in page order, three to a page), the pages extra
-    ({stock category: (ID, setting)}) adds after a stock category's own, and their value text; virt, the virtual settings' module,
-    takes the turn and the click first."""
+    """The HXtra section of Global Settings when settings has pages ((ID, setting) in page order, three to a page), the settings
+    extra ({stock category: [(ID, setting)]}) adds to a stock category from its first trailing empty slot on, and their value text;
+    virt, the virtual settings' module, takes the turn and the click first."""
     extra = extra or {}
     p.expect(TEXT_FN, TEXT_FN_STOCK, 'the value-text function')
     p.expect(NAV_CMP, NAV_CMP_STOCK, 'the category navigation')
     p.expect(NAV_WRAP, NAV_WRAP_STOCK, 'the category navigation')
     for site in SITES.values():
         p.expect(site[0], bytes([5, 0x2b if site[1] == 3 else 0x2c]), 'a category dispatch')
+
+    grown = {}                  # stock category -> its table's IDs with extra's settings
+    for cat, mine in extra.items():
+        table = next(t for c, t in STOCK_CATEGORIES.values() if c == cat)
+        n = 3 * p.u32(ARRAYS['pages'][0] + 4 * cat)
+        ids = list(struct.unpack(f'<{n}H', p.read(table, 2 * n)))
+        while ids and ids[-1] == EMPTY_SLOT:
+            ids.pop()
+        ids += [pid for pid, _ in mine]
+        grown[cat] = ids + [EMPTY_SLOT] * (-len(ids) % 3)
 
     # The per-category arrays with a seventh entry for HXtra, and the page counts of the stock categories that grow
     name_va = p.add(CAT_NAME + b'\0') if settings else None
@@ -806,19 +817,17 @@ def add_category(p, settings, virt=None, extra=None):
                 raise SystemExit(f'patch-menu: a category array pointer at {lit:#x} is not the stock one')
         entries = [p.u32(stock + 4 * i) for i in range(6)]
         if key == 'pages':
-            entries = [n + len(extra.get(cat, ())) // 3 for cat, n in enumerate(entries)]
+            entries = [len(grown[cat]) // 3 if cat in grown else n for cat, n in enumerate(entries)]
         if settings:
             entries.append({'names': name_va, 'pages': len(settings) // 3}.get(key, new))
         array_va = p.add(b''.join(struct.pack('<I', x) for x in entries))
         for lit in lits:
             p.put(lit, struct.pack('<I', array_va), f'the category array {key}')
     tables = {6: p.add(b''.join(struct.pack('<H', pid) for pid, _ in settings))} if settings else {}
-    for cat, pages in extra.items():
-        table = next(t for c, t in STOCK_CATEGORIES.values() if c == cat)
-        own = p.read(table, 6 * p.u32(ARRAYS['pages'][0] + 4 * cat))
-        tables[cat] = p.add(own + b''.join(struct.pack('<H', pid) for pid, _ in pages))
+    for cat, ids in grown.items():
+        tables[cat] = p.add(b''.join(struct.pack('<H', pid) for pid in ids))
     values = {pid: (p.add(b''.join(padded(v) for v in s.values)), s.max, s.default)
-              for pid, s in settings + [x for pages in extra.values() for x in pages] if s is not None}
+              for pid, s in settings + [x for mine in extra.values() for x in mine] if s is not None}
 
     if settings:
         p.put(NAV_CMP, b'\x06\x2b', 'the category navigation')

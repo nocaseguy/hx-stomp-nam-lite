@@ -231,22 +231,22 @@ def test_footswitches_gets_the_hold_pages_and_other_categories_stay_stock():
     assert read(*STOCK_TABLES[:1], STOCK_TABLES[1] - STOCK_TABLES[0]) == stock(STOCK_TABLES[0], STOCK_TABLES[1] - STOCK_TABLES[0])
     assert struct.unpack('<6H', read(FS_TABLE, 12)) == FS_STOCK_IDS
     pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
-    assert struct.unpack('<6I', read(pages, 24)) == (3, 4, 4, 1, 4, 1)
+    assert struct.unpack('<6I', read(pages, 24)) == (3, 4, 3, 1, 4, 1)
     assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK, 'no feature with an HXtra page: no HXtra section'
     ids = setting_ids.by_name()
-    hold = tuple(ids[f'long_press.fs{n}'] for n in range(1, 6)) + (pm.EMPTY_SLOT,)
-    for site in pm.SITES:
-        assert struct.unpack('<12H', read(page_table(read, 2, site), 24)) == FS_STOCK_IDS + hold, site
+    hold = tuple(ids[f'long_press.fs{n}'] for n in range(1, 6))
+    for site in pm.SITES:      # FS5 Function's page takes FS1 and FS2 Hold in its empty slots, then a page of FS3..FS5 Hold
+        assert struct.unpack('<9H', read(page_table(read, 2, site), 18)) == FS_STOCK_IDS[:4] + hold, site
 
 
 @pytest.mark.firmware
 def test_hxtra_section_and_footswitches_pages_together():
     read, _ = built({'HX_LONG_PRESS': '1', 'HX_BPM': '1'})
     pages = struct.unpack('<I', read(pm.ARRAYS['pages'][2][0], 4))[0]
-    assert struct.unpack('<7I', read(pages, 28)) == (3, 4, 4, 1, 4, 1, 1)
+    assert struct.unpack('<7I', read(pages, 28)) == (3, 4, 3, 1, 4, 1, 1)
     ids = setting_ids.by_name()
     assert struct.unpack('<3H', read(page_table(read, 6), 6)) == tuple(ids[f'bpm.{k}'] for k in ('font', 'color', 'dot'))
-    assert struct.unpack('<6H', read(page_table(read, 2) + 12, 12))[:5] == tuple(ids[f'long_press.fs{n}'] for n in range(1, 6))
+    assert struct.unpack('<5H', read(page_table(read, 2) + 8, 10)) == tuple(ids[f'long_press.fs{n}'] for n in range(1, 6))
 
 
 @pytest.mark.firmware
