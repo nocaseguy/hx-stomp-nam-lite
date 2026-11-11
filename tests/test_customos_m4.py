@@ -1,6 +1,6 @@
 """The M4 code tools/patch_menu.py generates, run in unicorn (tests/m4emu.py): the shared-hook stub and each kind of chain
 (function pointer, bl call, function entry) with two features on one site, customos_setting_get, the value text of CustomOS
-settings, including values above a setting's max, and the CustomOS page titles and icons."""
+settings, including values above a setting's max, and the HXtra page titles and icons."""
 import struct
 
 import pytest
@@ -275,7 +275,7 @@ def title(m, caller, section, page):
     return r0
 
 
-def test_title_is_the_page_s_in_customos(m4emu):
+def test_title_is_the_page_s_in_hxtra(m4emu):
     m, caller = title_fn(m4emu)
     for page, want in enumerate(PAGE_TITLES):
         assert m.read(title(m, caller, 6, page), len(want) + 1) == want + b'\0'
@@ -296,7 +296,7 @@ def test_title_past_the_last_page_is_the_stock_name(m4emu, page):
 PAGE_ICONS = (0x181, 0x100, 0x48)
 
 
-def test_icon_is_the_page_s_in_customos_and_stock_elsewhere(m4emu):
+def test_icon_is_the_page_s_in_hxtra_and_stock_elsewhere(m4emu):
     m = m4emu.M4(pm.page_cave(CAVE, TITLES, len(PAGE_ICONS), pm.ICON_SET), CAVE)
     caller = pm.Asm(CAVE + 0x100)
     caller.h(0xb540, 0x460e)                # push {r6,lr}; mov r6,r1

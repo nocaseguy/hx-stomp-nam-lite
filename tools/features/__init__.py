@@ -8,7 +8,7 @@ A feature module may have:
   CONFLICTS  names of features it cannot be built with
   SETTINGS   Setting()s on its own CustomOS pages, three to a page; each takes the ID tools/setting_ids.py gives '<feature>.<key>'
              (a virtual ID, which the engine serves from a bit field: see tools/setting_ids.py VIRTUAL)
-  TITLE      the title of its CustomOS pages in Global Settings, on each of them (default: its name in words, breathing_line ->
+  TITLE      the title of its HXtra pages in Global Settings, on each of them (default: its name in words, breathing_line ->
              Breathing Line); 1..63 printable ASCII characters
   ICON       the stock image shown by that title, by name, e.g. 'Icon_Tempo' (default Icon_Displays); a name in
              tools/patch_menu.py ICONS

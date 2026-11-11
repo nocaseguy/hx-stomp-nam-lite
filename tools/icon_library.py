@@ -51,8 +51,8 @@ def png(width, height, pixels):
 
 
 def tags(mods):
-    """Image name -> what CustomOS uses it for: the default page icon and each feature's ICON."""
-    out = {'Icon_Displays': ['CustomOS default']}
+    """Image name -> what HXtra uses it for: the default page icon and each feature's ICON."""
+    out = {'Icon_Displays': ['HXtra default']}
     for m in mods:
         if getattr(m, 'ICON', None):
             out.setdefault(m.ICON, []).append(pm.check_title(m).decode())

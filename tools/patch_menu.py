@@ -54,7 +54,7 @@ ICON_SET = 0x28dc5a6c            # (image index): the section icon by the title
 # The section paint's calls of TITLE_SET and ICON_SET, each with r2 the section and r6 the view ([+0xa] section, [+0xb] page)
 TITLE_CALL, ICON_CALL = 0x28dce8e2, 0x28dce8fa
 ICONS = {   # the stock image index of each icon a feature may name (tests check them against Entry 7's names)
-    'Icon_Displays': 0x48,       # CustomOS's icon in the section list, and a page's when its feature names none
+    'Icon_Displays': 0x48,       # HXtra's icon in the section list, and a page's when its feature names none
     'Icon_Tempo': 0x181,
     'Icon_DualIR': 0x100,
 }
@@ -180,7 +180,7 @@ def dispatch_cave(at, site, table, stub=None):
 
 
 def page_cave(at, table, pages, fn):
-    """fn (TITLE_SET or ICON_SET) with CustomOS's word for the page (table: a word per page) in r0, the stock one in any other
+    """fn (TITLE_SET or ICON_SET) with HXtra's word for the page (table: a word per page) in r0, the stock one in any other
     section."""
     a = Asm(at)
     a.h(cmp_imm(2, 6))
@@ -285,7 +285,7 @@ def check_setting(feature, s):
 
 
 def check_title(feature):
-    """Its CustomOS pages' title: TITLE, else its name in words."""
+    """Its HXtra pages' title: TITLE, else its name in words."""
     t = getattr(feature, 'TITLE', None) or features.name(feature).replace('_', ' ').title()
     if not t.isascii() or not t.isprintable() or not 1 <= len(t) < TITLE_LEN:
         raise SystemExit(f'patch-menu: {features.name(feature)}: title {t!r} is not 1..{TITLE_LEN - 1} printable ASCII characters')
@@ -293,7 +293,7 @@ def check_title(feature):
 
 
 def icon(feature):
-    """The image index of its CustomOS pages' icon: ICON's, else the Displays icon CustomOS has always shown."""
+    """The image index of its HXtra pages' icon: ICON's, else the Displays icon HXtra has always shown."""
     name = getattr(feature, 'ICON', None) or 'Icon_Displays'
     if name not in ICONS:
         raise SystemExit(f'patch-menu: {features.name(feature)}: icon {name!r} is not in ICONS: add it with its image index')
@@ -738,7 +738,7 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None, virtual=No
     values = {features.name(m): features.values(m, env, cwd) for m in on}
     p = Patch(load(0), mods, setting_ids.by_name() if ids is None else ids, load, values)
     packing = setting_ids.packing() if virtual is None else virtual
-    settings, stored, titles, icons = [], [], [], []    # (ID, setting) on CustomOS pages in page order, of every feature; per page
+    settings, stored, titles, icons = [], [], [], []    # (ID, setting) on HXtra pages in page order, of every feature; per page
     for m in on:
         mine = []
         for s in getattr(m, 'SETTINGS', ()):
@@ -823,7 +823,7 @@ def add_virtual(p, virt, packing):
 def add_category(p, settings, virt=None, titles=None, icons=None):
     """The CustomOS section of Global Settings: its pages of settings ((ID, setting) in page order, three to a page) and value text;
     virt, the virtual settings' module, takes the turn and the click first; titles and icons (image indexes), one per page, replace
-    CustomOS's own."""
+    HXtra's own."""
     p.expect(TEXT_FN, TEXT_FN_STOCK, 'the value-text function')
     p.expect(NAV_CMP, NAV_CMP_STOCK, 'the category navigation')
     p.expect(NAV_WRAP, NAV_WRAP_STOCK, 'the category navigation')
@@ -852,16 +852,16 @@ def add_category(p, settings, virt=None, titles=None, icons=None):
     owner, p.owner = p.owner, 'CustomOS'
     if titles:
         names = {t: p.add(t + b'\0') for t in dict.fromkeys(titles)}
-        own_pages(p, TITLE_CALL, TITLE_SET, 'the CustomOS page titles', [names[t] for t in titles], len(settings) // 3)
+        own_pages(p, TITLE_CALL, TITLE_SET, 'the HXtra page titles', [names[t] for t in titles], len(settings) // 3)
     if icons:
-        own_pages(p, ICON_CALL, ICON_SET, 'the CustomOS page icons', icons, len(settings) // 3)
+        own_pages(p, ICON_CALL, ICON_SET, 'the HXtra page icons', icons, len(settings) // 3)
     p.owner = owner
 
 
 def own_pages(p, site, fn, what, words, pages):
-    """The section paint's call of fn at site, sent to a page_cave of words, one per CustomOS page."""
+    """The section paint's call of fn at site, sent to a page_cave of words, one per HXtra page."""
     if len(words) != pages:
-        raise SystemExit(f'patch-menu: {len(words)} words for {pages} CustomOS pages ({what})')
+        raise SystemExit(f'patch-menu: {len(words)} words for {pages} HXtra pages ({what})')
     table_va = p.add(b''.join(struct.pack('<I', w) for w in words))
     p.own_call(site, fn, what, p.add(page_cave(p.next(), table_va, pages, fn)))
 

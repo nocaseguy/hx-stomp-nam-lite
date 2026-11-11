@@ -1,4 +1,4 @@
-"""tools/icon_library.py: the PNG it draws an image-store picture as, the groups of images, the tags of the icons CustomOS uses, and
+"""tools/icon_library.py: the PNG it draws an image-store picture as, the groups of images, the tags of the icons HXtra uses, and
 the page made from the stock firmware."""
 import re
 import struct
@@ -45,7 +45,7 @@ def test_tags_name_the_default_icon_and_each_feature_s():
     bpm = types.ModuleType('features.bpm')
     bpm.TITLE, bpm.ICON = 'BPM Display', 'Icon_Tempo'
     plain = types.ModuleType('features.plain')
-    assert il.tags([bpm, plain]) == {'Icon_Displays': ['CustomOS default'], 'Icon_Tempo': ['BPM Display']}
+    assert il.tags([bpm, plain]) == {'Icon_Displays': ['HXtra default'], 'Icon_Tempo': ['BPM Display']}
 
 
 @pytest.mark.firmware

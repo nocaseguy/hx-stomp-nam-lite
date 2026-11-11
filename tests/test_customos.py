@@ -84,7 +84,7 @@ def test_title_is_title_else_the_name_in_words():
 
 @pytest.mark.parametrize('m', [m for m in MODS if getattr(m, 'SETTINGS', ()) and getattr(m, 'MENU', True)], ids=features.name)
 def test_every_feature_with_a_page_names_it(m):
-    assert getattr(m, 'TITLE', None), f'{features.name(m)} has CustomOS pages but no TITLE'
+    assert getattr(m, 'TITLE', None), f'{features.name(m)} has HXtra pages but no TITLE'
     pm.check_title(m)
     pm.icon(m)
 
@@ -224,7 +224,7 @@ def test_a_feature_with_settings_and_a_shared_hook_builds():
 
 
 @pytest.mark.firmware
-def test_each_customos_page_shows_its_feature_s_title_and_icon(m4emu):
+def test_each_hxtra_page_shows_its_feature_s_title_and_icon(m4emu):
     """A build with BPM (one page), long press (two) and breathing line (one): the section paint's title and icon calls run their
     caves, which give each page its feature's title and icon in ORDER, and leave the stock sections theirs."""
     e0 = stock_e0()
