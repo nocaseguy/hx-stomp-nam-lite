@@ -25,8 +25,19 @@ def stock():
     return _load(path)
 
 
+@functools.lru_cache(maxsize=None)
+def stock_entry(n):
+    """Stock entry n, swapped."""
+    return pa.get_entry_swapped(stock(), n)
+
+
 def stock_e0():
-    return pa.get_entry_swapped(stock(), 0)
+    return stock_entry(0)
+
+
+def menu_entry0(e0, *args, **kw):
+    """patch_menu.menu_entry0 with the stock file's other entries, which a feature category's strip icons need."""
+    return pm.menu_entry0(e0, *args, others=stock_entry, **kw)
 
 
 def reader(e0):
@@ -41,7 +52,7 @@ def reader(e0):
 
 def built(env, mods=None, ids=None):
     """(read, the names of the features built in) of the stock Entry 0 with the features env turns on."""
-    new, on = pm.menu_entry0(stock_e0(), mods, env, ids)
+    new, on = menu_entry0(stock_e0(), mods, env, ids)
     return reader(new), [features.name(m) for m in on]
 
 
@@ -55,7 +66,7 @@ def branch_target(at, hw):
 
 def built_e0(env, mods=None, ids=None):
     """The stock Entry 0 with the features env turns on."""
-    return pm.menu_entry0(stock_e0(), mods, env, ids)[0]
+    return menu_entry0(stock_e0(), mods, env, ids)[0]
 
 
 def assert_virtual(e0, feature, setting):

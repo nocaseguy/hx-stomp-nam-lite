@@ -13,7 +13,7 @@ import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import Setting
-from firmware import branch_target, built, reader, stock, stock_e0
+from firmware import branch_target, built, menu_entry0, reader, stock, stock_e0
 
 MODS = features.load()
 SETTINGS = {f'{features.name(m)}.{s.key}': s for m in MODS for s in getattr(m, 'SETTINGS', ())}
@@ -211,7 +211,7 @@ def test_a_feature_with_settings_and_a_shared_hook_builds():
     demo = fake('demo', SETTINGS=(Setting('pos', b'Demo\nPosition', (b'A', b'B', b'C', b'D', b'E'), default=2),
                                   Setting('dir', b'Demo\nDirection', (b'Normal', b'Reverse'))), apply=apply)
     ids = dict(setting_ids.by_name(), **{'demo.pos': 102, 'demo.dir': 128})
-    new, on = pm.menu_entry0(e0, MODS + [demo], {'HX_TUNER': '1'}, ids)
+    new, on = menu_entry0(e0, MODS + [demo], {'HX_TUNER': '1'}, ids)
     assert [features.name(m) for m in on] == ['tuner', 'splash', 'demo']
     read = reader(new)
     assert read(pm.NAMES_LONG + pm.NAME_LEN * 102, 13) == b'Demo\nPosition'
@@ -279,7 +279,7 @@ def page_table(read, cat, site='lookup'):
 @pytest.mark.firmware
 def test_footswitches_gets_the_hold_pages_and_other_categories_stay_stock():
     e0 = stock_e0()
-    read, stock = reader(pm.menu_entry0(e0, MODS, {'HX_LONG_PRESS': '1'})[0]), reader(e0)
+    read, stock = reader(menu_entry0(e0, MODS, {'HX_LONG_PRESS': '1'})[0]), reader(e0)
     assert read(*STOCK_TABLES[:1], STOCK_TABLES[1] - STOCK_TABLES[0]) == stock(STOCK_TABLES[0], STOCK_TABLES[1] - STOCK_TABLES[0])
     assert struct.unpack('<6H', read(FS_TABLE, 12)) == FS_STOCK_IDS
     pages = struct.unpack('<I', read(pm.ARRAYS['pages'][1][0], 4))[0]
@@ -305,4 +305,4 @@ def test_a_feature_category_and_footswitches_pages_together():
 def test_menu_must_name_a_stock_category():
     demo = fake('demo', MENU='Tempo', SETTINGS=(Setting('a', b'A', (b'0', b'1')),))
     with pytest.raises(SystemExit, match='MENU is True, False or one of Footswitches'):
-        pm.menu_entry0(stock_e0(), [demo], {}, dict(setting_ids.by_name(), **{'demo.a': 0xcc}))
+        menu_entry0(stock_e0(), [demo], {}, dict(setting_ids.by_name(), **{'demo.a': 0xcc}))

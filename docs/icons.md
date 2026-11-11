@@ -1,6 +1,6 @@
 # Icons: the icon library and a feature section's icon
 
-Each feature with settings is a section of its own in Global Settings, after Displays, with a title and an icon next to it, both from the feature. The icon is one of the stock firmware's images, picked by name. This page says how to pick one, which images Global Settings itself uses, and how to see all of them. Status tags are as in [FIRMWARE_NOTES.md](../FIRMWARE_NOTES.md).
+Each feature with settings is a section of its own in Global Settings, after Displays, with a title and an icon next to it, both from the feature; the strip of section icons across the top shows that icon too. The icon is one of the stock firmware's images, picked by name. This page says how to pick one, which images Global Settings itself uses, and how to see all of them. Status tags are as in [FIRMWARE_NOTES.md](../FIRMWARE_NOTES.md).
 
 ## See every icon: the icon library
 
@@ -47,7 +47,7 @@ A feature with no `ICON` gets `Icon_Displays`, the stock Displays icon. A sectio
 | MIDI/Tempo | `Icon_MIDITempo` | 22×24 | 0x14d |
 | Displays | `Icon_Displays` | 30×21 | 0x48 |
 
-**The section strip across the top** [verified offline]: `0x28dcf4d8` draws `Global_<section>` for each section and `Global_<section>Sel` (lit) for the current one, from the lists at `0x28e3b5f8` and `0x28e3b628`. It has six places only, so a feature's section has none and nothing is lit while you are in it.
+**The section strip across the top** [verified offline]: `0x28dcf4d8` draws `Global_<section>` for each section and `Global_<section>Sel` (lit) for the current one, from the lists at `0x28e3b5f8` and `0x28e3b628`. It has six places. In a build with feature sections it is a carousel over all of them (`src/m4/strip.s`), the build's number of sections going round: it moves only to keep the current section in it, lit, bringing it in at the last place on a turn right and the first on a turn left, so past the last section it goes on with Ins/Outs. A feature's strip icon is its `ICON` as the stock ones are to theirs: its black border trimmed, 1.6 times the size, made into a lit picture (brightest at white) and a dim one (0.39 of that), both new images.
 
 | Section | Image | Lit image | Size |
 | --- | --- | --- | --- |

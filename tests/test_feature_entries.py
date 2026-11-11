@@ -34,7 +34,8 @@ def store(height=21):
     names = [b'Pic', FONT]
     e7 = bytearray(0xf0)
     struct.pack_into('<I', e7, 0, ims.E7_MAGIC)
-    struct.pack_into('<2I', e7, 0x10, len(names), 0x60)
+    struct.pack_into('<I', e7, 8, len(e7))
+    struct.pack_into('<3I', e7, 0x10, len(names), 0x60, len(names))
     at = 0x34
     for i, n in enumerate(names):
         struct.pack_into('<2I', e7, 0x24 + 8 * i, at, len(n))
@@ -228,6 +229,86 @@ def test_entry8_items_go_after_its_end_with_a_copy_of_the_table():
     assert ims.item(again, 4)[1] == 2 and ims.item(again, 3) == (0x1b8, 4)
     with pytest.raises(SystemExit, match='only Entry 8'):
         p.entry(7).add_item(b'x')
+
+
+def test_entry7_records_go_after_its_end_with_a_copy_of_the_stock_ones():
+    p = patch()
+    e7 = p.entry(7)
+    stock = e7.stock
+    assert (e7.add_record(b'\xaa' * ims.RECORD), e7.add_record(b'\xbb' * ims.RECORD)) == (2, 3)
+    out = e7.bytes()
+    assert out[:8] == stock[:8] and out[0xc:0x14] == stock[0xc:0x14] and out[0x1c:len(stock)] == stock[0x1c:]
+    assert struct.unpack_from('<3I', out, 0x10) == (2, len(stock), 4) and struct.unpack_from('<I', out, 8)[0] == len(out)
+    assert [out[ims.record_at(out, i):][:ims.RECORD] for i in range(2)] == [stock[0x60 + ims.RECORD * i:][:ims.RECORD] for i in range(2)]
+    assert out[ims.record_at(out, 3):] == b'\xbb' * ims.RECORD
+    assert ims.names(out) == ims.names(stock) and ims.record(out, b'Pic') == ims.record_at(out, 0)
+    assert ims.font(out, FONT) == ims.font(stock, FONT)
+    with pytest.raises(SystemExit, match='Entry 7 has no record 4'):
+        ims.record_at(out, 4)
+    with pytest.raises(SystemExit, match='only Entry 7'):
+        p.entry(8).add_record(b'x' * ims.RECORD)
+    with pytest.raises(SystemExit, match='of 48 bytes'):
+        e7.add_record(b'x')
+
+
+@pytest.mark.parametrize('word', [8, 0x14, 0x18])
+def test_add_record_and_a_write_to_the_header_words_it_rewrites_fail(word):
+    p = patch()
+    p.owner = 'splash'
+    p.entry(7).put(word, b'\0' * 4, 'its header word')
+    p.owner = 'emoji'
+    with pytest.raises(SystemExit, match=r'emoji \(Entry 7.s .*which add_record rewrites\) and splash \(its header word\)'):
+        p.entry(7).add_record(b'x' * ims.RECORD)
+
+
+def test_add_image_is_a_new_record_and_item_like_another_image():
+    p = patch()
+    px = bytes(range(16))
+    assert p.add_image(0, 4, 2, px) == 2
+    e7, e8 = p.entry(7).bytes(), p.entry(8).bytes()
+    im = ims.image_at(e7, e8, 2)
+    assert (im.item, im.width, im.height, im.bpp) == (2, 4, 2, 16) and e8[im.offset:im.offset + im.length] == px
+    assert struct.unpack_from('<I', e7, ims.record_at(e7, 2) + 12)[0] == 2
+    assert ims.image_at(e7, e8, 0) == ims.image(e7, e8, b'Pic')
+    with pytest.raises(SystemExit, match='a 3x2 image is 12 bytes, not 16'):
+        p.add_image(0, 3, 2, px)
+
+
+@pytest.mark.firmware
+def test_stock_records_repeat_their_item_and_counts_agree():
+    """add_image copies a record and sets its item in words 2, 3 and 9, as every stock image record has it."""
+    e7 = pa.get_entry_swapped(stock_l6ia(), 7)
+    names, table, count = struct.unpack_from('<3I', e7, 0x10)
+    assert names == count == 577 and struct.unpack_from('<I', e7, 8)[0] == len(e7)
+    for i in range(count):
+        w = struct.unpack_from('<12I', e7, table + ims.RECORD * i)
+        if w[7] == 16:
+            assert w[2] == w[3] == w[9], i
+
+
+def test_peak_and_scaled():
+    grey, white = ims.pixel(98, 98, 98), ims.pixel(255, 255, 255)
+    px = struct.pack('<3H', 0, grey, white)
+    assert ims.peak(px) == 1 and round(ims.peak(px[:4]), 2) == 0.39 and ims.peak(b'\0\0') == 0
+    assert struct.unpack('<3H', ims.scaled(px, 2)) == (0, ims.pixel(196, 196, 196), white)
+    assert ims.scaled(px, 1) == px
+    assert struct.unpack('<H', ims.scaled(struct.pack('<H', ims.pixel(255, 0, 0)), 0.5))[0] == ims.pixel(132, 0, 0)
+
+
+def test_trimmed_drops_black_border_rows_and_columns():
+    # 3 columns of 3 from the bottom: only the middle column's lower two pixels are lit
+    px = struct.pack('<9H', 0, 0, 0, 5, 6, 0, 0, 0, 0)
+    assert ims.trimmed(px, 3, 3) == (struct.pack('<2H', 5, 6), 1, 2)
+    assert ims.trimmed(b'\0' * 4, 1, 2) == (b'\0' * 4, 1, 2)
+
+
+def test_resized_averages_by_area():
+    white = ims.pixel(255, 255, 255)
+    assert ims.resized(struct.pack('<H', white), 1, 1, 2, 2) == struct.pack('<4H', *[white] * 4)
+    assert ims.resized(struct.pack('<2H', white, 0), 1, 2, 1, 1) == struct.pack('<H', 16 << 11 | 32 << 5 | 16)
+    assert ims.resized(struct.pack('<2H', 0, white), 2, 1, 4, 1) == struct.pack('<4H', 0, 0, white, white)
+    third = ims.resized(struct.pack('<3H', white, 0, 0), 3, 1, 1, 1)
+    assert third == struct.pack('<H', 10 << 11 | 21 << 5 | 10)
 
 
 def test_entry_output_is_entry0_and_the_entries_that_changed():
@@ -720,7 +801,7 @@ def test_bpm_builds_beside_an_owned_text_renderer(stock):
     load = lambda n: pa.get_entry_swapped(stock, n)
     alone, _ = pm.menu_entries(load, env={'HX_BPM': '1'})
     both, on = pm.menu_entries(load, without_splash() + [renderer_owner()], {'HX_BPM': '1'})
-    assert [features.name(m) for m in on] == ['bpm', 'demo'] and sorted(both) == [0]
+    assert [features.name(m) for m in on] == ['bpm', 'demo'] and sorted(both) == [0, 7, 8]     # 7 and 8: its strip icons
     segs = [pa._parse_e0_segments(e[0]) for e in (alone, both)]
     read = lambda e, sg, va, n: e[0][pa._e0_vaddr_to_foff(sg, va, n):pa._e0_vaddr_to_foff(sg, va, n) + n]
     assert read(both, segs[1], LED_SEND, 4) == read(alone, segs[0], LED_SEND, 4) != LED_STOCK
