@@ -7,6 +7,7 @@
 .include "hxtra.inc"
 .equ BPM_DOTS, 18                   @ rectangles: 9 a dot
 .equ BPM_DOT_TOP, 237               @ the dots' top (y counts up from the bottom)
+.equ PAINT_GAP, 10                  @ ms: a paint sooner can start before the last frame's copy into the next buffer ends, half-drawing the dot
 .equ FS_FUNCTIONS, 0x28128a74       @ each footswitch's function, two bytes apart: 1 is TAP
 
 bpm_written:                        @ after the settings store's write (ID, value, how): the Home view only repaints on request
@@ -24,6 +25,15 @@ bpm_repaint:                        @ a repaint, once the Home view has painted:
     ldr r3, =0x28db8509             @ the redraw request the layout code ends with: (0, 1)
     bx r3
 bpm_unpainted:
+    bx lr
+
+bpm_soon:                           @ a repaint now, or held until PAINT_GAP ms after the last Home paint (the breathing line's every 25 ms)
+    adr.w r0, bpm_data
+    ldrb r1, [r0, #20]
+    cmp r1, #PAINT_GAP
+    bhs bpm_repaint
+    movs r1, #1
+    strb r1, [r0, #7]
     bx lr
 
 bpm_ledsend:                        @ the LED send's first two instructions, moved here after noting each footswitch ring lit or not
@@ -56,6 +66,19 @@ bpm_tick:                           @ after the LED task's 1 ms sleep: the dot l
     ldr r0, [r4]
     cmp r0, #0
     beq bpm_ticked
+    ldrb r0, [r4, #20]
+    cmp r0, #255
+    it lo
+    addlo r0, #1
+    strb r0, [r4, #20]
+    cmp r0, #PAINT_GAP
+    blo bpm_held
+    ldrb r0, [r4, #7]
+    cbz r0, bpm_held
+    movs r0, #0
+    strb r0, [r4, #7]
+    bl bpm_repaint
+bpm_held:
     ldr r0, [r4, #8]
     movw r1, #1500
     cmp r0, r1
@@ -114,7 +137,7 @@ bpm_turn:
     strb r0, [r4, #4]
     movs r0, #0
     strb r0, [r4, #5]               @ a tap's red lasts until the ring's next turn
-    bl bpm_repaint
+    bl bpm_soon
 bpm_ticked:
     pop {r4, pc}
 
@@ -131,7 +154,7 @@ bpm_tap:                            @ before the tap tempo core: the dot lit red
     movs r1, #1
     strb r1, [r0, #4]
     strb r1, [r0, #5]
-    b bpm_repaint
+    b bpm_soon
 
 bpm_construct:                      @ after the Home view's constructor: the widgets, hidden until the first paint
     push {r4, r5, r6, lr}
@@ -190,6 +213,9 @@ bpm_before:                         @ before the Home paint (framebuffer, Home v
     adr.w r0, bpm_data
     movs r1, #1
     str r1, [r0]
+    movs r1, #0
+    strb r1, [r0, #7]               @ this paint shows the dot as it is now
+    strb r1, [r0, #20]
     movs r0, #SETTING_BPM_DOT
     movs r1, #SETTING_BPM_DOT_MAX
     movs r2, #SETTING_BPM_DOT_DEFAULT
@@ -437,8 +463,8 @@ bpm_dotshape:                       @ x, y below the dots' top, w, h, BPM Dot Po
     .byte 222, 8, 28, 14, 2, 0
     .byte 221, 11, 30, 8, 2, 0
 .balign 4
-bpm_data:                           @ 0 painted, 4 dot lit, 5 tapped red, 6 Tap Tempo LED on, 8 ms since first paint, 12 last turn (µs), 16 period (ms)
-    .word 0, 0x00010000, 0, 0, 0
+bpm_data:                           @ 0 painted, 4 dot lit, 5 tapped red, 6 Tap Tempo LED on, 7 repaint held, 8 ms since first paint, 12 last turn (µs), 16 period (ms), 20 ms since the last paint
+    .word 0, 0x00010000, 0, 0, 0, 255
 bpm_rings:                          @ each footswitch ring lit, as last sent
     .space 4
 bpm_text:
