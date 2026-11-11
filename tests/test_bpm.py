@@ -11,7 +11,7 @@ import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import bpm, tuner
-from firmware import assert_virtual, branch_target, reader, stock_e0
+from firmware import assert_virtual, branch_target, menu_entry0, reader, stock_e0
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONTS = (4, 5, 2, 1)                # Font's values as font numbers: XL 35 Bold, L 41 Lite, M 28 Bold, S 21 Reg
@@ -46,7 +46,7 @@ def build(e0, extra=(), monkeypatch=None):
 
     monkeypatch.setattr(pm.Patch, 'module', module)
     mods = sorted(features.load() + list(extra), key=lambda f: (getattr(f, 'ORDER', 100), features.name(f)))
-    new, on = pm.menu_entry0(e0, mods, {'HX_TUNER': '1', 'HX_BPM': '1'})
+    new, on = menu_entry0(e0, mods, {'HX_TUNER': '1', 'HX_BPM': '1'})
     assert 'bpm' in [features.name(m) for m in on]
     return new, seen['src/m4/bpm.s']
 

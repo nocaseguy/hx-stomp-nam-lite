@@ -9,7 +9,7 @@ import features
 import patch_menu as pm
 import setting_ids
 from features import breathing_line as bl, gr
-from firmware import assert_virtual, reader, stock_e0
+from firmware import assert_virtual, menu_entry0, reader, stock_e0
 
 RATES = [round(2 ** 32 / (ms * 1000)) for ms in (8000, 6000, 4800, 4000, 3200, 2500, 2000, 1500, 1100, 800)]
 
@@ -40,7 +40,7 @@ def test_settings_values_defaults_and_ids():
 @pytest.mark.firmware
 def test_build_serves_the_settings_virtually_and_hooks_the_paint_and_the_tick():
     e0 = stock_e0()
-    new, on = pm.menu_entry0(e0, None, {'HX_BREATHING_LINE': '1'})
+    new, on = menu_entry0(e0, None, {'HX_BREATHING_LINE': '1'})
     assert 'breathing_line' in [features.name(m) for m in on]
     for s in bl.SETTINGS:
         assert_virtual(new, bl, s)
@@ -59,10 +59,10 @@ def test_a_build_with_the_gr_meter_hands_the_line_its_shown_word(monkeypatch):
         seen[path] = (real(self, path, inc), inc)
         return seen[path][0]
     monkeypatch.setattr(pm.Patch, 'module', module)
-    pm.menu_entry0(stock_e0(), None, {'HX_BREATHING_LINE': '1', 'HX_GR': '1'})
+    menu_entry0(stock_e0(), None, {'HX_BREATHING_LINE': '1', 'HX_GR': '1'})
     assert seen['src/m4/breathing_line.s'][1] == {'gr.inc': f'.equ GR_SHOWN, {seen[gr.MODULE][0]["data"] + gr.SHOWN:#x}\n'}
     seen.clear()
-    pm.menu_entry0(stock_e0(), None, {'HX_BREATHING_LINE': '1'})
+    menu_entry0(stock_e0(), None, {'HX_BREATHING_LINE': '1'})
     assert seen['src/m4/breathing_line.s'][1] == {'gr.inc': '.equ GR_SHOWN, 0x0\n'}
 
 

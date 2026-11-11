@@ -14,7 +14,7 @@ import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import Setting
-from firmware import branch_target, reader, stock_e0
+from firmware import branch_target, menu_entry0, reader, stock_e0, stock_entry
 
 MODS = features.load()
 SETTINGS = {f'{features.name(m)}.{s.key}': s for m in MODS for s in getattr(m, 'SETTINGS', ())}
@@ -343,7 +343,7 @@ def demo_build():
     demo = types.ModuleType('features.demo')
     demo.SETTINGS = (POS, DIR, WIDE)
     ids = dict(setting_ids.by_name(), **{'demo.pos': 0xcc, 'demo.dir': 0xcd, 'demo.wide': 0xce})
-    out, on = pm.menu_entries(lambda n: stock_e0(), MODS + [demo], {}, ids, virtual=PACKING)
+    out, on = pm.menu_entries(stock_entry, MODS + [demo], {}, ids, virtual=PACKING)
     return out[0]
 
 
@@ -376,7 +376,7 @@ def test_every_feature_built_together_reads_and_stores_its_settings_through_the_
         return seen[path]
 
     monkeypatch.setattr(pm.Patch, 'module', module)
-    new, on = pm.menu_entry0(stock_e0(), MODS, ALL)
+    new, on = menu_entry0(stock_e0(), MODS, ALL)
     assert {features.name(m) for m in on} >= {'tuner', 'bpm', 'dsp_meter', 'long_press', 'breathing_line'}
     b = Built(m4emu, new)
     for cid in setting_ids.CONTAINERS:
@@ -401,7 +401,7 @@ def test_build_owns_the_four_settings_functions():
 
 @pytest.mark.firmware
 def test_default_build_has_no_virtual_engine():
-    new, _ = pm.menu_entry0(stock_e0())
+    new, _ = menu_entry0(stock_e0())
     read = reader(new)
     for fn, stock in pm.VIRTUAL_HOOKS.values():
         assert read(fn, len(stock)) == stock
@@ -460,7 +460,7 @@ def test_built_turn_steps_by_the_stock_knob_arithmetic(m4emu):
 def test_built_turn_on_the_footswitches_pages(m4emu):
     """Long press's Hold settings in Footswitches (MENU 'Footswitches'), from page 2's empty slots on: the stock turn handler steps
     FS1 Hold through the engine."""
-    new, _ = pm.menu_entry0(stock_e0(), MODS, {'HX_LONG_PRESS': '1'})
+    new, _ = menu_entry0(stock_e0(), MODS, {'HX_LONG_PRESS': '1'})
     b = Built(m4emu, new)
     m = b.m
     b.m.write(record(108) + 8, struct.pack('<BxxxI', 3, FLOAT_ONE))
@@ -476,7 +476,7 @@ def test_built_turn_on_the_footswitches_pages(m4emu):
 @pytest.mark.parametrize('page, slot', [(0, 0), (0, 1), (0, 2), (1, 0)])    # Stomp Select, FS3..FS5 Function
 def test_built_turn_on_a_stock_footswitches_setting_is_the_stock_turn(m4emu, page, slot):
     runs = []
-    for e0 in (stock_e0(), pm.menu_entry0(stock_e0(), MODS, {'HX_LONG_PRESS': '1'})[0]):
+    for e0 in (stock_e0(), menu_entry0(stock_e0(), MODS, {'HX_LONG_PRESS': '1'})[0]):
         m = Built(m4emu, e0).m
         m.write(VIEW, b'\0' * 0x50)
         m.write(VIEW + 0xa, bytes([2, page]))

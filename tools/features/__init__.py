@@ -11,7 +11,7 @@ A feature module may have:
   TITLE      the title of its Global Settings section, on each of its pages (default: its name in words, breathing_line ->
              Breathing Line); 1..63 printable ASCII characters
   ICON       the stock image shown by that title, by name, e.g. 'Icon_Tempo' (default Icon_Displays); a name in
-             tools/patch_menu.py ICONS
+             tools/patch_menu.py ICONS. The icon strip at the top shows it too, at strip size, as a new lit and a new dim picture
   MENU       False when it shows its SETTINGS itself: they keep their IDs, limits and hxtra.inc lines but get no section
              (default True: a section of its own); or a stock
              category's name (patch_menu.STOCK_CATEGORIES, e.g. 'Footswitches'): its settings fill that category's trailing empty
@@ -21,9 +21,9 @@ A feature module may have:
              p.chain_entry() (handlers on a hook other features may share), p.own_entry() and p.own_call() (a function start or
              a call for this feature alone, for a handler no chain can take), p.id('<feature>.<key>'), p.input('<VAR>'),
              p.modules (each module assembled so far, by path: a feature reads one built before it, by ORDER),
-             p.entry(n) (Entry n by offset: read(), expect(), expect_md5(), and put(), checked for overlap as p.put() is; Entry 8
-             also add_item()) and p.add_glyph() (a glyph in an empty slot of an Entry 7 font); tools/image_store.py reads Entries 7
-             and 8.
+             p.entry(n) (Entry n by offset: read(), expect(), expect_md5(), and put(), checked for overlap as p.put() is; Entry 7
+             also add_record(), Entry 8 add_item()), p.add_glyph() (a glyph in an empty slot of an Entry 7 font) and p.add_image()
+             (a new image, by index); tools/image_store.py reads Entries 7 and 8.
              The web build imports every feature file, so a module imports only what Pyodide has at its top, and runs a
              tool such as sips only inside apply(p).
 
