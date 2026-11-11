@@ -14,6 +14,7 @@ import patch_amp as pa
 import patch_menu as pm
 import patch_splash as ps
 import splash_emoji
+import splash_hxtra
 from features import splash
 from firmware import branch_target, reader, stock as stock_l6ia
 
@@ -53,6 +54,47 @@ def rgba_png(path, w, h, px):
     chunk = lambda k, d: struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d))
     path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
                      + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+def band_picture(marks):
+    """A 320x181 picture on a faint gradient with a white 3 px bar at each x of marks across the text band."""
+    rows = [[(x // 20, y // 12, 20) for x in range(ps.W)] for y in range(ps.SPLASH[1])]
+    for x in marks:
+        for y in range(151, 180):
+            rows[y][x - 1:x + 2] = [(255, 255, 255)] * 3
+    return rows
+
+
+def test_relabel_moves_hx_and_stomp():
+    hx, xs, stomp = splash_hxtra.layout(ps.W)
+    out = splash_hxtra.relabel(band_picture([60, 200]))
+    assert out[165][hx + 60 - splash_hxtra.HX[0]] == (255, 255, 255)
+    assert out[165][stomp + 200 - splash_hxtra.STOMP[0]] == (255, 255, 255)
+    for x in (60, 200):                     # the bars' old places are background again
+        assert max(out[165][x]) < 40
+
+
+def test_relabel_keeps_the_picture_above_the_text():
+    rows = band_picture([60, 200])
+    assert splash_hxtra.relabel(rows)[:splash_hxtra.TOP] == rows[:splash_hxtra.TOP]
+
+
+def test_hxtra_layout_fits_and_is_centred():
+    hx, xs, stomp = splash_hxtra.layout(ps.W)
+    end = stomp + splash_hxtra.STOMP[1] - splash_hxtra.STOMP[0]
+    assert hx > 0 and end < ps.W and abs(hx - (ps.W - end)) <= 1
+    assert hx + splash_hxtra.HX[1] - splash_hxtra.HX[0] < xs[0] < xs[1] < xs[2] < stomp
+
+
+def test_tra_strokes_match_the_capitals():
+    w, h = 20, ps.SPLASH[1] - splash_hxtra.TOP
+    for lw, lines in splash_hxtra.letters():
+        ink = splash_hxtra.stroke(lines, w, h, 0, splash_hxtra.TOP)
+        rows = [y + splash_hxtra.TOP for y in range(h) if ink[y].max() > 0.5]
+        assert ink[:, lw + 1:].max() == 0                               # inside its width
+        assert splash_hxtra.CAP <= rows[0] and rows[-1] < splash_hxtra.BASE
+    stem = splash_hxtra.stroke(splash_hxtra.letters()[1][1], w, h, 0, splash_hxtra.TOP)[170 - splash_hxtra.TOP, :4]
+    assert 2.5 <= stem.sum() <= 3.0                 # the stock capitals' stems are about 2.7 px of white
 
 
 def test_clusters():
@@ -96,18 +138,28 @@ def build(stock, env, cwd=None):
 
 
 def test_default_text_is_plain_ascii():
-    assert splash.TEXT == "HXtra" and all(" " <= c <= "~" for c in splash.TEXT)
+    assert splash.TEXT == "v1.0.0" and all(" " <= c <= "~" for c in splash.TEXT)
 
 
 @pytest.mark.firmware
 def test_default_text_without_inputs(stock):
     entries, on = build(stock, {})
-    assert "splash" in on and set(entries) == {0}
+    assert "splash" in on and set(entries) == {0, 8}
     e0 = entries[0]
-    assert reader(e0)(splash.TEXT_SITE, len(splash.TEXT_STOCK)) == b"HXtra".ljust(len(splash.TEXT_STOCK), b"\0")
-    assert int.from_bytes(reader(e0)(splash.VERSION_LITERAL, 4), "little") == splash.TEXT_SITE + len("HXtra")
+    assert reader(e0)(splash.TEXT_SITE, len(splash.TEXT_STOCK)) == b"v1.0.0".ljust(len(splash.TEXT_STOCK), b"\0")
+    assert int.from_bytes(reader(e0)(splash.VERSION_LITERAL, 4), "little") == splash.TEXT_SITE + len("v1.0.0")
     # no emoji: the line keeps its stock grey
     assert int.from_bytes(reader(e0)(splash.TEXT_COLOUR_LITERAL, 4), "little") == splash.TEXT_COLOUR
+
+
+@pytest.mark.firmware
+def test_default_picture_is_relabelled_stock(stock):
+    entries, _ = build(stock, {})
+    _, stock_px = ps.drawn_image(stock)
+    name, px = ps.drawn_image(l6ia.rebuild_archive(stock, entries)[0])
+    assert name == ps.SPLASH[0]
+    assert px == ps.encode(splash_hxtra.relabel(ps.decode(stock_px)))
+    assert ps.decode(px)[:splash_hxtra.TOP] == ps.decode(stock_px)[:splash_hxtra.TOP]      # only the text band changes
 
 
 @pytest.mark.firmware
@@ -148,7 +200,7 @@ def test_full_screen(tmp_path, stock):
 @pytest.mark.firmware
 def test_text(stock):
     entries, _ = build(stock, {"HX_SPLASH_TEXT": "HXtra 3.80.0"})
-    assert set(entries) == {0}
+    assert set(entries) == {0, 8}
     e0 = entries[0]
     assert reader(e0)(splash.TEXT_SITE, len(splash.TEXT_STOCK)) == b"HXtra 3.80.0".ljust(len(splash.TEXT_STOCK), b"\0")
     assert int.from_bytes(reader(e0)(splash.VERSION_LITERAL, 4), "little") == splash.TEXT_SITE + len("HXtra 3.80.0")
@@ -225,7 +277,9 @@ def test_emoji_text(tmp_path, stock):
         off, ln = image_store.item(e8, idx)
         assert e8[off:off + ln] == splash_emoji.glyph_from_png(tmp_path / f"e{k}.png", 21)[1] and ln == 2 * w * h
     assert image_store.glyph(e7, table, 3)[2] == image_store.EMPTY_GLYPH
-    assert struct.unpack_from("<I", e8, 8)[0] == n + 2 and e8[24:len(stock8)] == stock8[24:]   # no stock byte moves
+    pic = image_store.image(stock7, stock8, ps.SPLASH[0])
+    assert struct.unpack_from("<I", e8, 8)[0] == n + 2 and e8[24:pic.offset] == stock8[24:pic.offset]   # no stock byte moves
+    assert e8[pic.offset + pic.length:len(stock8)] == stock8[pic.offset + pic.length:]
 
 
 @pytest.mark.firmware

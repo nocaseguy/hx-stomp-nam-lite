@@ -28,7 +28,7 @@ var STOCK_MD5 = {
   "7c2ebdf1bffb6bcc5f89dda97f91e40c": "HX_Effects",
 };
 var BUILT_MD5 = {
-  "HX_Stomp": "c51c624c93d91f5e510d8f44268e64b4",
+  "HX_Stomp": "8673ca7e83ec469e2ea79348eea99ca6",
   "HX_Stomp_XL": "8918ab60ebff62ebfccd4fccb2bed85a",
   "HX_Effects": "2efb98791581b67116ba82c5ecd30ea2",
 };
@@ -72,6 +72,7 @@ var SOURCES = [
   "tools/image_store.py",
   "tools/patch_splash.py",
   "tools/splash_emoji.py",
+  "tools/splash_hxtra.py",
   "tools/setting_ids.py",
   "tools/features/__init__.py",
   "tools/features/bpm.py",

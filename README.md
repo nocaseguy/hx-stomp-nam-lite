@@ -37,7 +37,7 @@ Each feature is a module in `tools/features/`; the Metronome's block itself, wit
 | **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). | The snapshot footswitches, with Footswitch Mode on Snapshot; in 4–6, the camera icon at the top right and the footswitch labels show the bank. No settings. |
 | **Metronome** | `HX_CLICK=1` | A block that plays a click on every beat of the tempo, with an optional accent on the downbeat. HX Stomp only. See [Metronome](#metronome). | Model browser: Looper > Metronome > Metronome. Its settings are the block's knobs: Time, Level, Accent and Thru. |
 | **GR meter** | `HX_GR=1` | A gain-reduction meter on the Home screen, lit by the compressor you turn it on in. With it, NAM A2 Lite runs up to two blocks instead of three. HX Stomp only. | Knobs on the Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester and Red Squeeze compressors: Mtr Pos (Middle, Top, Left, Bottom, Right), Mtr Dir (Normal, Reverse) and Mtr Thk (0 … 20; 0, the default, is off). |
-| **Boot screen** | `--splash`, `--splash-text` | Your own boot picture and boot text, with emoji. Without them, the boot text reads "HXtra". See [Boot screen](#boot-screen-hx-stomp-only). | The screen at power-on, once the firmware starts. Set when you build: no settings on the HX Stomp. |
+| **Boot screen** | `--splash`, `--splash-text` | The stock boot picture reads "HXtra STOMP" and the boot text "v1.0.0". Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). | The screen at power-on, once the firmware starts. Set when you build: no settings on the HX Stomp. |
 
 ```sh
 HX_TUNER=1 HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
@@ -133,9 +133,10 @@ A click track in time with the tempo, as a block: add it from the model browser,
 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf --splash my_picture.jpg --splash-text "HXS OS v0.1"
 ```
 
+- Without `--splash`, the boot picture is the stock one with "HX STOMP" relabelled "HXtra STOMP" (`tools/splash_hxtra.py`). It's made from the firmware's own pixels at build time, so the repo holds no Line 6 artwork.
 - `--splash` takes any picture macOS can open (PNG, JPEG, HEIC, ...) at any size. The screen is **320x240**; a 320x240 PNG is used exactly as it is, and anything else is converted to it with macOS's `sips`: scaled to cover the screen and cropped at the centre, or with `--splash-fit fit`, scaled to fit inside it on black. Off macOS, give a 320x240 PNG.
 - The loading bar crosses the picture about halfway down, and the text sits on it in the bottom 40 rows, in grey (`0xb1b1b1`), so keep the bottom darkish.
-- The boot text reads "HXtra" in place of "Firmware 3.80.0". `--splash-text` replaces it with up to 23 characters: ASCII, and emoji, each of which counts as one, e.g. `--splash-text "HXS OS v0.1 🎸"`.
+- The boot text reads "v1.0.0", the HXtra version, in place of "Firmware 3.80.0". `--splash-text` replaces it with up to 23 characters: ASCII, and emoji, each of which counts as one, e.g. `--splash-text "HXS OS v0.1 🎸"`.
 - Each emoji becomes a colour glyph of the line's font, 18 px tall, level with the capitals. On macOS it's rendered from Apple Color Emoji; `--splash-glyph 🎸=guitar.png` (repeatable) gives your own picture instead, and off macOS it's required. A line with emoji is drawn white, not grey, as the firmware shows a glyph's own colours only on a white line.
 - The boot screen is an HXtra feature (`tools/features/splash.py`). The flags set its inputs `HX_SPLASH`, `HX_SPLASH_FIT`, `HX_SPLASH_TEXT` and `HX_SPLASH_GLYPHS`, which work as environment variables too, as the other features' flags do.
 - `python3 tools/splash_topo.py out.png [--seed N]` draws a neon contour-map picture to start from; `python3 tools/patch_splash.py export firmware.hxf out.png` saves the picture an image has now.
@@ -182,9 +183,9 @@ This writes `build/HX_Stomp_v3.80.0_HXtra.hxf` (from the XL's file, `build/HX_St
 4. Adds the kernel to the DSP's boot code (`patch_amp.py patch`).
 5. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
-The build is deterministic. The default HX Stomp build (no switches) has MD5 `c51c624c93d91f5e510d8f44268e64b4`, pinned in `tests/test_firmware.py`.
+The build is deterministic. The default HX Stomp build (no switches) has MD5 `8673ca7e83ec469e2ea79348eea99ca6`, pinned in `tests/test_firmware.py`.
 
-A default build changes only 4 of the 15 parts of the firmware: the main application, the DSP program, the model list and the DSP graph library (the boot screen also changes the image store and the font table). **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
+A default build changes only 5 of the 15 parts of the firmware: the main application, the DSP program, the model list, the DSP graph library and the image store (the boot picture; emoji in the boot text also change the font table). **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
 ## Build in the browser
 
@@ -291,7 +292,7 @@ tools/release.py              makes a release: its m4cache.json on a GitHub rele
 src/m4/                       the features' M4 code (tuner.s, bpm.s, breathing_line.s, dsp_meter.s, long_press.s, more_snapshots.s)
 tools/image_store.py          the image store (Entries 7 and 8): images, fonts, items
 tools/icon_library.py         the icon library: every stock icon drawn from your firmware file (docs/icons.md)
-tools/patch_splash.py         boot screen pictures; splash_topo.py draws one, splash_emoji.py and emoji_png.swift make emoji glyphs
+tools/patch_splash.py         boot screen pictures; splash_hxtra.py relabels the stock one, splash_topo.py draws one, splash_emoji.py and emoji_png.swift make emoji glyphs
 tools/patch_amp.py            inspect / add-model / ir-title / patch
 tools/nam2ir.py               .nam -> User IR .wav
 tools/hxf.py, l6ia.py         .hxf container and L6IA archive
