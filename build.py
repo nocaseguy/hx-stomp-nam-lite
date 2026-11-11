@@ -42,12 +42,6 @@ STOCK_MD5 = {
 # The kernel and the patch_amp.py steps (tests/test_web_build.py keeps web/firmware-worker.js's copies
 # equal), per unit: the same on both. Each step reads the previous one's output: patch_amp.py CMD IN OUT ARGS...
 #
-# The earlier four-knob build (NAM4; patch_amp.py add-fx-model --knobs nam4, kernel --no-tone): Model,
-# Polarity, Input, Output in Amp > NAM, on MM4 Frequency Shifter's preset ID 461 (that stock model is removed). HX Edit knows that ID, so it keeps NAM blocks when it
-# rewrites a preset (it drops blocks of models it doesn't know); the knobs follow MM4's types, so HX
-# Edit keeps their values too. The block is an effect: the two-amp rule doesn't count it. No tone
-# knobs (the kernel's --no-tone, ~0.5% of the DSP less a block, hence DSP cost 2220, was 2275).
-# Presets saved with an earlier NAM build (IDs 147/148) don't open as NAM in this one.
 # NAM A2 Lite with ten knobs and a tone stack in Amp > NAM, on Xenomorph Fuzz Mono's preset ID 555 (that
 # stock model is removed), the knobs type for type on its own so HX Edit keeps NAM blocks and their
 # values, in live order: Input, Treble, Output | Polarity, Bass, Mid | Model, Mid Freq, Q | High Cut.
@@ -67,14 +61,6 @@ NAM_EQ = [
      "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
     ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
     ["ir-title", "--fx-preset-id", "555", "--knob", "6"],
-]
-NAM4 = [
-    ["remove-model", "--preset-id", "461"],
-    ["add-fx-model", "--knobs", "nam4", "--name", "HD2_DistNAMLite", "--display-name", "NAM A2 Lite",
-     "--category", "distortion", "--folder", "NAM", "--preset-id", "461", "--dsp-cost", "2220",
-     "--sdram-words", "0x5000", "--dm-words", "0x303", "--pm-words", "0x147"],
-    ["move-folder", "--name", "NAM", "--from", "2", "--to", "12"],
-    ["ir-title", "--fx-preset-id", "461", "--knob", "0"],
 ]
 STEPS = {"HX_Stomp": NAM_EQ, "HX_Stomp_XL": NAM_EQ, "HX_Effects": [["effects-eq"]]}
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -124,7 +110,8 @@ def main():
     titled = os.path.join(build, "nam_lite_title.l6ia")
     py = sys.executable
 
-    if os.environ.get("HX_FRAMEPROBE"):
+    probe = os.environ.get("HX_FRAMEPROBE") and unit == "HX_Stomp"
+    if probe:
         asm = os.path.join(HERE, "src", "sharc", "frame_probe.asm")
     else:
         run(py, *KERNEL[unit], "-o", asm, *([] if "--no-check" in argv else ["--check"]))
@@ -140,7 +127,7 @@ def main():
         run(py, "tools/patch_menu.py", base, titled, "--cwd", os.getcwd())
         os.replace(titled, base)
     wrap = ["--wrap-prim", "0x271a:0x8d9c9", "--wrap-prim", "0x2719:0x8d342",
-                                  "--wrap-prim", "0x2710:0x8d342"] if os.environ.get("HX_FRAMEPROBE") else []
+                                  "--wrap-prim", "0x2710:0x8d342"] if probe else []
     run(py, "tools/patch_amp.py", "patch", base, image, "--asm", asm, *wrap)
     if os.environ.get("HX_CLICK") and unit == "HX_Stomp":
         run(py, "tools/patch_click.py", image, titled)

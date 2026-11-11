@@ -18,6 +18,7 @@ add_model has no tempo sync (kit_patch_amp.SYNC_PARAMS), so this tool lays out t
 parameter map itself (click_blob) and uses the kit's Entry 0, 3 and 4 steps around it.
 """
 import argparse
+import importlib.util
 import os
 import struct
 import sys
@@ -166,12 +167,11 @@ def replace_last_blob(e4, blob_index, words):
 
 
 def nam_layout():
-    """nam_multi.Layout of build.py's HX Stomp kernel: three slots, --mid-sweep."""
-    midq, nam_multi.MIDQ = nam_multi.MIDQ, True     # main() sets it from --mid-sweep, which build() alone never sees
-    try:
-        return nam_multi.build(3)[1]
-    finally:
-        nam_multi.MIDQ = midq
+    """nam_multi's Layout of build.py's HX Stomp kernel, with its KERNEL['HX_Stomp'] flags."""
+    spec = importlib.util.spec_from_file_location('customos_build', os.path.join(SCRIPT_DIR, '..', 'build.py'))
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    return nam_multi.layout(build.KERNEL['HX_Stomp'][1:])
 
 
 def pm_base(n_insns):

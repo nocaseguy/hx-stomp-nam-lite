@@ -13,7 +13,7 @@ a = sys.argv[1:]
 if a[0] != "--no-ramrun":
     up, l6ia = hs.ramrun(os.path.abspath(a[0]), hs.STOCK)
 else:
-    l6ia, _ = hs.patch_amp.load_l6ia_from_any(os.path.join(ROOT, "build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf"))
+    l6ia, _ = hs.patch_amp.load_l6ia_from_any(os.path.join(ROOT, "build/HX_Stomp_v3.80.0_CustomOS.hxf"))
 hs.set_profile(l6ia)
 
 def usb_input():

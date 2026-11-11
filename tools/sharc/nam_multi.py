@@ -34,6 +34,7 @@ Memory (normal words):
   Each instance's SDRAM block: its long rings (d >= FAR_D), each with a 16-word
       mirror, HIST (the crossfade's 512 outputs) and the two sentinel words.
 """
+import contextlib
 import math
 import os
 import random
@@ -1472,6 +1473,30 @@ def check(asm, lay, w, **kw):
     return True, k.summary(), k
 
 
+@contextlib.contextmanager
+def flags(args):
+    """The kernel switches (--no-tone, --mid-sweep, --effects) as `args` set them, put back on exit."""
+    global NO_TONE, MIDQ, IR_FLAG, IR_TOP
+    saved = NO_TONE, MIDQ, IR_FLAG, IR_TOP
+    NO_TONE, MIDQ = "--no-tone" in args, "--mid-sweep" in args
+    if MIDQ and NO_TONE:
+        sys.exit("--mid-sweep needs the tone stack (not --no-tone)")
+    if "--effects" in args:
+        IR_FLAG, IR_TOP = IR_EFFECTS
+    try:
+        yield
+    finally:
+        NO_TONE, MIDQ, IR_FLAG, IR_TOP = saved
+
+
+def layout(args):
+    """The Layout of `nam_multi.py args`'s kernel, from its code sizes alone (build() also assembles the tables)."""
+    opt = lambda k: args[args.index(k) + 1] if k in args else None
+    with flags(args):
+        hot, cold = code_sizes()
+        return Layout(int(opt("--slots") or 3), n_code=hot, n_cold=cold, staging=opt("--staging") or "b2")
+
+
 def main():
     slots = int(sys.argv[sys.argv.index("--slots") + 1]) if "--slots" in sys.argv else 3
     args = sys.argv[1:]
@@ -1484,26 +1509,17 @@ def main():
             sys.exit(f"{src[0]}: {c} channels, NAM A2 Lite has {C}")
     else:
         w = nam_lite.placeholder()
-    global NO_TONE
-    NO_TONE = "--no-tone" in args
-    global MIDQ
-    MIDQ = "--mid-sweep" in args
-    if MIDQ and NO_TONE:
-        sys.exit("--mid-sweep needs the tone stack (not --no-tone)")
-    if "--effects" in args:
-        global IR_FLAG, IR_TOP
-        IR_FLAG, IR_TOP = IR_EFFECTS
-    asm, lay = build(slots, staging=opt("--staging") or "b2")
-    if "-o" in sys.argv:
-        open(sys.argv[sys.argv.index("-o") + 1], "w").write(asm)
-    for k, v in lay.report().items():
-        print(f"{k}: {v}")
-    if "--check" in sys.argv:
-        ok, res, _ = check(asm, lay, w)
-        print(res)
-        if not ok:
-            sys.exit(1)
-
+    with flags(args):
+        asm, lay = build(slots, staging=opt("--staging") or "b2")
+        if "-o" in sys.argv:
+            open(sys.argv[sys.argv.index("-o") + 1], "w").write(asm)
+        for k, v in lay.report().items():
+            print(f"{k}: {v}")
+        if "--check" in sys.argv:
+            ok, res, _ = check(asm, lay, w)
+            print(res)
+            if not ok:
+                sys.exit(1)
 
 if __name__ == "__main__":
     main()

@@ -346,6 +346,45 @@ def test_gr_build(tmp_path, flags):
     assert hashlib.md5(out.read_bytes()).hexdigest() == GR_BUILT_MD5[flags]
 
 
+def build_steps(tmp_path, monkeypatch, unit, env):
+    """The commands build.py's main() runs for `unit` with `env`, each step stubbed out."""
+    import hashlib
+    import importlib.util
+    import sys
+    spec = importlib.util.spec_from_file_location('customos_build', ROOT / 'build.py')
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    stock = tmp_path / 'stock.hxf'
+    stock.write_bytes(b'not firmware')
+    monkeypatch.setattr(build, 'STOCK_MD5', {hashlib.md5(stock.read_bytes()).hexdigest(): unit})
+    for k in ('HX_GR', 'HX_FRAMEPROBE', 'HX_CLICK'):
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setattr(build.os, 'replace', lambda *a: None)
+    monkeypatch.setattr(build.os, 'remove', lambda *a: None)
+    monkeypatch.setattr(sys, 'argv', ['build.py', str(stock), '-o', str(tmp_path / 'out.hxf'), '--no-check'])
+    ran = []
+    monkeypatch.setattr(build, 'run', lambda *a: ran.append(a[1:]) or 'ALL OK')
+    build.main()
+    return ran
+
+
+@pytest.mark.parametrize('unit', ['HX_Stomp_XL', 'HX_Effects'])
+def test_frameprobe_is_for_the_hx_stomp_only(tmp_path, monkeypatch, unit):
+    ran = build_steps(tmp_path, monkeypatch, unit, {'HX_FRAMEPROBE': '1'})
+    assert any(a[0] == 'tools/sharc/nam_multi.py' for a in ran)
+    patch = next(a for a in ran if a[:2] == ('tools/patch_amp.py', 'patch'))
+    assert '--wrap-prim' not in patch and not patch[-1].endswith('frame_probe.asm')
+
+
+def test_frameprobe_wraps_the_compressors_on_the_hx_stomp(tmp_path, monkeypatch):
+    ran = build_steps(tmp_path, monkeypatch, 'HX_Stomp', {'HX_FRAMEPROBE': '1'})
+    assert not any(a[0] == 'tools/sharc/nam_multi.py' for a in ran)
+    patch = next(a for a in ran if a[:2] == ('tools/patch_amp.py', 'patch'))
+    assert patch.count('--wrap-prim') == 3 and patch[patch.index('--asm') + 1].endswith('frame_probe.asm')
+
+
 # ---- the feature: its hooks on the stock firmware
 
 @pytest.mark.firmware

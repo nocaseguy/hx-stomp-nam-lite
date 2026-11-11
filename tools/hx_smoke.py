@@ -5,7 +5,7 @@ usage: python3 tools/hx_smoke.py IMAGE [--stock STOCK.hxf]
                                  [--only CASES|TAGS] [--skip CASES|TAGS] [--record S] [--soak S]
                                  [--json OUT] [--no-ramrun] [--list] [--steps]
 
-IMAGE (.hxf or .l6ia, e.g. build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf) runs from RAM
+IMAGE (.hxf or .l6ia, e.g. build/HX_Stomp_v3.80.0_CustomOS.hxf) runs from RAM
 (tools/hx_ramrun.sh: the eMMC is not touched, what the image saves stays in RAM, a power
 cycle brings the installed firmware back) and is driven with tools/hx_ctl.py. Cases, with
 their tags (--only / --skip take names or tags, comma-separated; --list prints them):

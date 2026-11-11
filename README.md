@@ -134,10 +134,11 @@ What is here is our own work: the patchers and the offsets they patch, the M4 an
 
 ## Requirements
 
-- An **HX Stomp**. The **HX Stomp XL** builds too, with NAM A2 Lite only (see [HX Stomp XL](#hx-stomp-xl)). Not the Helix Floor, LT or Rack: their firmware is a different design.
+- An **HX Stomp**. The **HX Stomp XL** and the **HX Effects** build too, with NAM A2 Lite only (see [HX Stomp XL](#hx-stomp-xl); on the HX Effects it is in Distortion > Mono). Not the Helix Floor, LT or Rack: their firmware is a different design.
 - Line 6's firmware 3.80.0 for your unit. The build checks the MD5 and refuses any other file:
   - HX Stomp: `HX_Stomp_v3.80.0_0x103966115.hxf`, MD5 `a2cd8f4ae56f49415380270ebc484bf1`. Download it from [line6.com](https://line6.com/software/readeula.html?rid=12906); you need to sign in with a free Line 6 (Helix) account to get the download.
   - HX Stomp XL: `HX_Stomp_XL_v3.80.0_0x103966115.hxf`, MD5 `329e3a26d60d3de1988b6785fa833ee1`
+  - HX Effects: `HX_Effects_v3.80.0_0xd97239907.hxf`, MD5 `7c2ebdf1bffb6bcc5f89dda97f91e40c`
 - Python 3.10 or newer with `numpy`: `pip install numpy`. To run a build from RAM from the command line, also `pyusb` and `dfu-util`.
 - For every feature but the boot screen, Apple's Command Line Tools (`xcode-select --install`): their M4 code is assembled with its clang at build time. For the boot screen, macOS converts pictures (`sips`) and renders emoji (`swift`); elsewhere give a 320x240 PNG and `--splash-glyph` pictures.
 - **Line 6 Updater** to install, and **HX Edit** to import captures.
@@ -148,15 +149,15 @@ What is here is our own work: the patchers and the offsets they patch, the M4 an
 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
 ```
 
-This writes `build/HX_Stomp_v3.80.0_CustomOS.hxf` (from the XL's file, `build/HX_Stomp_XL_v3.80.0_CustomOS.hxf`). It takes about 30 seconds. The build:
+This writes `build/HX_Stomp_v3.80.0_CustomOS.hxf` (from the XL's file, `build/HX_Stomp_XL_v3.80.0_CustomOS.hxf`; from the HX Effects', `build/HX_Effects_v3.80.0_CustomOS.hxf`). It takes about 2 minutes, most of it the kernel check of step 1. The build:
 
 1. Assembles the NAM kernel and runs it in the SHARC simulator, checking every block's output bit for bit against a reference NAM A2 implementation (`src/sharc/nam_a2.asm`). Add `--no-check` to skip this step.
-2. Adds the NAM A2 Lite amp and its Distortion > NAM twin (`tools/patch_amp.py add-model`, `add-fx-model`), and the IR name in the block title (`ir-title`).
+2. Adds NAM A2 Lite in place of Xenomorph Fuzz Mono (preset ID 555): `tools/patch_amp.py remove-model`, `add-fx-model --knobs eq`, `move-folder` (into Amp > NAM) and `ir-title --knob 6` (the IR name in the block title, from the Model knob). These are `build.py`'s `STEPS`; the HX Effects has its own one step, `effects-eq`.
 3. On the HX Stomp, adds the CustomOS features that are turned on to the main application (`tools/patch_menu.py`, from `tools/features/`).
 4. Adds the kernel to the DSP's boot code (`patch_amp.py patch`).
 5. Recomputes and verifies every checksum: the container MD5, the archive Fletcher-32 and CRC-32, and the image CRCs.
 
-The build is deterministic. The default HX Stomp build (no switches) has MD5 `fd18c1b0fda16c73c0f096d9b9edbdc7`, pinned in `tests/test_firmware.py`.
+The build is deterministic. The default HX Stomp build (no switches) has MD5 `a37659d04cf97218bd1c470c6519cdad`, pinned in `tests/test_firmware.py`.
 
 A default build changes only 4 of the 15 parts of the firmware: the main application, the DSP program, the model list and the DSP graph library (the boot screen also changes the image store and the font table). **The bootloader is never touched**, which is what keeps [Recovery](#recovery) possible.
 
@@ -227,7 +228,7 @@ HX_STOMP_HXF=path/to/HX_Stomp_v3.80.0_0x103966115.hxf .venv/bin/pytest   # and t
 .venv/bin/pytest -m nam                           # upstream's NAM A2 Lite tests (slow: the kernel in the simulator)
 ```
 
-Upstream's NAM A2 Lite tests (`test_nam_lite`, `test_multi_kernel`, `test_web_parity`, `test_patch_amp`, `test_web_i18n`) carry the `nam` marker and are skipped unless the `-m` expression names `nam` (`tests/conftest.py`). The firmware MD5 test still covers NAM A2 Lite's bytes in every build. GitHub Actions runs `-m "not firmware"` and `-m "nam and not firmware"` on every push and pull request. The firmware tests need your own stock file (`HX_STOMP_HXF`, `HX_STOMP_XL_HXF`) and are skipped without one. They build the whole `.hxf` and compare its MD5 with the one pinned in `tests/test_firmware.py`, so a changed byte anywhere in the firmware fails until the pin is updated on purpose. `web/firmware-worker.js` carries the same pin.
+Upstream's NAM A2 Lite tests (`test_nam_lite`, `test_multi_kernel`, `test_web_parity`, `test_patch_amp`, `test_web_i18n`) carry the `nam` marker and are skipped unless the `-m` expression names `nam` (`tests/conftest.py`). The firmware MD5 test still covers NAM A2 Lite's bytes in every build. GitHub Actions runs `-m "not firmware"` and `-m "nam and not firmware"` on every push and pull request. The firmware tests need your own stock file (`HX_STOMP_HXF`, `HX_STOMP_XL_HXF`, `HX_EFFECTS_HXF`) and are skipped without one. They build the whole `.hxf` and compare its MD5 with the one pinned in `tests/test_firmware.py`, so a changed byte anywhere in the firmware fails until the pin is updated on purpose. `web/firmware-worker.js` carries the same pin.
 
 M4 code (the caves `tools/patch_menu.py` writes, and each feature's `.s` module) is tested by running it in [unicorn](https://www.unicorn-engine.org) as a Cortex-M4, with `tests/m4emu.py`: it assembles a module with the generated `customos.inc` and stands in for firmware functions with Python stubs that log their calls. A call fails if it runs code that is neither loaded nor a stub (a missing stub), doesn't return (a loop), or changes SP or r4-r11. Take the `m4emu` fixture rather than importing the module, so a file's other tests still run without unicorn. `tests/test_customos_m4.py` is the example. `tests/firmware.py` builds Entry 0 from your stock file with the features a test turns on, and reads its code and branches. `m4emu.assemble()` needs Apple's Command Line Tools clang and skips the test without it, so CI (Ubuntu) skips those.
 
