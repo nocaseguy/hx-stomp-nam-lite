@@ -52,6 +52,15 @@ CAT_NAME = b'HXtra'
 # Stock categories a feature's MENU may name: (category, its page table, as each dispatch's own literal loads it). The table is
 # copied with the features' settings in its trailing empty slots and on pages after it, since the next category's table follows it.
 STOCK_CATEGORIES = {'Footswitches': (2, 0x28e3b550)}
+TITLE_SET, TITLE_LEN = 0x28dc5f20, 64     # (text): copies at most 64 bytes into the Global Settings title
+ICON_SET = 0x28dc5a6c            # (image index): the section icon by the title
+# The section paint's calls of TITLE_SET and ICON_SET, each with r2 the section and r6 the view ([+0xa] section, [+0xb] page)
+TITLE_CALL, ICON_CALL = 0x28dce8e2, 0x28dce8fa
+ICONS = {   # the stock image index of each icon a feature may name (tests check them against Entry 7's names)
+    'Icon_Displays': 0x48,       # HXtra's icon in the section list, and a page's when its feature names none
+    'Icon_Tempo': 0x181,
+    'Icon_DualIR': 0x100,
+}
 # Sites that switch on the category with `cmp rN,#5; bhi exit; tbb`: (hook, cat reg, page reg, table reg, tbb, exit, stub).
 # The stub is category 2's generic case entered after its table load: it sets the slot in r4 itself, which some cases leave to the category.
 SITES = {
@@ -175,6 +184,21 @@ def dispatch_cave(at, site, tables, stub=None):
     return a.bytes()
 
 
+def page_cave(at, table, pages, fn):
+    """fn (TITLE_SET or ICON_SET) with HXtra's word for the page (table: a word per page) in r0, the stock one in any other
+    section."""
+    a = Asm(at)
+    a.h(cmp_imm(2, 6))
+    a.b16('ne', 'stock')
+    a.h(0x7af3, cmp_imm(3, pages - 1))     # ldrb r3,[r6,#0xb]: the page
+    a.b16('hi', 'stock')
+    a.movw_movt(0, table)
+    a.h(0xf850, 0x0023)                     # ldr.w r0,[r0,r3,lsl #2]
+    a.label('stock')
+    a.bw(fn)
+    return a.bytes()
+
+
 def text_cave(at, tables):
     """Runs the two instructions the hook replaced, then answers our IDs (ID -> (strings, max, default)) and leaves others to stock."""
     a = Asm(at)
@@ -263,6 +287,22 @@ def check_setting(feature, s):
         raise SystemExit(f'patch-menu: {feature}.{s.key}: 1..256 values of at most {VALUE_LEN - 1} bytes')
     if not 0 <= s.default <= s.max:
         raise SystemExit(f'patch-menu: {feature}.{s.key}: default {s.default} is not a value')
+
+
+def check_title(feature):
+    """Its HXtra pages' title: TITLE, else its name in words."""
+    t = getattr(feature, 'TITLE', None) or features.name(feature).replace('_', ' ').title()
+    if not t.isascii() or not t.isprintable() or not 1 <= len(t) < TITLE_LEN:
+        raise SystemExit(f'patch-menu: {features.name(feature)}: title {t!r} is not 1..{TITLE_LEN - 1} printable ASCII characters')
+    return t.encode()
+
+
+def icon(feature):
+    """The image index of its HXtra pages' icon: ICON's, else the Displays icon HXtra has always shown."""
+    name = getattr(feature, 'ICON', None) or 'Icon_Displays'
+    if name not in ICONS:
+        raise SystemExit(f'patch-menu: {features.name(feature)}: icon {name!r} is not in ICONS: add it with its image index')
+    return ICONS[name]
 
 
 def hxtra_inc(mods, ids, virt_set=None):
@@ -703,7 +743,7 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None, virtual=No
     values = {features.name(m): features.values(m, env, cwd) for m in on}
     p = Patch(load(0), mods, setting_ids.by_name() if ids is None else ids, load, values)
     packing = setting_ids.packing() if virtual is None else virtual
-    settings, stored = [], []   # (ID, setting): on HXtra pages in page order; of every feature
+    settings, stored, titles, icons = [], [], [], []    # (ID, setting) on HXtra pages in page order, of every feature; per page
     extra = {}                  # stock category -> (ID, setting) on its pages after its own
     for m in on:
         mine = []
@@ -718,6 +758,9 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None, virtual=No
             extra.setdefault(STOCK_CATEGORIES[menu][0], []).extend(mine)
         elif menu:
             settings += mine + [(EMPTY_SLOT, None)] * (-len(mine) % 3)
+            pages = -(-len(mine) // 3)
+            titles += [check_title(m)] * pages
+            icons += [icon(m)] * pages
 
     for tab in (NAMES_LONG, NAMES_SHORT):
         if p.read(tab + NAME_LEN * 22, 8) != b'Main LCD':
@@ -737,7 +780,7 @@ def menu_entries(load, mods=None, env=os.environ, ids=None, cwd=None, virtual=No
             set_limits(p, pid, s)
     virt = add_virtual(p, [(pid, s) for pid, s in stored if pid in packing], packing)
     if settings or extra:       # no feature with a page: no HXtra section and stock categories as they are
-        add_category(p, settings, virt, extra)
+        add_category(p, settings, virt, extra, titles, icons)
 
     for m in on:
         if hasattr(m, 'apply'):
@@ -788,10 +831,11 @@ def add_virtual(p, virt, packing):
     return m
 
 
-def add_category(p, settings, virt=None, extra=None):
+def add_category(p, settings, virt=None, extra=None, titles=None, icons=None):
     """The HXtra section of Global Settings when settings has pages ((ID, setting) in page order, three to a page), the settings
     extra ({stock category: [(ID, setting)]}) adds to a stock category from its first trailing empty slot on, and their value text;
-    virt, the virtual settings' module, takes the turn and the click first."""
+    virt, the virtual settings' module, takes the turn and the click first; titles and icons (image indexes), one per HXtra page,
+    replace HXtra's own."""
     extra = extra or {}
     p.expect(TEXT_FN, TEXT_FN_STOCK, 'the value-text function')
     p.expect(NAV_CMP, NAV_CMP_STOCK, 'the category navigation')
@@ -836,6 +880,21 @@ def add_category(p, settings, virt=None, extra=None):
         stub = virt[f'virt_{name}'] if virt and name in ('turn', 'click') else None
         p.put(site[0], thumb_bw(site[0], p.add(dispatch_cave(p.next(), site, tables, stub))), f'the category dispatch {name}')
     p.put(TEXT_FN, thumb_bw(TEXT_FN, p.add(text_cave(p.next(), values))), 'the value-text function')
+    owner, p.owner = p.owner, 'HXtra'
+    if titles:
+        names = {t: p.add(t + b'\0') for t in dict.fromkeys(titles)}
+        own_pages(p, TITLE_CALL, TITLE_SET, 'the HXtra page titles', [names[t] for t in titles], len(settings) // 3)
+    if icons:
+        own_pages(p, ICON_CALL, ICON_SET, 'the HXtra page icons', icons, len(settings) // 3)
+    p.owner = owner
+
+
+def own_pages(p, site, fn, what, words, pages):
+    """The section paint's call of fn at site, sent to a page_cave of words, one per HXtra page."""
+    if len(words) != pages:
+        raise SystemExit(f'patch-menu: {len(words)} words for {pages} HXtra pages ({what})')
+    table_va = p.add(b''.join(struct.pack('<I', w) for w in words))
+    p.own_call(site, fn, what, p.add(page_cave(p.next(), table_va, pages, fn)))
 
 
 def patch_menu(l6ia_bytes, log=print, cwd=None):

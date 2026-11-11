@@ -7,11 +7,13 @@ import types
 import pytest
 
 import features
+import image_store
 import m4asm
+import patch_amp as pa
 import patch_menu as pm
 import setting_ids
 from features import Setting
-from firmware import branch_target, built, reader, stock_e0
+from firmware import branch_target, built, reader, stock, stock_e0
 
 MODS = features.load()
 SETTINGS = {f'{features.name(m)}.{s.key}': s for m in MODS for s in getattr(m, 'SETTINGS', ())}
@@ -70,6 +72,36 @@ def test_check_setting_refuses_long_labels_and_values():
         pm.check_setting('f', Setting('k', b'A\nB', (b'x' * 20,)))
     with pytest.raises(SystemExit, match='default'):
         pm.check_setting('f', Setting('k', b'A\nB', (b'Off', b'On'), default=2))
+
+
+def test_title_is_title_else_the_name_in_words():
+    assert pm.check_title(fake('breathing_line')) == b'Breathing Line'
+    assert pm.check_title(fake('dsp_meter', TITLE='DSP Display')) == b'DSP Display'
+    for bad in ('x' * pm.TITLE_LEN, 'Caf\u00e9', 'A\nB'):
+        with pytest.raises(SystemExit, match='title'):
+            pm.check_title(fake('f', TITLE=bad))
+
+
+@pytest.mark.parametrize('m', [m for m in MODS if getattr(m, 'SETTINGS', ()) and getattr(m, 'MENU', True) is True],
+                         ids=features.name)
+def test_every_feature_with_a_page_names_it(m):
+    assert getattr(m, 'TITLE', None), f'{features.name(m)} has HXtra pages but no TITLE'
+    pm.check_title(m)
+    pm.icon(m)
+
+
+def test_icon_is_icon_else_the_displays_icon():
+    assert pm.icon(fake('f')) == pm.ICONS['Icon_Displays'] == 0x48
+    assert pm.icon(fake('f', ICON='Icon_Tempo')) == pm.ICONS['Icon_Tempo']
+    with pytest.raises(SystemExit, match='not in ICONS'):
+        pm.icon(fake('f', ICON='Icon_Nope'))
+
+
+@pytest.mark.firmware
+def test_icons_are_the_stock_images_of_their_names():
+    names = image_store.names(pa.get_entry_swapped(stock(), 7))
+    assert {name: names.index(name.encode()) for name in pm.ICONS} == pm.ICONS
+    assert reader(stock_e0())(0x28e3b5b8 + 4 * 5, 4) == struct.pack('<I', pm.ICONS['Icon_Displays'])
 
 
 BASE = 0x28d8fa80
@@ -190,6 +222,42 @@ def test_a_feature_with_settings_and_a_shared_hook_builds():
     assert tab + 2 * struct.unpack('<H', read(entry, 2))[0] == pm.ENUM01_TARGET
     stub = struct.unpack('<I', read(paint_lit, 4))[0]
     assert stub != paint and stub & 1
+
+
+@pytest.mark.firmware
+def test_each_hxtra_page_shows_its_feature_s_title_and_icon(m4emu):
+    """A build with BPM and breathing line (a page each) and long press (in Footswitches, no HXtra page): the section paint's title
+    and icon calls run their caves, which give each HXtra page its feature's title and icon in ORDER, and leave the stock sections
+    theirs."""
+    e0 = stock_e0()
+    for site, fn in ((pm.TITLE_CALL, pm.TITLE_SET), (pm.ICON_CALL, pm.ICON_SET)):
+        assert reader(e0)(site, 4) == pm.bl(site, fn)
+    env = {'HX_BPM': '1', 'HX_LONG_PRESS': '1', 'HX_BREATHING_LINE': '1'}
+    new, _ = pm.menu_entry0(e0, MODS, env)
+    _, poff, slen, base, _ = pa._parse_e0_segments(new)[6]
+    m = m4emu.M4(new[poff:poff + slen], base)
+    view, stock_word = base + slen + 0x200, base + slen + 0x300
+    callers = {}
+    for site, fn in ((pm.TITLE_CALL, pm.TITLE_SET), (pm.ICON_CALL, pm.ICON_SET)):
+        [cave] = setting_ids.bl_targets(struct.unpack_from('<2H', new, poff + site - base), site).values()
+        m.stub(fn)
+        a = callers[fn] = pm.Asm(base + slen + 0x100 + 0x20 * len(callers))
+        a.h(0xb540, 0x460e)                 # push {r6,lr}; mov r6,r1
+        a.bl(cave)
+        a.h(0xbd40)                         # pop {r6,pc}
+        m.load(a.base, a.bytes())
+
+    def shown(fn, section, page):
+        m.write(view + 0xa, bytes([section, page]))
+        m.log.clear()
+        m.call(callers[fn].base, stock_word, view, section)
+        [(r0, *_)] = m.calls(fn)
+        return r0 if r0 == stock_word or fn == pm.ICON_SET else m.read(r0, pm.TITLE_LEN).split(b'\0')[0]
+
+    assert [shown(pm.TITLE_SET, 6, page) for page in range(3)] == [b'BPM Display', b'Breathing Line', stock_word]
+    assert [shown(pm.ICON_SET, 6, page) for page in range(3)] == [pm.ICONS['Icon_Tempo'], pm.ICONS['Icon_DualIR'], stock_word]
+    for fn in (pm.TITLE_SET, pm.ICON_SET):
+        assert [shown(fn, section, 0) for section in range(6)] == [stock_word] * 6
 
 
 def test_stock_uses_finds_reads_writes_and_loops():
