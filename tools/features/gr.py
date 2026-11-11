@@ -1,6 +1,6 @@
 """The gain-reduction meter on the Home screen (src/m4/gr_meter.s), set by each compressor block's own Mtr knobs (tools/patch_comp.py).
 
-No Global Settings: the knobs live in the blocks. The DSP side (src/sharc/frame_probe.asm) needs HX_FRAMEPROBE=1 too."""
+No Global Settings: the knobs live in the blocks. The DSP side (src/sharc/frame_probe.asm) goes in with them, and NAM keeps two blocks."""
 FLAG = 'HX_GR'
 ORDER = 90                          # before the breathing line, which reads SHOWN
 WEB = False                         # its DSP side replaces the NAM kernel, and the web page always builds NAM

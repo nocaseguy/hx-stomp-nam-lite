@@ -1,7 +1,7 @@
 // frame_probe.asm - a wrapper around the Deluxe Comp's core (primitive 0x271a) that calls the stock
 // process code, then looks for the DSP's outgoing SPI frames in memory and writes into their
 // unused tail what it saw: the registers the stock code was called with and samples of the
-// buffers they point to (a test image only).
+// buffers they point to. tools/patch_comp.py places it in Block 3 above NAM's slots (GR_DM_BASE, GR_PM_BASE).
 //
 // A frame is 256 words: FACEF00D first, D00FECAF last. Once per block it scans a slice
 // of internal and external memory for the first word (and its halfword-swapped form),
@@ -31,7 +31,7 @@
 .equ GR_TAG,  0x6B000000
 .equ WINDOW,  64                        // blocks per window peak: longer than a cycle of a low E; 1024 samples, as the Release power assumes
 
-.section dm 0xe4850
+.section dm GR_DM_BASE
 FP_SAVE:  .space 24
 FP_CUR:   .space 1                      // the next address to look at (0: not started)
 FP_CALLS: .space 1
@@ -56,8 +56,7 @@ KK_TAB:   .space 65                     // per 0x2710 core: its state, its Attac
 FC_R3:    .space 1
 FS_BASE:  .space 1
 
-.section pm 0x0c4ef8
-CUSTOM_AMP_ENTRY:
+.section pm GR_PM_BASE
 ENTRY_271A:
     DM(FP_R0) = R0;
     R0 = 0;
