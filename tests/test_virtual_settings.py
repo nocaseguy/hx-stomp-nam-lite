@@ -96,7 +96,7 @@ def assemble(virt=VIRT, packing=PACKING, stocks=None):
         pytest.skip('no Command Line Tools clang')
     stocks = stocks or {'get': GET_STOCK, 'limits': LIMITS_STOCK, 'label': LABEL_STOCK}
     with tempfile.TemporaryDirectory() as d:
-        for name, text in (('customos.inc', pm.customos_inc(MODS, setting_ids.by_name())),
+        for name, text in (('hxtra.inc', pm.hxtra_inc(MODS, setting_ids.by_name())),
                            ('virtual.inc', pm.virtual_inc(virt, packing, stocks))):
             with open(os.path.join(d, name), 'w') as f:
                 f.write(text)
@@ -281,9 +281,9 @@ SET_STUB, SETTER_CTX = 0x28e80000, 0x28400000
 
 
 @pytest.mark.parametrize('engine', [True, False])
-def test_customos_setting_set_sends_virtual_ids_to_the_engine_and_others_to_the_stock_setter(m4emu, tmp_path, engine):
+def test_hxtra_setting_set_sends_virtual_ids_to_the_engine_and_others_to_the_stock_setter(m4emu, tmp_path, engine):
     src = tmp_path / 'set.s'
-    src.write_text('.syntax unified\n.thumb\n.include "customos.inc"\nCUSTOMOS_SETTING_SET\n')
+    src.write_text('.syntax unified\n.thumb\n.include "hxtra.inc"\nHXTRA_SETTING_SET\n')
     code, sym = m4emu.assemble(str(src), MODS, setting_ids.by_name(), SET_STUB if engine else None)
     m = m4emu.M4(code, CODE)
     engine_calls, stock_calls = [], []
@@ -292,7 +292,7 @@ def test_customos_setting_set_sends_virtual_ids_to_the_engine_and_others_to_the_
     m.stub(pm.SETTER, lambda m: stock_calls.append((m.reg('r0'), m.reg('r1'), struct.unpack('<BxxxI', m.read(m.reg('r2'), 8)),
                                                     m.reg('r3'))))
     for pid, value in ((0xcc, 1), (74, 5)):
-        m.call(CODE + sym['customos_setting_set'], pid, value)
+        m.call(CODE + sym['hxtra_setting_set'], pid, value)
     stock = [(SETTER_CTX, 74, (2, 5), 1)]
     assert (engine_calls, stock_calls) == (([(0xcc, 1)], stock) if engine else ([], [(SETTER_CTX, 0xcc, (2, 1), 1)] + stock))
 
@@ -384,7 +384,7 @@ def test_every_feature_built_together_reads_and_stores_its_settings_through_the_
     for vid, cid, bit, bits, name, _ in setting_ids.VIRTUAL:
         if name:
             assert b.get(vid) == (0, (2, SETTINGS[name].default)), name
-    knob_set = seen['src/m4/tuner.s']['knob_set']       # the tuner page's store, through customos_setting_set and virt_set
+    knob_set = seen['src/m4/tuner.s']['knob_set']       # the tuner page's store, through hxtra_setting_set and virt_set
     b.m.call(knob_set, 1, 1)
     assert b.get(setting_ids.by_name()['tuner.lock']) == (0, (2, 1)) and b.get(setting_ids.by_name()['tuner.activate']) == (0, (2, 0))
     assert struct.unpack('<BxxxI', b.m.read(record(105) + 8, 8)) == (2, 1 << 2)
@@ -438,12 +438,12 @@ def test_built_class_matches_stock_for_stock_ids(m4emu):
 
 @pytest.mark.firmware
 def test_built_turn_steps_by_the_stock_knob_arithmetic(m4emu):
-    """The stock turn handler 0x28dcef50 on CustomOS page 0, slot 0: the dispatch cave, virt_turn, the stock step (four encoder
+    """The stock turn handler 0x28dcef50 on HXtra page 0, slot 0: the dispatch cave, virt_turn, the stock step (four encoder
     counts a step), the container written, the slot repainted through the view's change handler, and the stock exit."""
     b = Built(m4emu, demo_build())
     m = b.m
     m.write(VIEW, b'\0' * 0x50)
-    m.write(VIEW + 0xa, bytes([6, 0]))      # category CustomOS, page 0
+    m.write(VIEW + 0xa, bytes([6, 0]))      # category HXtra, page 0
     for count in range(3):
         m.call(0x28dcef50, VIEW, 0, 1)
         assert m.read(record(105) + 8, 1) == b'\3' and m.calls(CHANGED) == [], count

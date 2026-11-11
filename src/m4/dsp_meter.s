@@ -1,5 +1,5 @@
 @ dsp_meter.s - the per-block DSP usage meter: each block in the Edit view's signal-flow row shows its share of the DSP in per cent, in black,
-@ and the top right corner shows their sum against what blocks may use (90% less the firmware's fixed 15%), as Global Settings > CustomOS > DSP Disp asks,
+@ and the top right corner shows their sum against what blocks may use (90% less the firmware's fixed 15%), as Global Settings > HXtra > DSP Disp asks,
 @ in a text widget of our own on the block title's baseline.
 @ The Edit view's top half (0x281282f8) has eight block slots, image widgets at view+0x4a4+0x24k, hidden when empty.
 @ DSP costs are the firmware's own, in hundredths of a per cent (the preset total adds 1500 and must stay within 9000).
@@ -7,7 +7,7 @@
 @ tools/features/dsp_meter.py chains dsp_paint after the Edit view top half's stock paint and dsp_browser after the browser's; patch_menu.py assembles this at build time.
 .syntax unified
 .thumb
-.include "customos.inc"
+.include "hxtra.inc"
 .equ BUDGET, 75                     @ per cent of the DSP blocks may use: the preset limit 9000 less its fixed 1500, in hundredths
 .equ TOTAL_RIGHT, 316
 .equ TOTAL_TOP, 228                 @ the title's baseline (its top 0xea less ink row 22) plus this font's ink row 16
@@ -70,7 +70,7 @@ costed:
     movs r0, #SETTING_DSP_METER_DISP
     movs r1, #SETTING_DSP_METER_DISP_MAX
     movs r2, #SETTING_DSP_METER_DISP_DEFAULT
-    bl customos_setting_get
+    bl hxtra_setting_get
     str r0, [sp, #36]
     ldr r3, =0x28e24971             @ the widget lock
     blx r3
@@ -521,7 +521,7 @@ put_out:
     add sp, #16
     pop {r5-r11, pc}
 
-CUSTOMOS_SETTING_GET
+HXTRA_SETTING_GET
 .ltorg
 .balign 4
 style:                              @ the scale and colour put draws with

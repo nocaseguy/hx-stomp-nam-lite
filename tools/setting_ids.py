@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""setting_ids.py - the Global Settings IDs CustomOS uses, one line per ID, and `free <stock .hxf>` to list candidate spare IDs.
+"""setting_ids.py - the Global Settings IDs HXtra uses, one line per ID, and `free <stock .hxf>` to list candidate spare IDs.
 
 An ID is the setting's place in the firmware's settings store, and the HX Stomp keeps each setting's value under its ID across builds:
 so an ID never moves once a build has used it, and an ID that held another setting before may come with that setting's value.
 A feature claims an ID by putting its setting's '<feature>.<key>' on the ID's line. Two branches claiming the same ID edit the same
-line, so the merge conflicts; tests/test_customos.py fails on a duplicate, on a setting with no ID and on an ID claimed by no setting.
+line, so the merge conflicts; tests/test_hxtra.py fails on a duplicate, on a setting with no ID and on an ID claimed by no setting.
 
 A new setting takes a virtual ID instead (VIRTUAL): an ID in 0xcc..0xf9, which no stock settings function knows, served by
 tools/patch_menu.py's engine (src/m4/virtual_settings.s) from a bit field of the record of a dead float ID 105..116 (CONTAINERS),

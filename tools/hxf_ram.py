@@ -6,7 +6,7 @@ same in the browser, over WebUSB.
 
     python3 tools/hxf_ram.py dfu         # update mode (or Page Right at power-up), then:
     dfu-util -d 1fc9:000c -a 0 -D tools/ramboot/firmware-ramboot.dfu
-    python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_CustomOS.hxf \\
+    python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_HXtra.hxf \\
         --stock HX_Stomp_v3.80.0_0x103966115.hxf
 
     python3 tools/hxf_ram.py plan FIRMWARE --stock STOCK.hxf [--out DIR]

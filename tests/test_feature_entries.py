@@ -60,7 +60,7 @@ def patch(env=None, mods=(), entries=None):
     p = pm.Patch.__new__(pm.Patch)
     p.e0, p.mods, p.ids = bytearray(0x10000), list(mods), {}
     p.segs = [(0, 0, 0x8000, BASE, 0x8000)] * 7
-    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'CustomOS', [], {}
+    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'HXtra', [], {}
     e7, e8 = store()
     p.load = (entries or {7: e7, 8: e8}).__getitem__
     p.values = {features.name(m): features.values(m, env or {}) for m in mods}

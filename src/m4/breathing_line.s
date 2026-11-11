@@ -4,7 +4,7 @@
 @ the LED task's 1 ms tick asks for a repaint every FRAME_MS while it runs. tools/features/breathing_line.py chains the handlers.
 .syntax unified
 .thumb
-.include "customos.inc"
+.include "hxtra.inc"
 .include "gr.inc"                   @ GR_SHOWN: the gain-reduction meter's shown word, or 0 in a build without it
 .equ SEGMENTS, 0x2812a594           @ the stock divider: four 80 px rectangle widgets, 0x1c apart
 .equ STRIP, 4                       @ px
@@ -56,7 +56,7 @@ bl_paint:                           @ after the Home paint (framebuffer): the st
     movs r0, #SETTING_BREATHING_LINE_MOTION
     movs r1, #SETTING_BREATHING_LINE_MOTION_MAX
     movs r2, #SETTING_BREATHING_LINE_MOTION_DEFAULT
-    bl customos_setting_get
+    bl hxtra_setting_get
     movs r6, r0
 .if GR_SHOWN
     ldr r1, =GR_SHOWN               @ a compressor's meter shows: the line holds still, as at Line Motion Off
@@ -83,12 +83,12 @@ bl_animate:
     movs r0, #SETTING_BREATHING_LINE_COLOR
     movs r1, #SETTING_BREATHING_LINE_COLOR_MAX
     movs r2, #SETTING_BREATHING_LINE_COLOR_DEFAULT
-    bl customos_setting_get
+    bl hxtra_setting_get
     mov r7, r0
     movs r0, #SETTING_BREATHING_LINE_SPEED
     movs r1, #SETTING_BREATHING_LINE_SPEED_MAX
     movs r2, #SETTING_BREATHING_LINE_SPEED_DEFAULT
-    bl customos_setting_get
+    bl hxtra_setting_get
     adr.w r1, bl_rates
     ldr.w r10, [r1, r0, lsl #2]
     ldr r3, =0x28da6459             @ the µs clock
@@ -460,7 +460,7 @@ bl_hue5:                            @ red, blue falling
     orr r0, r1, #0xff0000
     bx lr
 
-CUSTOMOS_SETTING_GET
+HXTRA_SETTING_GET
 .ltorg
 .balign 4
 bl_rates:                           @ Line Speed 1..10: 2^32 / the cycle in µs, for cycles of 8, 6, 4.8, 4, 3.2, 2.5, 2, 1.5, 1.1 and 0.8 s

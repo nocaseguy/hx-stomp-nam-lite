@@ -4,7 +4,7 @@
 @ tools/features/long_press.py owns the footswitch event handler 0x28dd1978 and enters lp_event with the stock handler in r2.
 .syntax unified
 .thumb
-.include "customos.inc"
+.include "hxtra.inc"
 .equ PRESS, 1
 .equ RELEASE, 2
 .equ CLICK, 3                       @ a release before a hold, posted after the release
@@ -197,7 +197,7 @@ action_of:                          @ r0 footswitch 0..4 -> r0 its Hold action (
     movs r1, #SETTING_LONG_PRESS_FS1_MAX
     adr r2, hold_defaults
     ldrb r2, [r2, r4]
-    bl customos_setting_get
+    bl hxtra_setting_get
     movs r5, r0
     beq none
     movs r0, #21                    @ Footswitch Mode: 2 and 3 are the preset and snapshot modes
@@ -270,4 +270,4 @@ pending:                            @ per footswitch 0..4: its press was held ba
 latched:                            @ per virtual footswitch 0..4: 1 when the last value sent turned its blocks on
     .space 8
 
-CUSTOMOS_SETTING_GET
+HXTRA_SETTING_GET

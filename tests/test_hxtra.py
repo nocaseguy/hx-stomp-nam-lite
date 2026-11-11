@@ -1,5 +1,5 @@
-"""tools/patch_menu.py's CustomOS engine, tools/features and tools/setting_ids.py: IDs claimed once, settings that fit the menu,
-writes that may not overlap, shared hooks, and the generated customos.inc."""
+"""tools/patch_menu.py's HXtra engine, tools/features and tools/setting_ids.py: IDs claimed once, settings that fit the menu,
+writes that may not overlap, shared hooks, and the generated hxtra.inc."""
 import os
 import struct
 import types
@@ -80,7 +80,7 @@ def patch():
     p = pm.Patch.__new__(pm.Patch)
     p.e0, p.mods, p.ids = bytearray(0x10000), [], {}
     p.segs = [(0, 0, 0x8000, BASE, 0x8000)] * 7
-    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'CustomOS', [], {}
+    p.cave, p.owner, p.written, p.chains = pm.Cave(BASE + 0x8000), 'HXtra', [], {}
     return p
 
 
@@ -136,26 +136,26 @@ def test_entry_chain_moves_the_prologue():
     assert p.read(fn, 4) == pm.thumb_bw(fn, tramp + 8)
 
 
-def test_customos_inc_lists_every_setting():
-    inc = pm.customos_inc(MODS, setting_ids.by_name())
+def test_hxtra_inc_lists_every_setting():
+    inc = pm.hxtra_inc(MODS, setting_ids.by_name())
     for name, s in SETTINGS.items():
         sym = 'SETTING_' + name.replace('.', '_').upper()
         assert f'.equ {sym}, {setting_ids.by_name()[name]}\n' in inc
         assert f'.equ {sym}_MAX, {s.max}\n' in inc
         assert f'.equ {sym}_DEFAULT, {s.default}\n' in inc
-    assert '.macro CUSTOMOS_SETTING_GET' in inc
+    assert '.macro HXTRA_SETTING_GET' in inc
 
 
 @CLANG
-def test_module_assembles_with_customos_inc(tmp_path):
+def test_module_assembles_with_hxtra_inc(tmp_path):
     src = tmp_path / 'm.s'
-    src.write_text('.syntax unified\n.thumb\n.include "customos.inc"\nentry:\n    movs r0, #SETTING_TUNER_LOCK\n'
-                   '    movs r1, #SETTING_TUNER_LOCK_MAX\n    movs r2, #SETTING_TUNER_LOCK_DEFAULT\n    b customos_setting_get\n'
-                   'CUSTOMOS_SETTING_GET\n')
+    src.write_text('.syntax unified\n.thumb\n.include "hxtra.inc"\nentry:\n    movs r0, #SETTING_TUNER_LOCK\n'
+                   '    movs r1, #SETTING_TUNER_LOCK_MAX\n    movs r2, #SETTING_TUNER_LOCK_DEFAULT\n    b hxtra_setting_get\n'
+                   'HXTRA_SETTING_GET\n')
     p = patch()
     p.mods, p.ids = MODS, setting_ids.by_name()
     m = p.module(str(src))
-    assert m.va == BASE + 0x8000 and m['entry'] == m.va and m['customos_setting_get'] == m.va + 8
+    assert m.va == BASE + 0x8000 and m['entry'] == m.va and m['hxtra_setting_get'] == m.va + 8
     assert p.cave.buf[:2] == struct.pack('<H', 0x2000 | setting_ids.by_name()['tuner.lock'])
 
 
