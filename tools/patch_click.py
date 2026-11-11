@@ -167,18 +167,24 @@ def replace_last_blob(e4, blob_index, words):
     return out
 
 
-def nam_layout():
-    """nam_multi's Layout of build.py's HX Stomp kernel, with its KERNEL['HX_Stomp'] flags."""
+def nam_layout(gr=None):
+    """nam_multi's Layout of build.py's HX Stomp kernel, with its build.kernel('HX_Stomp', gr) flags."""
     spec = importlib.util.spec_from_file_location('customos_build', os.path.join(SCRIPT_DIR, '..', 'build.py'))
     build = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(build)
-    return nam_multi.layout(build.KERNEL['HX_Stomp'][1:])
+    return nam_multi.layout(build.kernel('HX_Stomp', gr)[1:])
 
 
-def pm_base(n_insns):
+def kernel_size():
+    """The kernel's instructions."""
+    secs, _ = kit.sasm.assemble(open(ASM).read().replace('KIT_PM_BASE', '0xe0000'), 'click.asm')
+    return sum(len(s.words) for s in secs if s.kind == 'pm')
+
+
+def pm_base(n_insns, lay=None):
     """Where the kernel goes: right under NAM A2 Lite's cold code, above its slots
-    (nam_layout())."""
-    lay = nam_layout()
+    (lay, else nam_layout())."""
+    lay = lay or nam_layout()
     n = n_insns + (n_insns & 1)
     base = lay.cold_pm - n
     nw = nam_multi.NW3 + (base - nam_multi.NW3) * 3 // 2
@@ -240,10 +246,8 @@ def add_click(l6ia_bytes, log=print):
     e2_raw, _ = kit.expand_sharc_blob0_buffer(e2_raw)
     out, _, _ = l6ia.rebuild_archive(l6ia_bytes, {0: bytes(new_e0), 2: l6ia.swap32(e2_raw), 3: new_e3, 4: new_e4})
 
-    asm = open(ASM).read()
-    secs, _ = kit.sasm.assemble(asm.replace('KIT_PM_BASE', '0xe0000'), 'click.asm')
-    base = pm_base(sum(len(s.words) for s in secs if s.kind == 'pm'))
-    out, kinfo = kit.patch_kernel(out, asm, 'click.asm', prim=PRIM, pm_base=base, relocate=False, log=log)
+    base = pm_base(kernel_size())
+    out, kinfo = kit.patch_kernel(out, open(ASM).read(), 'click.asm', prim=PRIM, pm_base=base, relocate=False, log=log)
     return out, {'model_id': model_id, 'blob': blob, 'composite': comp, 'preset_id': pid, 'pm_base': base,
                  'entry': kinfo['entry'], 'params': params}
 
