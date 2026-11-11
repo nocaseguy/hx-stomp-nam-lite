@@ -306,6 +306,34 @@ def test_entry0_shows_four_knobs_and_names_preset_id_181(built):
     assert struct.unpack('<IHHI', rd(t1 + 12 * (n1 - 1), 12))[1:] == (181, 0, patch_click.DSP_COST)
 
 
+def browser(l6ia_bytes):
+    """Entry 0's model browser: {category: [(folder name, [(btype, model name index, display name)])]}."""
+    e0 = kit.get_entry_swapped(l6ia_bytes, 0)
+    segs = kit._parse_e0_segments(e0)
+    A = kit.e0_device(segs)
+    rd = lambda va, n: e0[kit._e0_vaddr_to_foff(segs, va, n):kit._e0_vaddr_to_foff(segs, va, n) + n]
+    u32 = lambda va: struct.unpack('<I', rd(va, 4))[0]
+    out = {}
+    for cat in range(kit.E0_BLIST_SLOTS // 4):
+        folders = []
+        for sub in range(u32(A.SUBCAT_CNT + 4 * cat)):
+            lp, lc = u32(A.BLIST_PTR_TAB + 4 * (4 * cat + sub)), u32(A.BLIST_CNT_TAB + 4 * (4 * cat + sub))
+            items = [rd(lp + 48 * k, 48) for k in range(lc if lp else 0)]
+            folders.append((rd(A.SUBCAT_NAMES + 104 * cat + 26 * sub, 26).rstrip(b'\0').decode(),
+                            [(*struct.unpack_from('<II', it), it[14:40].rstrip(b'\0').decode()) for it in items]))
+        out[cat] = folders
+    return out
+
+
+@pytest.mark.firmware
+def test_the_browser_lists_it_in_a_metronome_folder_under_looper(built):
+    data, out, info = built
+    before, after = browser(data), browser(out)
+    name_idx = kit.parse_entry3_full(kit.get_entry_swapped(out, 3))['models'][info['model_id']]['words'][2]
+    assert after[18] == before[18] + [('Metronome', [(1, name_idx, 'Metronome')])]   # a plain effect, not a looper
+    assert {c: f for c, f in after.items() if c != 18} == {c: f for c, f in before.items() if c != 18}
+
+
 def ldr_blocks(l6ia_bytes):
     """Entry 2's INIT blocks before FINAL_INIT: (tag, address, payload words)."""
     entries = kit.l6ia.parse(l6ia_bytes)

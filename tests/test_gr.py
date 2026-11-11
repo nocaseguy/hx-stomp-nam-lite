@@ -323,7 +323,7 @@ def test_comp_patch_refuses_a_second_run(comp_patched):
 GR_BUILT_MD5 = {                # HX_GR alone has the meter's M4 side and knobs; the DSP side needs HX_FRAMEPROBE too
     'HX_GR': 'c4b19e70f5500e5e8b763951add88b38',
     'HX_GR HX_FRAMEPROBE': '036990f9e12e633e835326cadad63c91',
-    'HX_GR HX_CLICK': '2024b31e6e0c95ff8080deebd4714490',    # patch_click.py adds a model, which would drop knobs written before it
+    'HX_GR HX_CLICK': '1be1bbb687ab802a3d94b7f10fc0f222',    # patch_click.py adds a model, which would drop knobs written before it
 }
 
 
