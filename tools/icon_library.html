@@ -52,20 +52,20 @@
   <header>
     <span class="eyebrow">HX Stomp 3.80.0 · Entry 7 image store · {{N_IMAGES}} images</span>
     <h1>HX Stomp Icon Library</h1>
-    <p>Every icon-like image in your stock firmware, drawn at 2× from its pixels by <code>tools/icon_library.py</code>. Each tile gives the image's name, its size in pixels and its index (the number the firmware uses for it). An HXtra feature picks its pages' icon by name with <code>ICON</code>; a name tagged <strong>in ICONS</strong> works as it is, any other needs its line in <code>ICONS</code> in <code>tools/patch_menu.py</code> (see <code>docs/icons.md</code>). An image marked <strong>fits</strong> is no bigger than 30×29, the size of the stock section icons; bigger ones may run into the title.</p>
+    <p>Every icon-like image in your stock firmware, drawn at 2× from its pixels by <code>tools/icon_library.py</code>. Each tile gives the image's name, its size in pixels and its index (the number the firmware uses for it). A feature picks its section's icon by name with <code>ICON</code>; a name tagged <strong>in ICONS</strong> works as it is, any other needs its line in <code>ICONS</code> in <code>tools/patch_menu.py</code> (see <code>docs/icons.md</code>). An image marked <strong>fits</strong> is no bigger than 30×29, the size of the stock section icons; bigger ones may run into the title.</p>
   </header>
 
   <section>
     <span class="eyebrow">Shown by stock Global Settings</span>
     <h2>Section icon by the title</h2>
-    <p>One per section, from the list at <code>0x28e3b5b8</code>. An HXtra page shows its feature's <code>ICON</code> here, or the Displays icon when the feature names none.</p>
+    <p>One per section, from the list at <code>0x28e3b5b8</code>. A feature's section shows its <code>ICON</code> here, or the Displays icon when the feature names none.</p>
     {{TITLE}}
   </section>
 
   <section>
     <span class="eyebrow">Shown by stock Global Settings</span>
     <h2>Section strip across the top</h2>
-    <p>Each section has a normal and a lit (<code>Sel</code>) picture, from the lists at <code>0x28e3b5f8</code> and <code>0x28e3b628</code>. The strip has only six places, so HXtra has none.</p>
+    <p>Each section has a normal and a lit (<code>Sel</code>) picture, from the lists at <code>0x28e3b5f8</code> and <code>0x28e3b628</code>. The strip has only six places, so a feature's section has none.</p>
     {{STRIP}}
   </section>
 

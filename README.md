@@ -39,13 +39,13 @@ HX_TUNER=1 HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/
 
 ### Custom settings
 
-The other features' settings are in Global Settings, in a seventh section called **HXtra**, after Displays (press right past Displays). It has no icon in the section strip, so none is lit while you are in it. Each feature that's built in has its own page there, titled with the feature's name (BPM Display, Breathing Line) and, for some, an icon of its own (see [Icons](docs/icons.md), which also makes an icon library of every stock icon from your firmware file). A build with none of them has no HXtra section. Long press's settings are in **Footswitches** instead, after FS5 Function.
+The other features' settings are in Global Settings, each feature in a section of its own after Displays (turn the knob right past Displays): **BPM Display**, then **Breathing Line**, each with its own icon by the title (see [Icons](docs/icons.md), which also makes an icon library of every stock icon from your firmware file). The section strip at the top has room for the six stock sections only, so none of its icons is lit while you are in a feature's. A build with none of these features has no sections after Displays. Long press's settings are in **Footswitches** instead, after FS5 Function.
 
 | Feature | Setting | Values | What it does |
 |---|---|---|---|
-| BPM | **BPM Font** | **41 Lite** (default), 35 Bold, 28 Bold, 28 Lite, 21 Bold, 21 Reg | The tempo's font |
-| BPM | **BPM Color** | **White** (default), Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple | The tempo's and the dot's colour |
-| BPM | **BPM Dot Pos** | **Left** (default), Right, Both | Where the beat dot sits, beside the preset number |
+| BPM | **Font Size** | XL, **L** (default), M, S | The tempo's size. XL is digits only: no ` X` with MIDI clock and nothing with no tempo |
+| BPM | **Color** | **White** (default), Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple | The tempo's and the dot's colour |
+| BPM | **Dot Position** | **Left** (default), Right, Both | Where the beat dot sits, beside the preset number |
 | Long press | **FS1 Hold Function** … **FS5 Hold Function** | Off, Tuner, FS4, FS5, FS6 … FS10 (defaults FS6 … FS10) | What holding that footswitch for 1 s does. FS4 and FS5 are external switches. In Global Settings > Footswitches, pages 2 and 3, after FS5 Function. |
 | Breathing line | **Color** | White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, **Rainbow** (default) | The line's colours. The gradients flow along the line: Fire is red, orange and yellow; Ice blue, cyan and white; Sunset purple, pink and orange; Ocean deep blue, blue and aqua; Aurora green, sky blue and violet; Neon magenta, indigo and cyan; Rainbow every hue. Where the motion dims the line, the colours dim with it. |
 | Breathing line | **Type** | Off, Steady, **Breathe** (default), Cylon, Comet, Heart, Sparkle | How it moves. Breathe slowly fades the whole line in and out. Cylon sweeps a wide light from end to end and back, slowing at the ends, with a trail behind it. Comet shoots a light across with a long tail. Heart beats lub-dub from the middle. Sparkle twinkles at random. Steady holds the full colour. Off gives back the stock line. |
@@ -70,7 +70,7 @@ The Home screen shows the tempo at its top left, and a beat dot beside the prese
 
 - **The tempo** is the one the HX Stomp is using, the global or the preset's as Tempo Select says, as a whole number. It shows ` X` after it while the tempo comes from MIDI clock (the tempo screen's Extrnl), and `--` with no tempo.
 - **The dot** keeps the beat in every footswitch mode, and with Tap Tempo LED off too: the ring then stays dark while the dot blinks.
-- **Settings** (Global Settings > HXtra): BPM Font, BPM Color (the tempo's and the dot's) and BPM Dot Pos (left of the preset number, right of it, or both). See [Custom settings](#custom-settings).
+- **Settings** (Global Settings > BPM Display): Font Size, Color (the tempo's and the dot's) and Dot Position (left of the preset number, right of it, or both). See [Custom settings](#custom-settings).
 
 ### DSP meter
 
