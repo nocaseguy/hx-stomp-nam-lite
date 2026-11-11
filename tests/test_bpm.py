@@ -14,17 +14,18 @@ from features import bpm, tuner
 from firmware import assert_virtual, branch_target, reader, stock_e0
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FONTS = (5, 4, 2, 3, 0, 1)          # BPM Font's values as font numbers: 41 Lite, 35 Bold, 28 Bold, 28 Lite, 21 Bold, 21 Reg
+FONTS = (4, 5, 2, 1)                # Font's values as font numbers: XL 35 Bold, L 41 Lite, M 28 Bold, S 21 Reg
 COLOURS = (0xffffff, 0xb1b1b1, 0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0080ff, 0xb000ff)
 CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
 
 
 def test_settings_values_defaults_and_ids():
     s = {x.key: x for x in bpm.SETTINGS}
-    assert s['font'].values == (b'41 Lite', b'35 Bold', b'28 Bold', b'28 Lite', b'21 Bold', b'21 Reg')
+    assert s['font'].values == (b'XL', b'L', b'M', b'S')
     assert s['color'].values == (b'White', b'Gray', b'Red', b'Orange', b'Yellow', b'Green', b'Cyan', b'Blue', b'Purple')
     assert s['dot'].values == (b'Left', b'Right', b'Both')
-    assert all(x.default == 0 for x in s.values()), 'value 0 is the default: an ID never set reads 0'
+    assert [x.label for x in bpm.SETTINGS] == [b'Size\nFont', b'Color', b'Position\nDot'], 'Font over Size, Dot over Position'
+    assert (s['font'].default, s['color'].default, s['dot'].default) == (1, 0, 0), 'L, White, Left'
     assert len(FONTS) == len(s['font'].values) and len(COLOURS) == len(s['color'].values)
     ids = setting_ids.by_name()
     assert (ids['bpm.font'], ids['bpm.color'], ids['bpm.dot']) == (0xce, 0xcf, 0xd0), 'virtual: a unit keeps a value by ID, so never move them'
@@ -433,16 +434,16 @@ def before(m4, font=None, colour=None, dot=None, lit=0, tapped=0):
     m4.call('bpm_before', 0x20000000, 0x2812a05c)
 
 
-@pytest.mark.parametrize('value', range(6))
+@pytest.mark.parametrize('value', range(4))
 def test_before_sets_the_font_bpm_font_says(m4, value):
     before(m4, font=value)
     assert [r[1] for r in m4.called(SET_FONT)] == [FONTS[value]]
 
 
-@pytest.mark.parametrize('value', [None, 6, 255])
+@pytest.mark.parametrize('value', [None, 4, 255])
 def test_before_takes_the_default_font_when_unset_or_out_of_range(m4, value):
     before(m4, font=value)
-    assert [r[1] for r in m4.called(SET_FONT)] == [FONTS[0]]
+    assert [r[1] for r in m4.called(SET_FONT)] == [FONTS[1]] == [5], 'L, 41 Lite'
 
 
 @pytest.mark.parametrize('value', [*range(9), None, 9])
