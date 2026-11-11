@@ -13,8 +13,8 @@
 .equ FRAME_MS, 25
 .equ HOME_GONE_MS, 1000             @ no Home paint for this long: another view is up, so no more repaint requests
 .equ CENTRE, 632                    @ the line's middle, strip 39.5, in 1/16 strips as every distance below
-.equ RING, 6 * 16                   @ Pulse's ring
-.equ EYE_FRONT, 24                  @ Cylon's eye ahead of its centre
+.equ EYE_CORE, 4 * 16               @ Cylon's eye: full on this far either side of its centre
+.equ EYE_FRONT, 24                  @ and fading over this ahead of the core
 .equ TRAIL_MIN, 32                  @ Cylon's trail at the ends, where the eye stops to turn
 .equ GLOW, 16                       @ Comet's glow ahead of its head
 .equ TAIL, 20 * 16                  @ Comet's tail
@@ -172,42 +172,16 @@ bl_level:                           @ r0 Type, r1 a strip, r2 the phase (2^16 a 
     adr.w r12, bl_sine
     tbb [pc, r0]
 bl_levels:
-    .byte (bl_steady - bl_levels) / 2, (bl_steady - bl_levels) / 2, (bl_pulse - bl_levels) / 2, (bl_breathe - bl_levels) / 2
-    .byte (bl_wave - bl_levels) / 2, (bl_cylon - bl_levels) / 2, (bl_comet - bl_levels) / 2, (bl_heart - bl_levels) / 2
-    .byte (bl_sparkle - bl_levels) / 2
+    .byte (bl_steady - bl_levels) / 2, (bl_steady - bl_levels) / 2, (bl_breathe - bl_levels) / 2, (bl_cylon - bl_levels) / 2
+    .byte (bl_comet - bl_levels) / 2, (bl_heart - bl_levels) / 2, (bl_sparkle - bl_levels) / 2
 .balign 2
 bl_steady:
     movs r0, #255
-    pop {r4-r6, pc}
-bl_pulse:                           @ a ring from the middle out past both ends, fading as it goes
-    movw r5, #CENTRE
-    subs r0, r4, r5
-    it mi
-    rsbmi r0, r0, #0
-    movw r5, #CENTRE + RING
-    mul r5, r2, r5
-    subs.w r0, r0, r5, lsr #16
-    it mi
-    rsbmi r0, r0, #0
-    movs r1, #RING
-    bl bl_fall
-    rsb r3, r3, #256
-    muls r0, r3, r0
-    lsrs r0, #8
     pop {r4-r6, pc}
 bl_breathe:                         @ a raised cosine from 0, squared to rest longer near the bottom
     adds r3, #192
     uxtb r3, r3
     ldrb r0, [r12, r3]
-    muls r0, r0, r0
-    adds r0, #255
-    lsrs r0, #8
-    pop {r4-r6, pc}
-bl_wave:                            @ 2.5 sine periods across the line moving right, squared into distinct crests
-    lsls r0, r1, #3
-    subs r0, r0, r3
-    uxtb r0, r0
-    ldrb r0, [r12, r0]
     muls r0, r0, r0
     adds r0, #255
     lsrs r0, #8
@@ -232,11 +206,17 @@ bl_cylon:                           @ an eye easing from end to end and back, it
     subhs r0, r4, r0                @ behind the eye, whichever way it moves
     cmp r0, #0
     blt bl_cylon_ahead
+    subs r0, #EYE_CORE
+    it mi
+    movmi r0, #0
     mov r1, r5
     bl bl_fall2
     pop {r4-r6, pc}
 bl_cylon_ahead:
     rsbs r0, r0, #0
+    subs r0, #EYE_CORE
+    it mi
+    movmi r0, #0
     movs r1, #EYE_FRONT
     bl bl_fall
     pop {r4-r6, pc}
@@ -394,14 +374,15 @@ bl_palette:                         @ around three stops: back from the third to
     moveq r3, #0
     ldr.w r1, [r5, r3, lsl #2]
     bl bl_mix
-bl_shade:                           @ the level from 3/16 of the colour up to all of it
+bl_shade:                           @ the level eased out, from a quarter of the colour: 3/16 and a straight level were too dim on the unit
     mov r1, r0
-    ldr r3, =0x1f1f1f
-    and.w r0, r3, r1, lsr #3
-    ldr r3, =0x0f0f0f
-    and.w r3, r3, r1, lsr #4
-    add r0, r3
-    mov r2, r6
+    ldr r3, =0x3f3f3f
+    and.w r0, r3, r1, lsr #2
+    rsb r2, r6, #255
+    muls r2, r2, r2
+    adds r2, #255
+    lsrs r2, #8
+    rsb r2, r2, #255
     bl bl_mix
     pop {r4-r6, pc}
 

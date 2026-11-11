@@ -5,8 +5,7 @@ FLAG = 'HX_BREATHING_LINE'
 SETTINGS = (
     Setting('color', b'Color', (b'White', b'Red', b'Green', b'Blue', b'Fire', b'Ice', b'Sunset', b'Ocean', b'Aurora', b'Neon',
                                        b'Rainbow'), default=10),
-    Setting('motion', b'Type', (b'Off', b'Steady', b'Pulse', b'Breathe', b'Sine', b'Cylon', b'Comet', b'Heart', b'Sparkle'),
-            default=3),
+    Setting('motion', b'Type', (b'Off', b'Steady', b'Breathe', b'Cylon', b'Comet', b'Heart', b'Sparkle'), default=2),
     Setting('speed', b'Speed', tuple(str(n).encode() for n in range(1, 11)), default=3),
 )
 
