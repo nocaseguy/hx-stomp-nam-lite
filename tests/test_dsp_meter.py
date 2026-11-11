@@ -366,8 +366,13 @@ class Browser(Meter):
         self.fills.clear()
         self.events.clear()
         self.items.clear()
+        self.drawn.clear()
         assert self.m.call(CODE + self.sym['dsp_browser'], FB, BROWSER, 0, 0) == 0
         return self
+
+    def calls(self):
+        """The events but the total's text widget calls."""
+        return [e for e in self.events if not e.startswith('text ')]
 
     def texts(self, colour, rows=None):
         return super().texts(colour, rows or [(194 - 40 * (r + 1), 194 - 40 * r) for r in range(5)])
@@ -438,16 +443,35 @@ def test_browser_draws_nothing_for_a_list_the_firmware_has_not(browser):
     browser.show(MODELS, cat=1, sub=0)
     m = browser.paint()
     assert m.numbers() == [] and m.fills == [wipe(r) for r in range(5)]
-    assert m.events == ['level', 'count', 'widget lock'] + ['fill'] * 5 + ['widget unlock']
+    assert m.calls() == ['dsp lock', 'dsp unlock', 'level', 'count', 'widget lock'] + ['fill'] * 5 + ['widget unlock']
 
 
 @pytest.mark.parametrize('level', [0, 1, 3, 4, 5, 6])
-def test_browser_leaves_other_list_levels_alone(browser, level):
-    """Categories, subcategories and the rest list no models: no call, no lock, nothing drawn."""
+def test_browser_shows_only_the_total_at_other_list_levels(browser, level):
+    """Categories, subcategories and the rest list no models: no model calls and no labels, only the total."""
     browser.lists[(2, 0)] = [2345] * 5
+    blocks(browser, 2345)
     browser.show(level, cat=2, sub=0)
     m = browser.paint()
-    assert m.fills == [] and m.events == []
+    assert m.fills == [] and m.calls() == ['dsp lock', 'dsp unlock', 'widget lock', 'widget unlock'] and m.total() == '23/75'
+
+
+@pytest.mark.parametrize('level', [MODELS, 4])
+def test_browser_shows_the_total_where_the_edit_view_does(browser, meter, level):
+    blocks(browser, 2345, 1000)
+    blocks(meter, 2345, 1000)
+    browser.show(level, cat=2, sub=0)
+    assert browser.paint().total() == meter.paint().total() == '33/75'
+    key = lambda w: (w['pos'], w['anchor'], w['font'], w['colour'], w['visible'])
+    assert key(browser.widget) == key(meter.widget) == ((316, 228), 8, 1, WHITE, 1)
+    assert browser.events[-5:] == ['text text', 'text visible', 'text erase', 'text draw', 'widget unlock']
+
+
+def test_browser_hides_the_total_with_no_dsp_model(browser):
+    blocks(browser, 2345)
+    browser.m.u32(DSP_PTR, 0)
+    m = browser.paint()
+    assert m.total() is None and 'dsp lock' not in m.events and 'level' in m.events
 
 
 @pytest.mark.parametrize('level', [1, 4])
@@ -456,16 +480,17 @@ def test_browser_wipes_the_labels_once_on_leaving_the_model_list(browser, level)
     browser.paint()
     browser.show(level, cat=2, sub=0)
     m = browser.paint()
-    assert m.fills == [wipe(r) for r in range(5)] and m.events == ['widget lock'] + ['fill'] * 5 + ['widget unlock']
-    assert browser.paint().events == []
+    assert m.fills == [wipe(r) for r in range(5)]
+    assert m.calls() == ['dsp lock', 'dsp unlock', 'widget lock'] + ['fill'] * 5 + ['widget unlock']
+    assert browser.paint().calls() == ['dsp lock', 'dsp unlock', 'widget lock', 'widget unlock']
 
 
 def test_browser_takes_the_widget_lock_after_the_level_and_count(browser):
-    """The level getter takes the DSP model lock, which is never held with the widget lock."""
+    """The total's sum and the level getter take the DSP model lock, which is never held with the widget lock."""
     browser.lists[(2, 0)] = [2345]
-    ev = browser.paint().events
-    assert ev[:3] == ['level', 'count', 'widget lock'] and ev[-1] == 'widget unlock'
-    assert 'fill' in ev and all(e == 'fill' for e in ev[3:-1])
+    ev = browser.paint().calls()
+    assert ev[:5] == ['dsp lock', 'dsp unlock', 'level', 'count', 'widget lock'] and ev[-1] == 'widget unlock'
+    assert 'fill' in ev and all(e == 'fill' for e in ev[5:-1])
 
 
 @pytest.mark.firmware
@@ -497,7 +522,7 @@ def chained_after(read, lit, stock):
 def test_build_chains_the_browser_handler_after_the_browser_paint():
     read, _ = built({'HX_DSP_METER': '1'})
     browser = chained_after(read, dsp_meter.BROWSER_PAINT_LIT, dsp_meter.BROWSER_PAINT)
-    assert read(browser, 6) == bytes.fromhex('2de9 f041 82b0')   # push.w {r4-r8,lr}; sub sp,#8: browser's prologue
+    assert read(browser, 6) == bytes.fromhex('2de9 f041 84b0')   # push.w {r4-r8,lr}; sub sp,#16: browser's prologue
     assert read(dsp_meter.NAMES_X, 2) == bytes([NAMES_X, 0x23])   # movs r3, #60
 
 
