@@ -17,6 +17,9 @@ MIDI_IN_FIRST, MIDI_IN_FIRST_STOCK = 0x28dbc2b4, bytes.fromhex('0422')
 # A CC shows as "CC" then the digits itoa writes; after it, CC 20..24 read FS6..FS10. Bypass Assign's redraw and knob refresh, and
 # Controller Assign's CC# (a parameter on CC 20 follows FS6 too). The Command Center's CCs are ones it sends, so they keep their numbers.
 ITOA, CC_TEXT_CALLS = 0x28daaf6c, (0x28dbb6b2, 0x28dbbcd6, 0x28d8ff4c)
+# Bypass Assign's redraw and knob refresh label the MIDI In knob "MIDI In" just after its text; on FS6..FS10 the label reads FootswIn.
+LABEL = 0x28dc63d0
+LABEL_CALLS = ((0x28dbb6c2, 'lp_label_redraw'), (0x28dbbce6, 'lp_label_refresh'))
 
 
 def apply(p):
@@ -26,6 +29,8 @@ def apply(p):
     p.put(MIDI_IN_FIRST, bytes([VIRTUAL_CC, 0x22]), 'the MIDI In knob\'s first CC')
     for site in CC_TEXT_CALLS:
         p.chain_bl(site, ITOA, after=m['lp_cc_text'])
+    for site, handler in LABEL_CALLS:
+        p.own_call(site, LABEL, 'the MIDI In knob\'s label', m[handler])
     a = pm.Asm(p.next())
     a.movw_movt(2, hook.stock | 1)
     a.bw(m['lp_event'])

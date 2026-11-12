@@ -100,7 +100,7 @@ In Stomp footswitch mode, each of FS1–FS5 can have a Hold action (Global Setti
 
 - **Tuner** opens the tuner, as holding TAP does.
 - **FS4, FS5** press that footswitch, as an external switch would.
-- **FS6 … FS10** are virtual footswitches. Each toggles the blocks you assign to it: in a block's Bypass Assign, set MIDI In to FS6 … FS10 (the first five steps up from Off). The assignment is saved in the preset, and parameters assigned to the same footswitch through Controller Assign follow it too. They are MIDI CC 20–24 underneath, which is how HX Edit and other MIDI gear see them.
+- **FS6 … FS10** are virtual footswitches. Each toggles the blocks you assign to it: in a block's Bypass Assign, set MIDI In to FS6 … FS10 (the first five steps up from Off; the knob's label reads FootswIn while it's on one). The assignment is saved in the preset, and parameters assigned to the same footswitch through Controller Assign follow it too. They are MIDI CC 20–24 underneath, which is how HX Edit and other MIDI gear see them.
 - A switch with Hold **Off**, a momentary switch, and the Preset and Snapshot footswitch modes work as stock.
 
 ### More snapshots
