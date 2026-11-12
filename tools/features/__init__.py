@@ -6,6 +6,8 @@ A feature module may have:
   INPUTS     Input()s: the environment variables it reads besides FLAG, or FLAG itself to give its value a kind
   ORDER      its turn among the features (default 100): the order of their Global Settings sections and of their handlers on a shared hook
   CONFLICTS  names of features it cannot be built with
+  WEB        True (the default): every web page build has it; 'opt-in': a checkbox on the page, off until ticked; False: never on the
+             page or in a release, built only from a checkout
   SETTINGS   Setting()s in its own Global Settings section, after Displays, three to a page; each takes the ID tools/setting_ids.py gives '<feature>.<key>'
              (a virtual ID, which the engine serves from a bit field: see tools/setting_ids.py VIRTUAL)
   TITLE      the title of its Global Settings section, on each of its pages (default: its name in words, breathing_line ->

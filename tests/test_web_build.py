@@ -100,6 +100,13 @@ def test_page_lists_the_web_features():
     assert sorted(re.findall(r'<div class="feat" data-feature="(\w+)">', page)) == sorted(m4cache.web_flags())
 
 
+def test_page_lists_the_web_options():
+    # opt-in features: a checkbox each, hidden until the release's cache offers it, unticked
+    page = (ROOT / "web/index.html").read_text()
+    boxes = re.findall(r'<div class="feat" data-option="(\w+)" hidden><label><input type="checkbox"> ', page)
+    assert sorted(boxes) == sorted(m4cache.web_options())
+
+
 @pytest.mark.firmware
 def test_page_copy_builds_features_from_the_cache(tmp_path):
     stock = os.environ.get("HX_STOMP_HXF")
