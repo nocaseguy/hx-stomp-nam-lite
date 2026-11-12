@@ -82,6 +82,7 @@ var SOURCES = [
   "tools/features/long_press.py",
   "tools/features/metronome.py",
   "tools/features/more_snapshots.py",
+  "tools/features/real_names.py",
   "tools/features/splash.py",
   "tools/features/tuner.py",
   "tools/kit_patch_amp.py",
@@ -183,7 +184,7 @@ async function build(stock, flags) {
   flags = unit === "HX_Stomp" ? (flags || []) : [];
   if (flags.length && !cache) throw new Error("This page has no feature code (" + CACHE + "): build without features.");
   flags.forEach(function (f) {
-    if (cache.features.indexOf(f) < 0) throw new Error("This release has no feature " + f + ".");
+    if (cache.features.indexOf(f) < 0 && (cache.options || []).indexOf(f) < 0) throw new Error("This release has no feature " + f + ".");
   });
   setFeatures(p, flags);
   post({ type: "log", text: "features: " + (flags.join(" ") || "none") + "\n" });

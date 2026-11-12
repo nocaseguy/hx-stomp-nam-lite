@@ -413,6 +413,41 @@ def test_other_ccs_keep_their_numbers(h, cc):
     assert cc_text(h, cc) == f'CC{cc}'
 
 
+LABEL, NODE, MIDI_IN = 0x28dc63d0, 0x28620000, 0x28e3a0f4
+MOV_R2_R5, MOV_R2_R4 = bytes.fromhex('2a46'), bytes.fromhex('2246')
+
+
+def label(h, cc):
+    """The label lp_label hands the knob label setter for a MIDI In node on cc, or for no node (Off) when cc is None."""
+    h.m.stub(LABEL)
+    h.m.log.clear()
+    if cc is not None:
+        h.m.u32(NODE + 0x14, cc)
+    h.m.call(CODE + h.sym['lp_label'], 0, MIDI_IN, 0 if cc is None else NODE)
+    [(knob, text)] = [regs[:2] for regs in h.m.calls(LABEL)]
+    assert knob == 0
+    return 'MIDI In' if text == MIDI_IN else h.m.read(text, 9).split(b'\0')[0].decode()
+
+
+@pytest.mark.parametrize('cc', [20, 21, 22, 23, 24])
+def test_the_virtual_footswitches_are_labelled_footswin(h, cc):
+    assert label(h, cc) == 'FootswIn'
+
+
+@pytest.mark.parametrize('cc', [None, 0, 4, 19, 25, 127])
+def test_off_and_other_ccs_keep_the_midi_in_label(h, cc):
+    assert label(h, cc) == 'MIDI In'
+
+
+def test_each_label_entry_reads_its_callers_node(h, m4emu):
+    """At the redraw's label call the MIDI In node is in r5; at the knob refresh's, in r4 (0 when MIDI In is Off)."""
+    code, _ = m4emu.assemble('src/m4/long_press.s', MODS, IDS)
+    at = lambda name: h.sym[name] & ~1
+    assert code[at('lp_label_redraw'):at('lp_label_redraw') + 2] == MOV_R2_R5
+    assert code[at('lp_label_refresh'):at('lp_label_refresh') + 2] == MOV_R2_R4
+    assert at('lp_label_refresh') + 2 == at('lp_label'), 'the refresh entry falls through into lp_label'
+
+
 @pytest.mark.firmware
 def test_build_owns_the_handler_and_hands_lp_event_the_stock_handler():
     read, on = built({'HX_LONG_PRESS': '1'})
@@ -432,6 +467,8 @@ def test_build_owns_the_handler_and_hands_lp_event_the_stock_handler():
     assert read(long_press.MIDI_IN_FIRST, 2) == bytes([20, 0x22]), 'MIDI In: the first step up from Off is FS6\'s CC 20'
     for site in long_press.CC_TEXT_CALLS:
         assert read(site, 4) != pm.bl(site, long_press.ITOA), f'the CC text at {site:#x} is chained'
+    for site, mov in zip((0x28dbb6c2, 0x28dbbce6), (MOV_R2_R5, MOV_R2_R4)):
+        assert read(branch_target(site, read(site, 4)), 2) == mov, f'the label call at {site:#x} goes to its lp_label entry'
 
 
 @pytest.mark.firmware
@@ -449,6 +486,8 @@ def test_without_the_flag_the_handler_stays_stock():
     assert read(long_press.MIDI_IN_FIRST, 2) == long_press.MIDI_IN_FIRST_STOCK
     for site in long_press.CC_TEXT_CALLS:
         assert read(site, 4) == pm.bl(site, long_press.ITOA)
+    for site, _ in long_press.LABEL_CALLS:
+        assert read(site, 4) == pm.bl(site, long_press.LABEL)
 
 
 @pytest.mark.firmware

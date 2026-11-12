@@ -28,6 +28,9 @@ ITOA, CC_TEXT_CALLS = 0x28daaf6c, (0x28dbb6b2, 0x28dbbcd6, 0x28d8ff4c)
 # hooks other features put in it hold: its switch on the function byte, and TogglEXP's body past its press check.
 SWITCH, SWITCH_STOCK = 0x28dd14d2, bytes.fromhex('00eb4400 6500 0379 013b 0d2b f4d8 dfe8 13f0 b000 2e00 bb00 3b00 6500 7c00 9300 ed00 0701 2201 3101 4201')
 TOGGLE_EXP, TOGGLE_EXP_STOCK = 0x28dd17fc, bytes.fromhex('c5f7 4cf8 0228 40d0')
+# Bypass Assign's redraw and knob refresh label the MIDI In knob "MIDI In" just after its text; on FS6..FS10 the label reads FootswIn.
+LABEL = 0x28dc63d0
+LABEL_CALLS = ((0x28dbb6c2, 'lp_label_redraw'), (0x28dbbce6, 'lp_label_refresh'))
 
 
 def apply(p):
@@ -39,6 +42,8 @@ def apply(p):
     p.put(MIDI_IN_FIRST, bytes([VIRTUAL_CC, 0x22]), 'the MIDI In knob\'s first CC')
     for site in CC_TEXT_CALLS:
         p.chain_bl(site, ITOA, after=m['lp_cc_text'])
+    for site, handler in LABEL_CALLS:
+        p.own_call(site, LABEL, 'the MIDI In knob\'s label', m[handler])
     a = pm.Asm(p.next())
     a.movw_movt(2, hook.stock | 1)
     a.bw(m['lp_event'])

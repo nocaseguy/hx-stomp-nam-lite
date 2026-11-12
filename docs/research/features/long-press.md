@@ -36,6 +36,13 @@ A hold action per footswitch, FS1..FS5 Hold, and the virtual footswitches FS6..F
     - `0x28d8ff4c`: Controller Assign `0x28d8fc48`, its CC# knob.
   - Each is chained with `lp_cc_text`, which rewrites CC 20..24 as FS6..FS10. The Command Center's "CC #" is a CC it sends, so it is left as it is. HX Edit still shows MIDI CC 20..24.
   - Image MD5 `2240fc7cafb4acd1929fd5014309d26b` **[verified on unit]**: MIDI In reads FS6 one click up from Off, FS10 four clicks later, then CC25; it reads CC19 below FS6. Controller Assign's CC# 20 reads FS6, and an FS6 hold still toggles its block.
+- **MIDI In label: FootswIn** [verified offline, then on unit]:
+  - Bypass Assign labels the MIDI In knob (knob 0) right after its text, with the knob label setter `0x28dc63d0(0, "MIDI In")` (string `0x28e3a0f4`). The only two calls:
+    - `0x28dbb6c2`, in the redraw: the MIDI In node from `0x28ddebcc` is in r5 (0 when MIDI In is Off).
+    - `0x28dbbce6`, in the knob refresh: the node is in r4 (0 when Off).
+  - Off sets its text and then joins the same label call (`0x28dbb808` → `0x28dbb6be`, `0x28dbbea4` → `0x28dbbce2`), so every detent relabels the knob.
+  - `long_press.py` owns both calls (`p.own_call`): `lp_label_redraw` and `lp_label_refresh` pass the node to `lp_label`, which hands the setter "FootswIn" when the node's CC (+0x14) is 20..24, and "MIDI In" otherwise.
+  - Image payload MD5 `007daabaf3de232fa88749ca8489a8ea` (HX_LONG_PRESS, RAM run, 2026-11-11) **[verified on unit]**: MIDI In reads FootswIn on FS6..FS10, when paged to and on each detent, and MIDI In on Off and other CCs; FootswIn fits under the knob, and an FS6 hold still toggles its block.
 
 - **FS6..FS10 Function** [verified offline: unicorn tests in `tests/test_long_press.py`; not yet on the unit]:
   - Settings FS6 Function … FS10 Function (virtual IDs `0xda..0xde`, container 110, as 108 is full), FS3..FS5 Function's values with Stomp N, and Tuner in TAP/Tunr's place (the user's choice after the first unit run: a hold only ever gives one action, and it has no use for a tap), default Stomp. From Stomp on, value v is stock function v + 1, as for FS3..FS5 Function. In Footswitches after the Holds: pages 4 and 5.
