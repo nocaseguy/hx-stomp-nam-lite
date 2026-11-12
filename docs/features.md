@@ -44,6 +44,8 @@ Every feature's settings are virtual settings: HXtra serves their IDs itself and
 ## Tuner settings
 
 <!-- demo: tuner -->
+<img src="https://github.com/user-attachments/assets/7decba81-b026-4fb5-95f9-6c8899b2e47c" width="100%" alt="The tuner: Activate set to Press, so one press opens it, then Lock On and its knobs no longer change">
+
 With `HX_TUNER=1`, the tuner's own settings get a page of their own, third: page right past Trails, Offsets and String 6. The string pages (Strings 5–3, then 2 and 1) follow it: few players use the per-string offsets, so the page comes before them. Its knobs set them as the stock pages' knobs do: turn to change, press to go back to the default.
 
 | Knob | Values | What it does |
@@ -56,6 +58,8 @@ Both keep their values (setting IDs 29 and 104) from builds that had them in Glo
 ## BPM
 
 <!-- demo: bpm -->
+<img src="https://github.com/user-attachments/assets/62783af2-506f-4878-80ed-e2705acba51c" width="49%" alt="Tapping TAP: the tempo and its beat dot follow"> <img src="https://github.com/user-attachments/assets/4579e864-8a7d-46fd-a764-ec5cd102b6e9" width="49%" alt="Global Settings, BPM Display: Font Size, Color and Dot Position">
+
 The Home screen shows the tempo at its top left, and a beat dot beside the preset number that lights with the TAP footswitch's ring, red on a tap.
 
 - **The tempo** is the one the HX Stomp is using, the global or the preset's as Tempo Select says, as a whole number. It shows ` X` after it while the tempo comes from MIDI clock (the tempo screen's Extrnl), and `--` with no tempo.
@@ -65,6 +69,8 @@ The Home screen shows the tempo at its top left, and a beat dot beside the prese
 ## Tap LED color
 
 <!-- demo: tap-color -->
+<img src="https://github.com/user-attachments/assets/29f1b0a3-fa13-4d40-bfb0-cb426b15079d" width="100%" alt="Tap LED Color: red, green, blue, then Rainbow walking the colour wheel, and BPM Display Color Tempo following it">
+
 The TAP footswitch's ring blinks red with the tempo, and its icon and label on the Home screen are red. Tap LED Color (Global Settings > Displays, under Tap Tempo LED) picks another colour for all three, from the colours the HX Stomp gives its other footswitches.
 
 - **The colours** are the stock footswitch palette: each ring colour is the one the HX Stomp lights for a block of that colour, and each icon the stock switch icon of that colour.
@@ -77,6 +83,8 @@ The TAP footswitch's ring blinks red with the tempo, and its icon and label on t
 ## DSP usage display
 
 <!-- demo: dsp-usage -->
+<img src="https://github.com/user-attachments/assets/fb8644f3-b5ab-4803-b3be-fefcfb23c7b3" width="100%" alt="Browsing bass amps: the DSP total previews each model, then the added block shows its share">
+
 In the Edit view, each block in the signal-flow row shows its share of the DSP in per cent, in black on the block. The top right corner shows the blocks' total out of 75, e.g. `47/75`.
 
 In the model browser, each model shows the share it would take, in white between its icon and its name, and the top right corner shows the total as in the Edit view.
@@ -86,6 +94,8 @@ In the model browser, each model shows the share it would take, in white between
 ## Real block names
 
 <!-- demo: real-names -->
+<img src="https://github.com/user-attachments/assets/607728e6-773b-41ae-9619-5a30ca2f50ad" width="100%" alt="The model browser's Distortion list by real names: Xotic EP Booster, Klon Centaur, Ibanez TS808">
+
 Line 6 names its models after the gear they're based on with a twist (Deez One Mod, US Double Nrm). With Real block names, the model browser and the Edit view title each block by that gear instead: Boss DS-1 Mod, Twin Reverb Nrm. The names come from [helixhelp.com/models](https://helixhelp.com/models)' "based on", at most 16 characters.
 
 - **Off unless you ask:** a checkbox on the setup page, unticked, or `HX_REAL_NAMES=1` for `build.py`.
@@ -95,6 +105,8 @@ Line 6 names its models after the gear they're based on with a twist (Deez One M
 ## Breathing line
 
 <!-- demo: breathing-line -->
+<img src="https://github.com/user-attachments/assets/d492b0aa-1151-42c6-b84a-27f6fd36e5d8" width="49%" alt="Breathing Line types, colours and speeds on the Home screen, on the unit"> <img src="https://github.com/user-attachments/assets/dd1085e1-c51d-4377-8dee-26b8ce5e1423" width="49%" alt="The same, the screen alone: Steady, Breathe, Cylon, Heart, Sparkle, then Aurora, Ice, Fire and Tempo">
+
 Just for fun: the line across the middle of the Home screen, between the signal flow and the knobs, comes alive in the colours, motion and speed you pick. It starts on Rainbow, breathing once every 4 s.
 
 - **Where it shows:** on the Home screen only. Other screens stay stock, and the line stops animating while you're on them.
@@ -104,6 +116,8 @@ Just for fun: the line across the middle of the Home screen, between the signal 
 ## Long press
 
 <!-- demo: long-press -->
+<img src="https://github.com/user-attachments/assets/50a6ecf0-6d87-4556-8ffd-035e4b40987b" width="49%" alt="Tapping and holding FS2, holding FS1 for the tuner, then the Hold and FS6 to FS10 Function settings"> <img src="https://github.com/user-attachments/assets/f0261c29-ef31-4527-8d96-21ef176b67aa" width="49%" alt="A block's Bypass Assign: MIDI In set to the virtual footswitch FS6, then holding FS2 toggles it">
+
 In Stomp footswitch mode, each of FS1–FS5 can have a Hold action (Global Settings > Footswitches, pages 2 and 3: FS1 Hold Function … FS5 Hold Function), and each virtual footswitch FS6–FS10 a function (pages 4 and 5: FS6 Function … FS10 Function). Holding the switch for 1 s runs it; a tap still toggles the switch's own blocks, on release instead of on press, since the press can't tell yet whether it will become a hold.
 
 - **Tuner** opens the tuner, as holding TAP does.
@@ -115,6 +129,8 @@ In Stomp footswitch mode, each of FS1–FS5 can have a Hold action (Global Setti
 ## More snapshots
 
 <!-- demo: snapshots -->
+<img src="https://github.com/user-attachments/assets/8ce9d86c-cffb-491e-9c47-0430a02a4af7" width="100%" alt="Snapshots 1 to 3, the lit footswitch again for 4 to 6, and again back to 1 to 3">
+
 With Footswitch Mode on Snapshot, the three footswitches select snapshots 1–3 as usual. Press the lit one again and the same footswitches select snapshots 4–6; press the lit one again to come back.
 
 - **Which bank you're in:** in 4–6, the camera icon at the top right and the footswitch labels show 4, 5 or 6.
@@ -127,6 +143,8 @@ With Footswitch Mode on Snapshot, the three footswitches select snapshots 1–3 
 ## Metronome
 
 <!-- demo: metronome -->
+https://github.com/user-attachments/assets/f25be41c-3ab0-45a1-87fa-99cd50194933
+
 A click track in time with the tempo, as a block: add it from the model browser, Looper > Metronome > Metronome, anywhere in the signal flow. It is a mono effect block, listed under Looper so it's easy to find; it isn't a looper. In the signal flow it is teal, lit when on and dim when off, and its icon is a metronome.
 
 | Knob | Values | What it does |
@@ -142,6 +160,8 @@ A click track in time with the tempo, as a block: add it from the model browser,
 ## GR meter
 
 <!-- demo: gr-meter -->
+https://github.com/user-attachments/assets/50b5cd91-f578-4252-a1df-4b73d8ca1995
+
 A gain-reduction meter on the Home screen, lit by the compressor you turn it on in, so you can see how hard it is working. HX Stomp only.
 
 | Knob | Values | What it does |
@@ -155,7 +175,6 @@ A gain-reduction meter on the Home screen, lit by the compressor you turn it on 
 
 ## Boot screen (HX Stomp only)
 
-<!-- demo: boot-screen -->
 ```sh
 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf --splash my_picture.jpg --splash-text "HXS OS v0.1"
 ```

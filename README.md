@@ -8,6 +8,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/wisemandenny/hxtra?style=flat-square)](https://github.com/wisemandenny/hxtra/commits/main)
 
 <!-- demo: tour, a short loop of the virtual HX Stomp from tools/hx_mirror.py -->
+<img src="https://github.com/user-attachments/assets/b804955a-3275-40b6-932b-d1ccf10c4d95" width="480" alt="A tour of HXtra on the HX Stomp: the BPM and tap colours, DSP usage in the Edit view and model browser, and six snapshots">
 
 </div>
 
@@ -69,6 +70,8 @@ If an install ever stops at the splash screen, hold Page Right while powering on
 
 ### <img src="docs/assets/icons/bpm.svg" width="40" height="28" align="top" alt=""> BPM display
 <!-- demo: bpm -->
+<img src="https://github.com/user-attachments/assets/62783af2-506f-4878-80ed-e2705acba51c" width="49%" alt="Tapping TAP: the tempo and its beat dot follow"> <img src="https://github.com/user-attachments/assets/4579e864-8a7d-46fd-a764-ec5cd102b6e9" width="49%" alt="Global Settings, BPM Display: Font Size, Color and Dot Position">
+
 The tempo at the top left of the Home screen, and a beat dot that blinks with TAP. Choose its size, its colour and where the dot sits.
 
 &nbsp;
@@ -78,6 +81,8 @@ The tempo at the top left of the Home screen, and a beat dot that blinks with TA
 
 ### <img src="docs/assets/icons/dsp-usage.svg" width="32" height="32" align="top" alt=""> DSP usage display
 <!-- demo: dsp-usage -->
+<img src="https://github.com/user-attachments/assets/fb8644f3-b5ab-4803-b3be-fefcfb23c7b3" width="100%" alt="Browsing bass amps: the DSP total previews each model, then the added block shows its share">
+
 Every block shows its share of the DSP, and the total sits at the top right (`47/75`). The model browser shows what a model costs *before* you add it.
 
 &nbsp;
@@ -89,6 +94,8 @@ Every block shows its share of the DSP, and the total sits at the top right (`47
 
 ### <img src="docs/assets/icons/snapshots.svg" width="104" height="32" align="top" alt=""> Six snapshots
 <!-- demo: snapshots -->
+<img src="https://github.com/user-attachments/assets/8ce9d86c-cffb-491e-9c47-0430a02a4af7" width="100%" alt="Snapshots 1 to 3, the lit footswitch again for 4 to 6, and again back to 1 to 3">
+
 Press the lit snapshot footswitch again to flip to snapshots 4–6. Next and previous step through all six, and all six are saved with the preset.
 
 &nbsp;
@@ -98,6 +105,8 @@ Press the lit snapshot footswitch again to flip to snapshots 4–6. Next and pre
 
 ### <img src="docs/assets/icons/long-press.svg" width="28" height="28" align="top" alt=""> Long press and virtual footswitches
 <!-- demo: long-press -->
+<img src="https://github.com/user-attachments/assets/50a6ecf0-6d87-4556-8ffd-035e4b40987b" width="49%" alt="Tapping and holding FS2, holding FS1 for the tuner, then the Hold and FS6 to FS10 Function settings"> <img src="https://github.com/user-attachments/assets/f0261c29-ef31-4527-8d96-21ef176b67aa" width="49%" alt="A block's Bypass Assign: MIDI In set to the virtual footswitch FS6, then holding FS2 toggles it">
+
 Hold FS1–FS5 for a second action: the tuner, FS4, FS5, or one of five virtual footswitches, FS6–FS10, each with a footswitch function of its own.
 
 &nbsp;
@@ -109,6 +118,8 @@ Hold FS1–FS5 for a second action: the tuner, FS4, FS5, or one of five virtual 
 
 ### <img src="docs/assets/icons/tap-color.svg" width="28" height="28" align="top" alt=""> Tap LED color
 <!-- demo: tap-color -->
+<img src="https://github.com/user-attachments/assets/29f1b0a3-fa13-4d40-bfb0-cb426b15079d" width="100%" alt="Tap LED Color: red, green, blue, then Rainbow walking the colour wheel, and BPM Display Color Tempo following it">
+
 Light the TAP footswitch in any footswitch colour, or let Rainbow and Random change it on every beat. The BPM display can follow it.
 
 &nbsp;
@@ -118,6 +129,8 @@ Light the TAP footswitch in any footswitch colour, or let Rainbow and Random cha
 
 ### <img src="docs/assets/icons/breathing-line.svg" width="28" height="28" align="top" alt=""> Breathing line
 <!-- demo: breathing-line -->
+<img src="https://github.com/user-attachments/assets/d492b0aa-1151-42c6-b84a-27f6fd36e5d8" width="49%" alt="Breathing Line types, colours and speeds on the Home screen, on the unit"> <img src="https://github.com/user-attachments/assets/dd1085e1-c51d-4377-8dee-26b8ce5e1423" width="49%" alt="The same, the screen alone: Steady, Breathe, Cylon, Heart, Sparkle, then Aurora, Ice, Fire and Tempo">
+
 Just for fun: the Home screen's divider comes alive. Rainbow, Fire, Ocean, Cylon, Comet, Heart, Sparkle and more, even in time with the tempo.
 
 &nbsp;
@@ -129,6 +142,8 @@ Just for fun: the Home screen's divider comes alive. Rainbow, Fire, Ocean, Cylon
 
 ### <img src="docs/assets/icons/metronome.svg" width="35" height="28" align="top" alt=""> Metronome
 <!-- demo: metronome -->
+https://github.com/user-attachments/assets/f25be41c-3ab0-45a1-87fa-99cd50194933
+
 A click-track block in time with the tempo, with an optional downbeat accent. Find it at Looper › Metronome.
 
 &nbsp;
@@ -138,6 +153,8 @@ A click-track block in time with the tempo, with an optional downbeat accent. Fi
 
 ### <img src="docs/assets/icons/gr-meter.svg" width="28" height="28" align="top" alt=""> Gain-reduction meter
 <!-- demo: gr-meter -->
+https://github.com/user-attachments/assets/50b5cd91-f578-4252-a1df-4b73d8ca1995
+
 See how hard your compressor is working, as a meter on the Home screen. It works with six of the stock compressors.
 
 &nbsp;
@@ -149,6 +166,8 @@ See how hard your compressor is working, as a meter on the Home screen. It works
 
 ### <img src="docs/assets/icons/tuner.svg" width="28" height="28" align="top" alt=""> Tuner settings
 <!-- demo: tuner -->
+<img src="https://github.com/user-attachments/assets/7decba81-b026-4fb5-95f9-6c8899b2e47c" width="100%" alt="The tuner: Activate set to Press, so one press opens it, then Lock On and its knobs no longer change">
+
 Open the tuner with a single press instead of a hold, and lock its settings so a stray knob turn can't change them.
 
 &nbsp;
@@ -158,6 +177,8 @@ Open the tuner with a single press instead of a hold, and lock its settings so a
 
 ### <img src="docs/assets/icons/real-names.svg" width="28" height="28" align="top" alt=""> Real block names
 <!-- demo: real-names -->
+<img src="https://github.com/user-attachments/assets/607728e6-773b-41ae-9619-5a30ca2f50ad" width="100%" alt="The model browser's Distortion list by real names: Xotic EP Booster, Klon Centaur, Ibanez TS808">
+
 *Optional.* Title each block by the gear it's based on: Deez One Mod reads Boss DS-1 Mod. Tick its box on the setup page.
 
 &nbsp;
@@ -168,7 +189,6 @@ Open the tuner with a single press instead of a hold, and lock its settings so a
 <td valign="top">
 
 ### <img src="docs/assets/icons/nam.svg" width="28" height="28" align="top" alt=""> NAM A2 Lite
-<!-- demo: nam -->
 [Neural Amp Modeler](https://www.neuralampmodeler.com) captures on the HX Stomp's own DSP, from [hx-stomp-nam-lite](https://github.com/nocaseguy/hx-stomp-nam-lite). The setup page converts your `.nam` files.
 
 &nbsp;
@@ -177,7 +197,6 @@ Open the tuner with a single press instead of a hold, and lock its settings so a
 <td valign="top">
 
 ### <img src="docs/assets/icons/boot-screen.svg" width="28" height="28" align="top" alt=""> Custom boot screen
-<!-- demo: boot-screen -->
 "HXtra STOMP" out of the box, or [your own picture and boot text](docs/features.md#boot-screen-hx-stomp-only), emoji included, from the command-line build.
 
 &nbsp;

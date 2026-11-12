@@ -70,7 +70,7 @@ def tap(m4emu):
 
 def test_feature_settings():
     assert tc.FLAG == 'HX_TAP_COLOR' and tc.MENU == 'Displays'
-    assert SETTING.label == b'Tap LED\nColor' and SETTING.default == 0 and SETTING.max == RANDOM and SETTING.values[RAINBOW:] == (b'Rainbow', b'Random')
+    assert SETTING.label == b'Color\nTap LED' and SETTING.default == 0 and SETTING.max == RANDOM and SETTING.values[RAINBOW:] == (b'Rainbow', b'Random')
     assert all(len(v) <= 8 for v in SETTING.values)
     assert pm.STOCK_CATEGORIES['Displays'] == (5, 0x28e3b540)
 

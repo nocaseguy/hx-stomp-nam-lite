@@ -6,8 +6,11 @@ shows, coded as its changes since the frame before (src/m4/screen_mirror.s).
 
   hx_mirror.py shot screen.png [--scale 2]      # one frame as a PNG
   hx_mirror.py view [--scale 3]                 # a live window (macOS: tools/mac/mirror_mac.swift, built on first use)
-  hx_mirror.py view --record demo.mov           # the same, recorded as H.264 at the times the frames arrived
+  hx_mirror.py view --record demo.mov           # the same, recorded as H.264 at the times the frames arrived, with the sound
   hx_mirror.py gif demo 12 20 [--screen]        # seconds 12 to 20 of that take as a looping GIF, the unit or the screen alone
+  hx_mirror.py gif demo 30 38 --out demo-2.gif  # a second GIF from the same take
+  hx_mirror.py gif demo 2 9 14 20               # seconds 2-9 and 14-20 joined, cutting out a slip
+  hx_mirror.py mp4 demo 0 7 18 54               # the MP4 again, of those windows only, its sound cut with them
   hx_mirror.py bench [--frames 50]              # frames a second
 
 A script can drive the HX Stomp while recording: Session(record='demo.mov') mirrors in the background, and its ctl (hx_ctl.HxCtl)
@@ -45,6 +48,7 @@ RENDER = os.path.join(ROOT, 'build', 'stomp_render')
 CONTROLS_JSON = os.path.join(ROOT, 'build', 'controls.json')
 SKINS = os.path.join(ROOT, 'tools', 'mac', 'skins')    # where each photo's controls are; the photos themselves are in ART
 ART = os.path.join(ROOT, 'build', 'art')                # the user's copies of the product photos: never committed
+AUDIO = 'HX Stomp'                                      # the sound input a recording takes, its USB 1/2: the main output
 RECORDINGS = os.path.join(ROOT, 'build', 'recordings')  # a bare --record name goes here: recordings show the HX Stomp's own UI,
                                                         # so they stay out of git (and are hosted outside the repository)
 
@@ -222,11 +226,14 @@ class Mirror:
         self.dropped, self.timing, self.prev = 0, [], None         # timing: (µs to code, µs to send, bytes) of each frame
         self.clock, self.t, self.events = Clock(), None, []          # the unit's time of the last frame; [(time, event)]
         self.leds = []                                               # [(time, leds())] each time they change
+        self.lag = []       # host time a reply came less the unit's time of its frame and its coding and sending: the least is
+                            # how far the host's clock (time.monotonic, mach time) is ahead of the unit's
 
     def frame(self):
         """The screen as RGB rows, or None when the reply did not decode (the next one then codes every pixel)."""
         with self.lock:
             blob = self._ctl.ed.request(CMD_SCREEN, timeout=5)
+            came = time.monotonic()
             if not isinstance(blob, (bytes, bytearray)):
                 raise hx_ctl.HxError('screen: no frame in the reply (a build without HX_SCREEN_MIRROR=1?): %r' % (blob,))
             t = stats(bytes(blob))
@@ -236,6 +243,8 @@ class Mirror:
             if ev:
                 self.t = self.clock(ev[0])
                 self.events += [(self.t + ((us - ev[0] + (1 << 31)) % (1 << 32) - (1 << 31)) / 1e6, e) for us, e in ev[1]]
+            if ev and t:
+                self.lag.append(came - self.t - (t[0] + t[1]) / 1e6)
             lit = leds(bytes(blob))
             if ev and lit and (not self.leds or self.leds[-1][1] != lit):
                 self.leds.append((self.t, lit))
@@ -258,11 +267,12 @@ class Mirror:
         self.close()
 
 
-def viewer(scale, record=None, title='HX Stomp', record_scale=4, codec='h264'):
-    """The macOS window (and recorder): a process taking frames on stdin. Builds it on first use."""
+def viewer(scale, record=None, title='HX Stomp', record_scale=4, codec='h264', audio=None):
+    """The macOS window (and recorder, with the sound of the input named audio beside it): a process taking frames on stdin.
+    Builds it on first use."""
     args = [build_tool(VIEWER_SRC, VIEWER), str(W), str(H), str(scale), title]
     if record:
-        args += [os.path.abspath(record), str(record_scale), codec]
+        args += [os.path.abspath(record), str(record_scale), codec, audio or '-']
     return subprocess.Popen(args, stdin=subprocess.PIPE)
 
 
@@ -271,10 +281,10 @@ class Session(Mirror):
     while a script uses ctl; with Session(...) as s: ... on_events(new [(time, event)]) is called as they come."""
 
     def __init__(self, scale=3, record=None, window=True, ctl=None, verbose=False, fps=FPS, record_scale=4, codec='h264',
-                 on_events=None, render=True, skin='black'):
+                 on_events=None, render=True, skin='black', audio=AUDIO):
         super().__init__(ctl, verbose)
         self.period = 1 / fps if fps else 0
-        self.view = viewer(scale, record, record_scale=record_scale, codec=codec) if window or record else None
+        self.view = viewer(scale, record, record_scale=record_scale, codec=codec, audio=audio) if window or record else None
         self.record, self.on_events, self.times, self.render, self.rendered = record, on_events, [], render, None
         self.skin = skin
         self.frames, self.last, self.error = 0, None, None
@@ -333,10 +343,11 @@ class Session(Mirror):
             raise self.error
 
     def timeline(self):
-        """The recording's frames and UI events, in seconds from its first frame, as the video's times are."""
+        """The recording's frames and UI events, in seconds from its first frame, as the video's times are, and host: the first
+        frame's time on the host's clock, which the sound's start is on."""
         t0 = self.times[0]
         lit = [x for x in self.leds if x[0] <= t0][-1:] + [x for x in self.leds if x[0] > t0]
-        return {'frames': [round(t - t0, 6) for t in self.times],
+        return {'frames': [round(t - t0, 6) for t in self.times], **({'host': round(t0 + min(self.lag), 6)} if self.lag else {}),
                 'events': [{'t': round(t - t0, 6), 'event': e.hex()} for t, e in self.events if t >= t0],
                 'leds': [{'t': round(max(0.0, t - t0), 6), 'leds': [list(x) for x in lit]} for t, lit in lit]}
 
@@ -462,17 +473,29 @@ def build_tool(src, exe):
     return exe
 
 
-def render(record, cmap=STOMP, skin='black', gif=None, screen=False):
+def render(record, cmap=STOMP, skin='black', gif=None, screen=False, out=None, touch=True, keep=None):
     """The recording set in a photo of the HX Stomp (skin: black or white, tools/mac/skins/) with its controls moving, as
-    <take>.mp4 beside it, small enough to attach on GitHub; with gif=(from, to), those seconds of it as <take>.gif for a README
-    (480 x 360, 15 frames a second, looping), and with screen too, the screen alone."""
+    <take>.mp4 beside it, small enough to attach on GitHub, with the take's sound when it has one (<take>-audio.m4a); with
+    gif=(from, to, ...), those seconds of it (windows joined, in order) as <take>.gif for a README (480 x 360, 15 frames a second,
+    looping), and with screen too, the screen alone; out names another file instead, and touch=False leaves out the footswitches'
+    touch sensors, a foot resting on one, showing only its clicks; keep=(from, to, ...) makes the MP4 of those windows only,
+    joined, the sound cut with them."""
     with open(timeline_path(record)) as f:
         timeline = json.load(f)
     base = os.path.splitext(record)[0]
+    tr = tracks(timeline, cmap)
+    for c in tr['controls'].values() if not touch else ():
+        c.pop('touch', None)
     with open(base + '-tracks.json', 'w') as f:
-        json.dump(tracks(timeline, cmap), f)
-    out = base + ('.gif' if gif else '.mp4')
-    extra = ['--gif', '%g' % gif[0], '%g' % gif[1]] + (['--screen'] if screen else []) if gif else []
+        json.dump(tr, f)
+    out = out or base + ('.gif' if gif else '.mp4')
+    extra = ['--gif'] + ['%g' % x for x in gif] + (['--screen'] if screen else []) if gif else []
+    sound, began = base + '-audio.m4a', base + '-audio.json'
+    if not gif and 'host' in timeline and os.path.exists(sound) and os.path.exists(began):
+        with open(began) as f:
+            extra += ['--audio', sound, '%.6f' % (json.load(f)['host_start'] - timeline['host'])]
+    if keep and not gif:
+        extra += ['--keep'] + ['%g' % x for x in keep]
     subprocess.run([build_tool(RENDER_SRC, RENDER), record, base + '-tracks.json', out, os.path.join(SKINS, skin + '.json'), ART]
                    + extra, check=True, stdout=subprocess.DEVNULL)
     return out
@@ -506,14 +529,21 @@ def main():
                     'an even scale keeps H.264\'s half-resolution colour inside each pixel)')
     sp.add_argument('--prores', action='store_true', help='record ProRes 4444, every pixel\'s colour kept (a master; big files)')
     sp.add_argument('--skin', default='black', choices=['black', 'white'], help='the HX Stomp photo the recording is set into')
+    sp.add_argument('--no-audio', action='store_true', help='no sound: by default a recording takes the HX Stomp\'s USB audio')
     sp.add_argument('--seconds', type=float, help='stop after this long (default: when the window closes)')
     sp.add_argument('--fps', type=float, default=FPS, help='frames a second to ask for, at most (default %(default)s; 0: as fast as '
                     'the unit answers, which makes its own screen and controls lag)')
     sp = sub.add_parser('gif', help='a window of a take as a looping GIF for a README, beside it')
     sp.add_argument('record', help='the take: a bare name is in build/recordings/, as view --record wrote it')
-    sp.add_argument('start', type=float, help='seconds into the take')
-    sp.add_argument('end', type=float, help='seconds into the take (4 to 10 s after start loops well)')
+    sp.add_argument('times', type=float, nargs='+', metavar='FROM TO', help='seconds into the take (4 to 10 s loops well); more '
+                    'windows, in order, are joined, to cut out a slip')
     sp.add_argument('--screen', action='store_true', help='the screen alone, where small text stays readable, not the unit')
+    sp.add_argument('--skin', default='black', choices=['black', 'white'])
+    sp.add_argument('--no-touch', action='store_true', help='only the footswitch clicks, not a foot resting on one')
+    sp.add_argument('--out', help='its name, for a second GIF from the same take: a bare name goes beside the take')
+    sp = sub.add_parser('mp4', help='a take rendered again as <take>.mp4, with its sound; with windows, only those, joined')
+    sp.add_argument('record', help='the take: a bare name is in build/recordings/, as view --record wrote it')
+    sp.add_argument('times', type=float, nargs='*', metavar='FROM TO', help='seconds into the take to keep, to cut out a slip')
     sp.add_argument('--skin', default='black', choices=['black', 'white'])
     sp = sub.add_parser('events', help='the window, and each UI event printed as it comes: to learn which control is which')
     sp.add_argument('--seconds', type=float, default=120)
@@ -539,8 +569,10 @@ def main():
         if args.record and not os.path.dirname(args.record):
             os.makedirs(RECORDINGS, exist_ok=True)
             args.record = os.path.join(RECORDINGS, args.record)
+        if args.record and not os.path.splitext(args.record)[1]:
+            args.record += '.mov'                   # AVFoundation reads no movie without its extension
         with Session(args.scale, args.record, verbose=args.verbose, fps=args.fps, record_scale=args.record_scale,
-                     codec='prores' if args.prores else 'h264', skin=args.skin) as s:
+                     codec='prores' if args.prores else 'h264', skin=args.skin, audio=None if args.no_audio else AUDIO) as s:
             start = time.monotonic()
             try:
                 s.wait(args.seconds if args.seconds else 1e9)
@@ -549,12 +581,20 @@ def main():
             took = time.monotonic() - start
         print(report(s, s.frames, took) + (', recorded to ' + args.record if args.record else '') +
               (', assembled into ' + s.rendered if s.rendered else ''))
-    elif args.cmd == 'gif':
+    elif args.cmd in ('gif', 'mp4'):
         record = args.record if os.path.dirname(args.record) else os.path.join(RECORDINGS, args.record)
         record += '.mov' if not os.path.exists(record) and os.path.exists(record + '.mov') else ''
-        out = render(record, skin=args.skin, gif=(args.start, args.end), screen=args.screen)
-        mb = os.path.getsize(out) / 1e6
-        print('%s, %.1f MB' % (out, mb) + (': over the 5 MB a README GIF should be, so pick a shorter window' if mb > 5 else ''))
+        if len(args.times) % 2 or any(a >= b for a, b in zip(args.times, args.times[1:])):
+            raise SystemExit('hx_mirror %s: give windows as FROM TO pairs, in order' % args.cmd)
+        if args.cmd == 'mp4':
+            out = render(record, skin=args.skin, keep=tuple(args.times) or None)
+            print('%s, %.1f MB' % (out, os.path.getsize(out) / 1e6))
+        else:
+            out = args.out and (args.out if os.path.dirname(args.out) else os.path.join(os.path.dirname(record), args.out))
+            out = render(record, skin=args.skin, gif=tuple(args.times), screen=args.screen, out=out,
+                         touch=not args.no_touch)
+            mb = os.path.getsize(out) / 1e6
+            print('%s, %.1f MB' % (out, mb) + (': over the 5 MB a README GIF should be, so pick a shorter window' if mb > 5 else ''))
     elif args.cmd == 'events':
         def show(new):
             for t, e in new:

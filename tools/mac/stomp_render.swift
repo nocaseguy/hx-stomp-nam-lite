@@ -1,10 +1,13 @@
 // stomp_render.swift - a recording of the HX Stomp's screen (tools/hx_mirror.py view --record) set into a photo of the unit, its
 // controls moving as they were used, as an H.264 MP4 at 30 frames a second, small enough to attach on GitHub (10 MB at most).
 //   swiftc -O tools/mac/stomp_render.swift -o build/stomp_render     (hx_mirror.py builds it on first use)
-//   stomp_render IN.mov TRACKS.json OUT.mp4 SKIN.json PHOTO_DIR
-//   stomp_render IN.mov TRACKS.json OUT.gif SKIN.json PHOTO_DIR --gif FROM TO [--screen]
+//   stomp_render IN.mov TRACKS.json OUT.mp4 SKIN.json PHOTO_DIR [--audio SOUND.m4a OFFSET] [--keep FROM TO [FROM TO ...]]
+//   stomp_render IN.mov TRACKS.json OUT.gif SKIN.json PHOTO_DIR --gif FROM TO [FROM TO ...] [--screen]
 // --gif: FROM to TO seconds of the take as a looping GIF for a README, 480 x 360 at 15 frames a second: the unit on the skin's
-// background, or with --screen the screen alone, where small text stays readable. IN may be a PNG, a still screen throughout.
+// background, or with --screen the screen alone, where small text stays readable. More windows, in order, are joined: a cut
+// leaves out a slip. IN may be a PNG, a still screen throughout. --audio puts the take's sound in the MP4, its start OFFSET
+// seconds into the video (negative: it began before the first frame). --keep makes the MP4 of those windows only, joined, the
+// sound cut with them.
 // SKIN.json (tools/mac/skins/): the photo's file name in PHOTO_DIR and, in its pixels (y down), where the unit is ("crop"), its
 // screen, knobs [x, y, r], volume knob (and the level its pointer shows, "volume_at"), buttons [x, y, w, h], footswitch rings
 // (the boxes to find their coloured pixels in), where FS4/FS5 light up ("badges") and, optionally, a touched control's colour
@@ -20,11 +23,28 @@ import AVFoundation
 import AppKit
 
 let args = CommandLine.arguments
-let gifWindow: (Double, Double)? = args.count >= 9 && args[6] == "--gif" ? (Double(args[7]) ?? -1, Double(args[8]) ?? -1) : nil
-let gifScreen = args.count == 10 && args[9] == "--screen"
-guard args.count == 6 || (gifWindow.map { $0.0 >= 0 && $0.1 > $0.0 } ?? false) && (args.count == 9 || gifScreen) else {
-    FileHandle.standardError.write("usage: stomp_render IN.mov TRACKS.json OUT.mp4 SKIN.json PHOTO_DIR [--gif FROM TO [--screen]]\n"
-        .data(using: .utf8)!)
+var gifTimes: [Double] = [], keepTimes: [Double] = [], gifScreen = false, soundPath: String? = nil, soundOffset = 0.0
+var badArgs = args.count < 6, a = 6
+while a < args.count {
+    switch args[a] {
+    case "--gif":
+        while a + 1 < args.count, let v = Double(args[a + 1]) { gifTimes.append(v); a += 1 }
+    case "--keep":
+        while a + 1 < args.count, let v = Double(args[a + 1]) { keepTimes.append(v); a += 1 }
+    case "--screen": gifScreen = true
+    case "--audio" where a + 2 < args.count && Double(args[a + 2]) != nil:
+        soundPath = args[a + 1]; soundOffset = Double(args[a + 2])!; a += 2
+    default: badArgs = true
+    }
+    a += 1
+}
+func windows(_ t: [Double]) -> [(Double, Double)] { stride(from: 0, to: t.count - 1, by: 2).map { (t[$0], t[$0 + 1]) } }
+func inOrder(_ t: [Double]) -> Bool { t.count % 2 == 0 && (t.first ?? 0) >= 0 && zip(t, t.dropFirst()).allSatisfy { $0 < $1 } }
+let gifWindows = windows(gifTimes)
+guard !badArgs && inOrder(gifTimes) && inOrder(keepTimes)
+        && (gifTimes.isEmpty ? !gifScreen : soundPath == nil && keepTimes.isEmpty) else {
+    FileHandle.standardError.write(("usage: stomp_render IN.mov TRACKS.json OUT.mp4 SKIN.json PHOTO_DIR [--audio SOUND.m4a OFFSET] [--keep FROM TO ...]\n" +
+        "       stomp_render IN.mov TRACKS.json OUT.gif SKIN.json PHOTO_DIR --gif FROM TO [FROM TO ...] [--screen]\n").data(using: .utf8)!)
     exit(2)
 }
 func fail(_ s: String) -> Never { FileHandle.standardError.write(("stomp_render: " + s + "\n").data(using: .utf8)!); exit(1) }
@@ -99,6 +119,8 @@ let accent = colour(skin.accent ?? "#ff2d6f")          // a touched control's co
 let FPS = 30.0
 let DEGREES_A_CLICK = 12.0, SWEEP = 0.08          // a knob click turns the photo's knob this far, over this many seconds
 let PRESS_IN = 0.08, PRESS_HOLD = 0.4, PRESS_OUT = 0.3   // a press eases in, shows at least PRESS_HOLD, then fades
+let PRESS_GAP = 0.1                                // dark between quick presses, so taps don't read as one hold
+let TOUCH = 0.3                                    // a foot resting on a footswitch is a faint tint, so its clicks stand out
 let WIDTH = 1280.0
 let DARKEN = 0.22                                  // the unit only, so the backdrop still matches the page around it
 let MAX_BYTES = 8_000_000.0                        // GitHub takes 10 MB; H.264's average rate overshoots a little
@@ -106,12 +128,16 @@ let K = WIDTH / skin.crop[2]                       // video pixels a photo pixel
 let W = Int((skin.crop[2] * K / 2).rounded()) * 2, H = Int((skin.crop[3] * K / 2).rounded()) * 2
 
 func isDown(_ c: Control?, _ t: Double) -> Double { inSpan(c?.down, t) }
-func isTouched(_ c: Control?, _ t: Double) -> Double { inSpan(c?.touch, t) }
+func isTouched(_ c: Control?, _ t: Double) -> Double { inSpan(c?.touch, t) * TOUCH }
 func inSpan(_ spans: [(Double, Double)]?, _ t: Double) -> Double {
+    let s = spans ?? []
     var v = 0.0
-    for (a, b) in spans ?? [] where t >= a {
-        let end = max(b, a + PRESS_HOLD)
-        v = max(v, ease((t - a) / PRESS_IN) * (1 - ease((t - end) / PRESS_OUT)))
+    for (i, (a, b)) in s.enumerated() where t >= a {
+        // shown less long when the next press comes soon, and gone PRESS_GAP before it
+        let next = i + 1 < s.count ? s[i + 1].0 : Double.infinity
+        let end = max(b, min(a + PRESS_HOLD, next - PRESS_GAP - 0.15))
+        let out = max(0.05, min(PRESS_OUT, next - end - PRESS_GAP))
+        v = max(v, ease((t - a) / PRESS_IN) * (1 - ease((t - end) / out)))
     }
     return v
 }
@@ -554,16 +580,15 @@ func lzw(_ px: [UInt8], _ minimum: Int) -> Data {
 }
 
 try? FileManager.default.removeItem(atPath: args[3])
-if let (from, to) = gifWindow {
+if !gifWindows.isEmpty {
     var px = [UInt8](repeating: 0, count: GIF_W * GIF_H * 4)
     // sRGB, as browsers show a GIF
     let ctx = CGContext(data: &px, width: GIF_W, height: GIF_H, bitsPerComponent: 8, bytesPerRow: GIF_W * 4,
                         space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
     ctx.interpolationQuality = .high
     let gif = Gif(GIF_W, GIF_H)
-    let frames = Int(((to - from) * GIF_FPS).rounded())
-    for k in 0..<frames {
-        let t = from + Double(k) / GIF_FPS
+    let times = gifWindows.flatMap { w in (0..<Int(((w.1 - w.0) * GIF_FPS).rounded())).map { w.0 + Double($0) / GIF_FPS } }
+    for (k, t) in times.enumerated() {
         let shown = screen(at: t)
         ctx.saveGState()
         ctx.setFillColor(backdrop)
@@ -588,7 +613,11 @@ if let (from, to) = gifWindow {
 }
 
 guard let writer = try? AVAssetWriter(outputURL: URL(fileURLWithPath: args[3]), fileType: .mp4) else { fail("cannot write \(args[3])") }
-let bitRate = Int(min(Double(W * H * 4), MAX_BYTES * 8 / max(duration, 1)))
+let kept = keepTimes.isEmpty ? [(0.0, duration)] : windows(keepTimes).map { ($0.0, min($0.1, duration)) }
+let keptStarts = kept.indices.map { i in kept[..<i].reduce(0) { $0 + $1.1 - $1.0 } }      // each window's start in the video
+let length = kept.reduce(0) { $0 + $1.1 - $1.0 }
+let SOUND_RATE = 160_000.0
+let bitRate = Int(min(Double(W * H * 4), MAX_BYTES * 8 / max(length, 1) - (soundPath != nil ? SOUND_RATE : 0)))
 let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
     AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: W, AVVideoHeightKey: H,
     AVVideoColorPropertiesKey: [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
@@ -603,14 +632,92 @@ let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sour
     kCVPixelBufferHeightKey as String: H,
 ])
 writer.add(input)
+
+// The sound, decoded and moved soundOffset later, fed a little ahead of the frames: the writer interleaves the two
+var soundOut: AVAssetReaderTrackOutput? = nil, soundIn: AVAssetWriterInput? = nil, soundReader: AVAssetReader? = nil   // kept
+if let path = soundPath {
+    let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+    guard let track = asset.tracks(withMediaType: .audio).first, let r = try? AVAssetReader(asset: asset),
+          let desc = (track.formatDescriptions.first as! CMAudioFormatDescription?),
+          let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc)?.pointee else { fail("no sound in \(path)") }
+    let out = AVAssetReaderTrackOutput(track: track, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM])
+    r.add(out)
+    r.startReading()
+    let sound = AVAssetWriterInput(mediaType: .audio, outputSettings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: asbd.mSampleRate,
+        AVNumberOfChannelsKey: min(2, Int(asbd.mChannelsPerFrame)), AVEncoderBitRateKey: SOUND_RATE])
+    writer.add(sound)
+    soundReader = r; soundOut = out; soundIn = sound
+}
+var nextSound = soundOut?.copyNextSampleBuffer(), soundQueue: [CMSampleBuffer] = [], soundWritten = 0.0   // in the video's time
+// Silence like s's samples for the video's from to to: a gap before the sound (its capture takes a moment to start) would hold
+// the writer up, and some players close it, putting the sound early
+func silence(like s: CMSampleBuffer, from: Double, to: Double) -> CMSampleBuffer? {
+    guard let format = CMSampleBufferGetFormatDescription(s),
+          let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee else { return nil }
+    let count = Int(((to - from) * asbd.mSampleRate).rounded()), bytes = count * Int(asbd.mBytesPerFrame)
+    var block: CMBlockBuffer?, out: CMSampleBuffer?
+    guard count > 0, CMBlockBufferCreateWithMemoryBlock(allocator: nil, memoryBlock: nil, blockLength: bytes, blockAllocator: nil,
+            customBlockSource: nil, offsetToData: 0, dataLength: bytes, flags: kCMBlockBufferAssureMemoryNowFlag, blockBufferOut: &block) == 0,
+          let b = block, CMBlockBufferFillDataBytes(with: 0, blockBuffer: b, offsetIntoDestination: 0, dataLength: bytes) == 0 else { return nil }
+    CMAudioSampleBufferCreateReadyWithPacketDescriptions(allocator: nil, dataBuffer: b, formatDescription: format, sampleCount: count,
+        presentationTimeStamp: CMTime(seconds: from, preferredTimescale: CMTimeScale(asbd.mSampleRate)), packetDescriptions: nil,
+        sampleBufferOut: &out)
+    return out
+}
+// The parts of s (an LPCM buffer of the take's sound) inside the kept windows, each at its time in the video
+func pieces(_ s: CMSampleBuffer) -> [(at: Double, buffer: CMSampleBuffer)] {
+    var timing = CMSampleTimingInfo()
+    CMSampleBufferGetSampleTimingInfo(s, at: 0, timingInfoOut: &timing)
+    let one = timing.duration.seconds, n = CMSampleBufferGetNumSamples(s)                // LPCM: a sample's duration
+    let at = timing.presentationTimeStamp.seconds + soundOffset, end = at + Double(n) * one
+    var out: [(Double, CMSampleBuffer)] = []
+    for (w, start) in zip(kept, keptStarts) where end > w.0 && at < w.1 {
+        let first = Int(((max(at, w.0) - at) / one).rounded()), last = min(n, Int(((min(end, w.1) - at) / one).rounded()))
+        var part: CMSampleBuffer?
+        guard last > first, CMSampleBufferCopySampleBufferForRange(allocator: nil, sampleBuffer: s,
+                sampleRange: CFRange(location: first, length: last - first), sampleBufferOut: &part) == 0, let p = part else { continue }
+        var moved = timing, copy: CMSampleBuffer?
+        moved.presentationTimeStamp = CMTime(seconds: start + at + Double(first) * one - w.0, preferredTimescale: timing.presentationTimeStamp.timescale)
+        moved.decodeTimeStamp = .invalid
+        CMSampleBufferCreateCopyWithNewTiming(allocator: nil, sampleBuffer: p, sampleTimingEntryCount: 1, sampleTimingArray: &moved,
+                                              sampleBufferOut: &copy)
+        if let c = copy { out.append((moved.presentationTimeStamp.seconds, c)) }
+    }
+    return out
+}
+// Fed a little ahead of the frames, one buffer each time the writer is ready: it interleaves the two
+func feedSound(until t: Double) {
+    guard let sound = soundIn else { return }
+    while sound.isReadyForMoreMediaData {
+        if !soundQueue.isEmpty { sound.append(soundQueue.removeFirst()); continue }
+        // finished as soon as it runs out or passes the last window: until then the writer holds the frames back for it
+        guard let s = nextSound, CMSampleBufferGetPresentationTimeStamp(s).seconds + soundOffset < kept.last!.1 else {
+            sound.markAsFinished(); soundIn = nil; return
+        }
+        let parts = pieces(s)
+        if let first = parts.first, first.at > t { return }
+        for (at, b) in parts {
+            if at > soundWritten + 0.002, let quiet = silence(like: b, from: soundWritten, to: at) { soundQueue.append(quiet) }
+            soundQueue.append(b)
+            soundWritten = at + CMSampleBufferGetDuration(b).seconds
+        }
+        nextSound = soundOut?.copyNextSampleBuffer()
+    }
+}
+
 writer.startWriting()
 writer.startSession(atSourceTime: .zero)
 
-let frames = Int((duration * FPS).rounded(.up)) + 1
-for k in 0..<frames {
-    let t = Double(k) / FPS
+// (the take's time, the video's) of each frame: the whole take keeps a last frame at its very end
+let times: [(Double, Double)] = zip(kept, keptStarts).flatMap { w, start in
+    (0..<(keepTimes.isEmpty ? Int((duration * FPS).rounded(.up)) + 1 : Int(((w.1 - w.0) * FPS).rounded()))).map {
+        (w.0 + Double($0) / FPS, start + Double($0) / FPS)
+    }
+}
+for (k, (t, v)) in times.enumerated() {
     let shown = screen(at: t)
-    while !input.isReadyForMoreMediaData { usleep(1000) }
+    feedSound(until: v + 0.5)
+    while !input.isReadyForMoreMediaData { feedSound(until: v + 1); usleep(1000) }
     var pb: CVPixelBuffer?
     CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &pb)
     guard let buf = pb else { fail("no pixel buffer") }
@@ -623,6 +730,10 @@ for k in 0..<frames {
     adaptor.append(buf, withPresentationTime: CMTime(value: CMTimeValue(k), timescale: CMTimeScale(FPS)))
 }
 input.markAsFinished()
+while soundIn != nil {
+    feedSound(until: length)
+    usleep(1000)
+}
 let done = DispatchSemaphore(value: 0)
 writer.finishWriting { done.signal() }
 done.wait()

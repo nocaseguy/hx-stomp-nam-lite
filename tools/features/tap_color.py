@@ -7,8 +7,8 @@ FLAG = 'HX_TAP_COLOR'
 MENU = 'Displays'
 ORDER = 10                          # before BPM, which reads tap_now
 MODULE, NOW = 'src/m4/tap_color.s', 'tap_now'
-SETTINGS = (     # 'Tap LED\nColor' reads Color over Tap LED, as stock's 'Tap Tempo\nLED' beside it reads LED over Tap Tempo
-    Setting('color', b'Tap LED\nColor', (b'Red', b'DkOrange', b'LtOrange', b'Yellow', b'Green', b'Teal', b'Blue', b'Violet',
+SETTINGS = (     # a label's last line shows on top, as BPM's 'Size\nFont' reads Font over Size
+    Setting('color', b'Color\nTap LED', (b'Red', b'DkOrange', b'LtOrange', b'Yellow', b'Green', b'Teal', b'Blue', b'Violet',
                                          b'Pink', b'White', b'Rainbow', b'Random')),
 )
 
