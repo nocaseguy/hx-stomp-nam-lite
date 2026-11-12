@@ -8,6 +8,11 @@
   var p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
   document.documentElement.classList.add(/^win/i.test(p) ? "os-win" : "os-mac");
 })();
+/* Links shared before the steps had names use #s1..#s6. */
+(function () {
+  var named = { s1: "get-ready", s2: "build", s3: "try-without-installing", s4: "install", s5: "convert-captures", s6: "play-nam" }[location.hash.slice(1)];
+  if (named) document.addEventListener("DOMContentLoaded", function () { location.replace("#" + named); });
+})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>HXtra Setup</title>
@@ -338,17 +343,17 @@
 
   <nav class="steps-nav" aria-label="Steps">
     <ol>
-      <li><a href="#s1" id="nav1"><span class="n">1</span><span class="t" data-i18n="nav.1">Prepare</span></a></li>
-      <li><a href="#s2" id="nav2"><span class="n">2</span><span class="t" data-i18n="nav.2">Build</span></a></li>
-      <li><a href="#s3" id="nav3"><span class="n">3</span><span class="t" data-i18n="nav.try">Try</span></a></li>
-      <li><a href="#s4" id="nav4"><span class="n">4</span><span class="t" data-i18n="nav.3">Install</span></a></li>
-      <li><a href="#s5" id="nav5"><span class="n">5</span><span class="t" data-i18n="nav.4">Convert captures</span></a></li>
-      <li><a href="#s6" id="nav6"><span class="n">6</span><span class="t" data-i18n="nav.5">Play NAM</span></a></li>
+      <li><a href="#get-ready" id="nav1"><span class="n">1</span><span class="t" data-i18n="nav.1">Prepare</span></a></li>
+      <li><a href="#build" id="nav2"><span class="n">2</span><span class="t" data-i18n="nav.2">Build</span></a></li>
+      <li><a href="#try-without-installing" id="nav3"><span class="n">3</span><span class="t" data-i18n="nav.try">Try</span></a></li>
+      <li><a href="#install" id="nav4"><span class="n">4</span><span class="t" data-i18n="nav.3">Install</span></a></li>
+      <li><a href="#convert-captures" id="nav5"><span class="n">5</span><span class="t" data-i18n="nav.4">Convert captures</span></a></li>
+      <li><a href="#play-nam" id="nav6"><span class="n">6</span><span class="t" data-i18n="nav.5">Play NAM</span></a></li>
     </ol>
   </nav>
 
   <!-- 1 -->
-  <section class="step" id="s1" aria-labelledby="h1s">
+  <section class="step" id="get-ready" aria-labelledby="h1s">
     <div class="step-head">
       <span class="n">1</span>
       <h2 id="h1s" data-i18n="s1.title">Get ready</h2>
@@ -367,7 +372,7 @@
   </section>
 
   <!-- 2 -->
-  <section class="step" id="s2" aria-labelledby="h2s">
+  <section class="step" id="build" aria-labelledby="h2s">
     <div class="step-head">
       <span class="n">2</span>
       <h2 id="h2s" data-i18n="s2.title">Build HXtra</h2>
@@ -402,7 +407,7 @@
   </section>
 
   <!-- 3 -->
-  <section class="step" id="s3" aria-labelledby="h3s">
+  <section class="step" id="try-without-installing" aria-labelledby="h3s">
     <div class="step-head">
       <span class="n">3</span>
       <h2 id="h3s" data-i18n="ram.title">Try it without installing</h2>
@@ -431,7 +436,7 @@
   </section>
 
   <!-- 4 -->
-  <section class="step" id="s4" aria-labelledby="h4s">
+  <section class="step" id="install" aria-labelledby="h4s">
     <div class="step-head">
       <span class="n">4</span>
       <h2 id="h4s" data-i18n="s3.title">Install it with Line 6 Updater</h2>
@@ -452,7 +457,7 @@
   </section>
 
   <!-- 5 -->
-  <section class="step" id="s5" aria-labelledby="h5s">
+  <section class="step" id="convert-captures" aria-labelledby="h5s">
     <div class="step-head">
       <span class="n">5</span>
       <h2 id="h5s" data-i18n="s4.title">Convert your NAM captures</h2>
@@ -481,7 +486,7 @@
   </section>
 
   <!-- 6 -->
-  <section class="step" id="s6" aria-labelledby="h6s">
+  <section class="step" id="play-nam" aria-labelledby="h6s">
     <div class="step-head">
       <span class="n">6</span>
       <h2 id="h6s" data-i18n="s5.title">Load a capture and play</h2>
@@ -528,7 +533,7 @@
     </ol>
   </section>
 
-  <section class="step" aria-labelledby="hqs">
+  <section class="step" id="questions" aria-labelledby="hqs">
     <div class="step-head">
       <span class="n">?</span>
       <h2 id="hqs" data-i18n="faq.title">Questions</h2>
@@ -2386,7 +2391,7 @@ var LANG_NAMES = {
   }
   function markDone(n) {
     $("nav" + n).classList.add("done");
-    $("s" + n).classList.add("done");
+    $($("nav" + n).hash.slice(1)).classList.add("done");
   }
   function dropZone(zone, onFiles) {
     ["dragenter", "dragover"].forEach(function (ty) {
@@ -2404,7 +2409,7 @@ var LANG_NAMES = {
   var boxes = Array.prototype.slice.call($("checks").querySelectorAll("input"));
   function checkStep1() {
     if (boxes.every(function (b) { return b.checked; })) markDone(1);
-    else { $("nav1").classList.remove("done"); $("s1").classList.remove("done"); }
+    else { $("nav1").classList.remove("done"); $("get-ready").classList.remove("done"); }
   }
   boxes.forEach(function (b) { b.addEventListener("change", checkStep1); });
 
@@ -2533,7 +2538,7 @@ var LANG_NAMES = {
   function ramReady(plan) {
     ram = plan;
     var noRam = !!(plan && !plan.regions && !plan.error);   // an HX Effects build: no RAM run
-    $("s3").hidden = noRam;
+    $("try-without-installing").hidden = noRam;
     $("nav3").parentElement.hidden = noRam;
     if (plan && plan.regions) {
       plan.regions.forEach(function (r) { r.bytes = new Uint8Array(r.bytes); });
