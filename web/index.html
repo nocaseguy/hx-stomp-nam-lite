@@ -268,7 +268,7 @@
         <ul data-i18n="feat.bpmS">
           <li><i>Global Settings › BPM Display</i></li>
           <li><b>Font size</b> (XL, L, M, S): the size of the tempo at the top left of the Home screen.</li>
-          <li><b>Color</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): the tempo's and the beat dot's colour.</li>
+          <li><b>Color</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): the tempo's and the beat dot's colour. Tempo follows the TAP footswitch's colour (Tap LED Color).</li>
           <li><b>Dot position</b> (Left, Right, Both): where the beat dot blinks with TAP, beside the preset number.</li>
         </ul></div>
       <div class="feat" data-feature="HX_BREATHING_LINE"><span data-i18n="feat.line"><b>Breathing line</b></span>
@@ -309,6 +309,11 @@
           <li><i>No settings</i></li>
           <li>Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6.</li>
           <li>Once a preset has snapshots 4–6, next and previous snapshot (SnpshtUp, SnpshtDn, MIDI CC 69) step through all six: next on 3 goes to 4, and next on 6 back to 1.</li>
+        </ul></div>
+      <div class="feat" data-feature="HX_TAP_COLOR"><span data-i18n="feat.tap"><b>Tap LED color</b></span>
+        <ul data-i18n="feat.tapS">
+          <li><i>Global Settings › Displays</i></li>
+          <li><b>Tap LED Color</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): the colour of the TAP footswitch's blinking ring, and of its icon and label on the Home screen. Red is the stock colour. Rainbow fades the ring a small step round the colour wheel at each beat, from red through orange, yellow, green, blue, indigo and violet and back; Random picks a new colour at each beat. Both keep the label white.</li>
         </ul></div>
       <div class="feat" data-feature="HX_CLICK"><span data-i18n="feat.click"><b>Metronome</b></span>
         <ul data-i18n="feat.clickS">
@@ -629,7 +634,7 @@ var LANGS = {
     "feat.tuner": "<b>Ajustes del afinador</b>",
     "feat.tunerS": "\n          <li><i>En la tercera página del propio afinador</i></li>\n          <li><b>Botón del afinador</b> (Hold, Press): Hold abre el afinador al mantener pulsado TAP; Press lo abre con una pulsación, y TAP ya no marca el tempo.</li>\n          <li><b>Bloqueo del afinador</b> (Off, On): On bloquea los demás ajustes del afinador (Output, Reference, Type, Trails, Offsets).</li>\n        ",
     "feat.bpm": "<b>Pantalla de BPM</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Tamaño de fuente</b> (XL, L, M, S): el tamaño del tempo en la parte superior izquierda de la pantalla Home.</li>\n          <li><b>Color</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): el color del tempo y del punto de pulso.</li>\n          <li><b>Posición del punto</b> (Left, Right, Both): dónde parpadea con TAP el punto de pulso, junto al número de preset.</li>\n        ",
+    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Tamaño de fuente</b> (XL, L, M, S): el tamaño del tempo en la parte superior izquierda de la pantalla Home.</li>\n          <li><b>Color</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): el color del tempo y del punto de pulso. Tempo usa el color del footswitch TAP (Color del LED de TAP).</li>\n          <li><b>Posición del punto</b> (Left, Right, Both): dónde parpadea con TAP el punto de pulso, junto al número de preset.</li>\n        ",
     "feat.line": "<b>Línea que respira</b>",
     "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Color</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): el color o degradado de la línea que cruza el centro de la pantalla Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): cómo se mueve; Off devuelve la línea original.</li>\n          <li><b>Velocidad</b> (1–10, Tempo): un ciclo dura 8 s con 1 y 0,8 s con 10; Tempo sigue el tempo, un tiempo por ciclo en Heart, dos en Breathe, Cylon y Comet, cuatro en Steady, ocho en Sparkle.</li>\n        ",
     "feat.dsp": "<b>Medidor de DSP</b>",
@@ -644,6 +649,8 @@ var LANGS = {
     "feat.snapS": "\n          <li><i>Sin ajustes</i></li>\n          <li>Seis snapshots por preset: vuelve a pulsar el footswitch del snapshot encendido para alternar entre los snapshots 1–3 y 4–6.</li>\n          <li>Cuando un preset tiene snapshots 4–6, snapshot siguiente y anterior (SnpshtUp, SnpshtDn, MIDI CC 69) recorren los seis: siguiente en el 3 va al 4, y siguiente en el 6 vuelve al 1.</li>\n        ",
     "feat.click": "<b>Metronome</b>",
     "feat.clickS": "\n          <li><i>Bloque nuevo: Looper › Metronome</i></li>\n          <li><b>Time</b> (una nota (valor de nota, sincronizado con el tempo)): el pulso, como el Time de un delay.</li>\n          <li><b>Level</b> (−60 … +6 dB): el volumen del clic.</li>\n          <li><b>Accent</b> (Off, 2 … 12): cada n-ésimo pulso es un tiempo fuerte, con un clic más agudo.</li>\n          <li><b>Thru</b> (Off, On): On reproduce tu señal con el clic debajo; Off reproduce solo el clic.</li>\n        ",
+    "feat.tap": "<b>Color del LED de TAP</b>",
+    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Color del LED de TAP</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): el color del anillo que parpadea en el footswitch TAP, y de su icono y su etiqueta en la pantalla Home. Red es el color de serie. Rainbow hace avanzar el anillo un pequeño paso por la rueda de colores en cada pulso, del rojo al naranja, amarillo, verde, azul, índigo y violeta, y vuelta a empezar; Random elige un color nuevo en cada pulso. Ambos dejan la etiqueta en blanco.</li>\n        ",
     "feat.none": "Esta copia de la página no incluye el código de las funciones, así que solo crea NAM A2 Lite y la pantalla de inicio. La página publicada con cada versión de HXtra sí lo incluye.",
     "nav.1": "Preparación",
     "nav.2": "Crear",
@@ -815,7 +822,7 @@ var LANGS = {
     "feat.tuner": "<b>Ajustes do afinador</b>",
     "feat.tunerS": "\n          <li><i>Na terceira página do próprio afinador</i></li>\n          <li><b>Botão do afinador</b> (Hold, Press): Hold abre o afinador ao segurar TAP; Press o abre com um toque, e TAP deixa de marcar o tempo.</li>\n          <li><b>Trava do afinador</b> (Off, On): On trava os outros ajustes do afinador (Output, Reference, Type, Trails, Offsets).</li>\n        ",
     "feat.bpm": "<b>Display de BPM</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Tamanho da fonte</b> (XL, L, M, S): o tamanho do tempo no canto superior esquerdo da tela Home.</li>\n          <li><b>Cor</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): a cor do tempo e do ponto de pulso.</li>\n          <li><b>Posição do ponto</b> (Left, Right, Both): onde o ponto de pulso pisca com o TAP, ao lado do número do preset.</li>\n        ",
+    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Tamanho da fonte</b> (XL, L, M, S): o tamanho do tempo no canto superior esquerdo da tela Home.</li>\n          <li><b>Cor</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): a cor do tempo e do ponto de pulso. Tempo usa a cor do footswitch TAP (Cor do LED do TAP).</li>\n          <li><b>Posição do ponto</b> (Left, Right, Both): onde o ponto de pulso pisca com o TAP, ao lado do número do preset.</li>\n        ",
     "feat.line": "<b>Linha que respira</b>",
     "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Cor</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): a cor ou o degradê da linha no meio da tela Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): como ela se move; Off devolve a linha original.</li>\n          <li><b>Velocidade</b> (1–10, Tempo): um ciclo leva 8 s com 1 e 0,8 s com 10; Tempo segue o andamento, um tempo por ciclo em Heart, dois em Breathe, Cylon e Comet, quatro em Steady, oito em Sparkle.</li>\n        ",
     "feat.dsp": "<b>Medidor de DSP</b>",
@@ -830,6 +837,8 @@ var LANGS = {
     "feat.snapS": "\n          <li><i>Sem ajustes</i></li>\n          <li>Seis snapshots por preset: aperte de novo o footswitch do snapshot aceso para alternar entre os snapshots 1–3 e 4–6.</li>\n          <li>Quando um preset tem os snapshots 4–6, próximo e anterior (SnpshtUp, SnpshtDn, MIDI CC 69) percorrem os seis: próximo no 3 vai para o 4, e próximo no 6 volta para o 1.</li>\n        ",
     "feat.click": "<b>Metronome</b>",
     "feat.clickS": "\n          <li><i>Bloco novo: Looper › Metronome</i></li>\n          <li><b>Time</b> (um valor de nota, sincronizado com o tempo): a batida, como o Time de um delay.</li>\n          <li><b>Level</b> (−60 … +6 dB): o volume do clique.</li>\n          <li><b>Accent</b> (Off, 2 … 12): cada n-ésima batida é um tempo forte, com um clique mais agudo.</li>\n          <li><b>Thru</b> (Off, On): On toca o seu sinal com o clique por baixo; Off toca só o clique.</li>\n        ",
+    "feat.tap": "<b>Cor do LED do TAP</b>",
+    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Cor do LED do TAP</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): a cor do anel que pisca no footswitch TAP, e do seu ícone e rótulo na tela Home. Red é a cor original. Rainbow avança o anel um pequeno passo pela roda de cores a cada batida, do vermelho ao laranja, amarelo, verde, azul, índigo e violeta, e de volta; Random escolhe uma cor nova a cada batida. Os dois mantêm o rótulo branco.</li>\n        ",
     "feat.none": "Esta cópia da página não tem o código dos recursos, então gera só o NAM A2 Lite e a tela de abertura. A página publicada com cada versão do HXtra tem.",
     "nav.1": "Preparação",
     "nav.2": "Gerar",
@@ -1001,7 +1010,7 @@ var LANGS = {
     "feat.tuner": "<b>Réglages de l'accordeur</b>",
     "feat.tunerS": "\n          <li><i>Sur la troisième page propre à l'accordeur</i></li>\n          <li><b>Bouton de l'accordeur</b> (Hold, Press): Hold ouvre l'accordeur quand vous maintenez TAP ; Press l'ouvre d'une simple pression, et TAP ne marque plus le tempo.</li>\n          <li><b>Verrouillage de l'accordeur</b> (Off, On): On verrouille les autres réglages de l'accordeur (Output, Reference, Type, Trails, Offsets).</li>\n        ",
     "feat.bpm": "<b>Affichage BPM</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Taille de police</b> (XL, L, M, S): la taille du tempo en haut à gauche de l'écran Home.</li>\n          <li><b>Couleur</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): la couleur du tempo et du point de pulsation.</li>\n          <li><b>Position du point</b> (Left, Right, Both): l'endroit où le point de pulsation clignote avec TAP, à côté du numéro de preset.</li>\n        ",
+    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Taille de police</b> (XL, L, M, S): la taille du tempo en haut à gauche de l'écran Home.</li>\n          <li><b>Couleur</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): la couleur du tempo et du point de pulsation. Tempo reprend la couleur du footswitch TAP (Couleur de la LED TAP).</li>\n          <li><b>Position du point</b> (Left, Right, Both): l'endroit où le point de pulsation clignote avec TAP, à côté du numéro de preset.</li>\n        ",
     "feat.line": "<b>Ligne qui respire</b>",
     "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Couleur</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): la couleur ou le dégradé de la ligne au milieu de l'écran Home.</li>\n          <li><b>Type</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): la façon dont elle bouge ; Off rend la ligne d'origine.</li>\n          <li><b>Vitesse</b> (1–10, Tempo) : un cycle dure 8 s à 1 et 0,8 s à 10 ; Tempo suit le tempo, un temps par cycle pour Heart, deux pour Breathe, Cylon et Comet, quatre pour Steady, huit pour Sparkle.</li>\n        ",
     "feat.dsp": "<b>Indicateur DSP</b>",
@@ -1016,6 +1025,8 @@ var LANGS = {
     "feat.snapS": "\n          <li><i>Aucun réglage</i></li>\n          <li>Six snapshots par preset : appuyez à nouveau sur le footswitch du snapshot allumé pour basculer entre les snapshots 1–3 et 4–6.</li>\n          <li>Dès qu'un preset a des snapshots 4–6, snapshot suivant et précédent (SnpshtUp, SnpshtDn, MIDI CC 69) parcourent les six : suivant sur le 3 passe au 4, et suivant sur le 6 revient au 1.</li>\n        ",
     "feat.click": "<b>Metronome</b>",
     "feat.clickS": "\n          <li><i>Nouveau bloc : Looper › Metronome</i></li>\n          <li><b>Time</b> (une valeur de note, synchronisée sur le tempo): le temps, comme le Time d'un delay.</li>\n          <li><b>Level</b> (−60 … +6 dB): le volume du clic.</li>\n          <li><b>Accent</b> (Off, 2 … 12): un temps sur n est un temps fort, avec un clic plus aigu.</li>\n          <li><b>Thru</b> (Off, On): On joue votre signal avec le clic en dessous ; Off joue le clic seul.</li>\n        ",
+    "feat.tap": "<b>Couleur de la LED TAP</b>",
+    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Couleur de la LED TAP</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): la couleur de l'anneau qui clignote sur le footswitch TAP, ainsi que de son icône et de son libellé sur l'écran Home. Red est la couleur d'origine. Rainbow fait avancer l'anneau d'un petit pas sur le cercle chromatique à chaque temps, du rouge à l'orange, au jaune, au vert, au bleu, à l'indigo et au violet, puis retour ; Random choisit une nouvelle couleur à chaque temps. Les deux laissent le libellé blanc.</li>\n        ",
     "feat.none": "Cette copie de la page ne contient pas le code des fonctions : elle crée donc seulement NAM A2 Lite et l'écran de démarrage. La page publiée avec chaque version de HXtra l'a.",
     "nav.1": "Préparation",
     "nav.2": "Créer",
@@ -1187,7 +1198,7 @@ var LANGS = {
     "feat.tuner": "<b>Tuner-Einstellungen</b>",
     "feat.tunerS": "\n          <li><i>Auf der dritten Seite der Tuner-Einstellungen</i></li>\n          <li><b>Tuner-Taste</b> (Hold, Press): Hold öffnet den Tuner, wenn du TAP gedrückt hältst; Press öffnet ihn mit einem Druck, und TAP gibt dann nicht mehr das Tempo vor.</li>\n          <li><b>Tuner-Sperre</b> (Off, On): On sperrt die übrigen Tuner-Einstellungen (Output, Reference, Type, Trails, Offsets).</li>\n        ",
     "feat.bpm": "<b>BPM-Anzeige</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Schriftgröße</b> (XL, L, M, S): die Größe des Tempos oben links auf dem Home-Screen.</li>\n          <li><b>Farbe</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): die Farbe von Tempo und Beat-Punkt.</li>\n          <li><b>Punktposition</b> (Left, Right, Both): wo der Beat-Punkt mit TAP blinkt, neben der Preset-Nummer.</li>\n        ",
+    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Schriftgröße</b> (XL, L, M, S): die Größe des Tempos oben links auf dem Home-Screen.</li>\n          <li><b>Farbe</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): die Farbe von Tempo und Beat-Punkt. Tempo übernimmt die Farbe des TAP-Fußschalters (Farbe der TAP-LED).</li>\n          <li><b>Punktposition</b> (Left, Right, Both): wo der Beat-Punkt mit TAP blinkt, neben der Preset-Nummer.</li>\n        ",
     "feat.line": "<b>Atmende Linie</b>",
     "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Farbe</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): die Farbe oder der Farbverlauf der Linie quer durch die Mitte des Home-Screens.</li>\n          <li><b>Typ</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): wie sie sich bewegt; Off bringt die Original-Linie zurück.</li>\n          <li><b>Geschwindigkeit</b> (1–10, Tempo): ein Durchlauf dauert 8 s bei 1 und 0,8 s bei 10; Tempo folgt dem Tempo, ein Schlag je Durchlauf bei Heart, zwei bei Breathe, Cylon und Comet, vier bei Steady, acht bei Sparkle.</li>\n        ",
     "feat.dsp": "<b>DSP-Anzeige</b>",
@@ -1202,6 +1213,8 @@ var LANGS = {
     "feat.snapS": "\n          <li><i>Keine Einstellungen</i></li>\n          <li>Sechs Snapshots pro Preset: Drücke den leuchtenden Snapshot-Fußschalter erneut, um zwischen den Snapshots 1–3 und 4–6 zu wechseln.</li>\n          <li>Sobald ein Preset Snapshots 4–6 hat, laufen nächster und vorheriger Snapshot (SnpshtUp, SnpshtDn, MIDI CC 69) durch alle sechs: Weiter auf 3 springt zu 4, weiter auf 6 zurück zu 1.</li>\n        ",
     "feat.click": "<b>Metronome</b>",
     "feat.clickS": "\n          <li><i>Neuer Block: Looper › Metronome</i></li>\n          <li><b>Time</b> (ein Notenwert, mit dem Tempo synchronisiert): der Beat, wie die Time eines Delays.</li>\n          <li><b>Level</b> (−60 … +6 dB): die Lautstärke des Klicks.</li>\n          <li><b>Accent</b> (Off, 2 … 12): jeder n-te Beat ist ein Taktschwerpunkt mit höherem Klick.</li>\n          <li><b>Thru</b> (Off, On): On spielt dein Signal mit dem Klick darunter; Off spielt nur den Klick.</li>\n        ",
+    "feat.tap": "<b>Farbe der TAP-LED</b>",
+    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Farbe der TAP-LED</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): die Farbe des blinkenden Rings am TAP-Fußschalter sowie seines Symbols und seiner Beschriftung auf dem Home-Screen. Red ist die Werksfarbe. Rainbow bewegt den Ring bei jedem Schlag ein kleines Stück weiter über den Farbkreis, von Rot über Orange, Gelb, Grün, Blau, Indigo und Violett und wieder zurück; Random wählt bei jedem Schlag eine neue Farbe. Bei beiden bleibt die Beschriftung weiß.</li>\n        ",
     "feat.none": "Diese Kopie der Seite enthält keinen Funktionscode und baut daher nur NAM A2 Lite und den Startbildschirm. Die mit jedem HXtra-Release veröffentlichte Seite hat ihn.",
     "nav.1": "Vorbereiten",
     "nav.2": "Bauen",
@@ -1373,7 +1386,7 @@ var LANGS = {
     "feat.tuner": "<b>Impostazioni dell'accordatore</b>",
     "feat.tunerS": "\n          <li><i>Sulla terza pagina dell'accordatore</i></li>\n          <li><b>Pulsante accordatore</b> (Hold, Press): Hold apre l'accordatore tenendo premuto TAP; Press lo apre con una pressione, e TAP non batte più il tempo.</li>\n          <li><b>Blocco accordatore</b> (Off, On): On blocca le altre impostazioni dell'accordatore (Output, Reference, Type, Trails, Offsets).</li>\n        ",
     "feat.bpm": "<b>Display BPM</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Dimensione carattere</b> (XL, L, M, S): la dimensione del tempo in alto a sinistra nella schermata Home.</li>\n          <li><b>Colore</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): il colore del tempo e del punto del beat.</li>\n          <li><b>Posizione del punto</b> (Left, Right, Both): dove lampeggia il punto del beat con TAP, accanto al numero del preset.</li>\n        ",
+    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Dimensione carattere</b> (XL, L, M, S): la dimensione del tempo in alto a sinistra nella schermata Home.</li>\n          <li><b>Colore</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): il colore del tempo e del punto del beat. Tempo usa il colore del footswitch TAP (Colore del LED TAP).</li>\n          <li><b>Posizione del punto</b> (Left, Right, Both): dove lampeggia il punto del beat con TAP, accanto al numero del preset.</li>\n        ",
     "feat.line": "<b>Linea che respira</b>",
     "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Colore</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): il colore o il gradiente della linea al centro della schermata Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): come si muove; Off ripristina la linea originale.</li>\n          <li><b>Velocità</b> (1–10, Tempo): un ciclo dura 8 s a 1 e 0,8 s a 10; Tempo segue il tempo, un battito per ciclo con Heart, due con Breathe, Cylon e Comet, quattro con Steady, otto con Sparkle.</li>\n        ",
     "feat.dsp": "<b>Indicatore DSP</b>",
@@ -1388,6 +1401,8 @@ var LANGS = {
     "feat.snapS": "\n          <li><i>Nessuna impostazione</i></li>\n          <li>Sei snapshot per preset: premi di nuovo il footswitch dello snapshot acceso per passare tra gli snapshot 1–3 e 4–6.</li>\n          <li>Quando un preset ha gli snapshot 4–6, snapshot successivo e precedente (SnpshtUp, SnpshtDn, MIDI CC 69) scorrono tutti e sei: successivo sul 3 va al 4, e successivo sul 6 torna all'1.</li>\n        ",
     "feat.click": "<b>Metronome</b>",
     "feat.clickS": "\n          <li><i>Nuovo blocco: Looper › Metronome</i></li>\n          <li><b>Time</b> (un valore di nota, sincronizzato al tempo): il beat, come il Time di un delay.</li>\n          <li><b>Level</b> (−60 … +6 dB): il volume del click.</li>\n          <li><b>Accent</b> (Off, 2 … 12): ogni n-esimo beat è un movimento forte, con un click più acuto.</li>\n          <li><b>Thru</b> (Off, On): On riproduce il tuo segnale con il click sotto; Off riproduce solo il click.</li>\n        ",
+    "feat.tap": "<b>Colore del LED TAP</b>",
+    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Colore del LED TAP</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): il colore dell'anello che lampeggia sul footswitch TAP, e della sua icona e della sua etichetta nella schermata Home. Red è il colore di fabbrica. Rainbow fa avanzare l'anello di un piccolo passo sulla ruota dei colori a ogni battito, dal rosso all'arancione, giallo, verde, blu, indaco e viola, e di nuovo da capo; Random sceglie un colore nuovo a ogni battito. Entrambi lasciano l'etichetta bianca.</li>\n        ",
     "feat.none": "Questa copia della pagina non contiene il codice delle funzioni, quindi crea solo NAM A2 Lite e la schermata di avvio. La pagina pubblicata con ogni versione di HXtra lo contiene.",
     "nav.1": "Preparazione",
     "nav.2": "Crea",
@@ -1559,7 +1574,7 @@ var LANGS = {
     "feat.tuner": "<b>チューナー設定</b>",
     "feat.tunerS": "\n          <li><i>チューナー自身の 3 ページ目</i></li>\n          <li><b>チューナーボタン</b> (Hold, Press): Hold は TAP の長押しでチューナーを開き、Press は 1 回押すだけで開きます。このとき TAP ではテンポをタップできなくなります。</li>\n          <li><b>チューナーロック</b> (Off, On): On にすると、チューナーのほかの設定 (Output、Reference、Type、Trails、Offsets) をロックします。</li>\n        ",
     "feat.bpm": "<b>BPM 表示</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>フォントサイズ</b> (XL, L, M, S): Home 画面の左上に表示するテンポの大きさ。</li>\n          <li><b>カラー</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): テンポとビートドットの色。</li>\n          <li><b>ドット位置</b> (Left, Right, Both): TAP に合わせてビートドットが点滅する場所。プリセット番号の横です。</li>\n        ",
+    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>フォントサイズ</b> (XL, L, M, S): Home 画面の左上に表示するテンポの大きさ。</li>\n          <li><b>カラー</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): テンポとビートドットの色。 Tempo は TAP フットスイッチの色（TAP LED の色）に合わせます。</li>\n          <li><b>ドット位置</b> (Left, Right, Both): TAP に合わせてビートドットが点滅する場所。プリセット番号の横です。</li>\n        ",
     "feat.line": "<b>Breathing Line</b>",
     "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>カラー</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): Home 画面の中央を横切るラインの色またはグラデーション。</li>\n          <li><b>タイプ</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): ラインの動き方。Off にすると標準のラインに戻ります。</li>\n          <li><b>スピード</b> (1–10, Tempo): 1 周期は 1 で 8 秒、10 で 0.8 秒です。Tempo はテンポに合わせ、1 周期は Heart で 1 拍、Breathe、Cylon、Comet で 2 拍、Steady で 4 拍、Sparkle で 8 拍です。</li>\n        ",
     "feat.dsp": "<b>DSP メーター</b>",
@@ -1574,6 +1589,8 @@ var LANGS = {
     "feat.snapS": "\n          <li><i>設定なし</i></li>\n          <li>1 プリセットにスナップショットを 6 つ。点灯中のスナップショットのフットスイッチをもう一度押すと、スナップショット 1〜3 と 4〜6 が切り替わります。</li>\n          <li>スナップショット 4〜6 があるプリセットでは、次/前のスナップショット（SnpshtUp、SnpshtDn、MIDI CC 69）が 6 つすべてを巡ります。3 で次へ進むと 4 に、6 で次へ進むと 1 に戻ります。</li>\n        ",
     "feat.click": "<b>Metronome</b>",
     "feat.clickS": "\n          <li><i>新しいブロック: Looper › Metronome</i></li>\n          <li><b>Time</b> (音符の長さ、テンポに同期): ビートの間隔。ディレイの Time と同じです。</li>\n          <li><b>Level</b> (−60 … +6 dB): クリックの音量。</li>\n          <li><b>Accent</b> (Off, 2 … 12): n 拍ごとにダウンビートとなり、高いクリックが鳴ります。</li>\n          <li><b>Thru</b> (Off, On): On はクリックを重ねてあなたの信号を出力し、Off はクリックだけを出力します。</li>\n        ",
+    "feat.tap": "<b>TAP LED の色</b>",
+    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>TAP LED の色</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): TAP フットスイッチで点滅するリングの色と、Home 画面に表示されるアイコンとラベルの色。Red が標準の色です。 Rainbow ではリングがビートごとに色相環を少しずつ進み、赤から橙、黄、緑、青、藍、紫を経て赤に戻ります。Random ではビートごとにランダムな色になります。どちらもラベルは白のままです。</li>\n        ",
     "feat.none": "このページには機能のコードが入っていないため、NAM A2 Lite と起動画面のみをビルドします。HXtra のリリースごとに公開されるページには入っています。",
     "nav.1": "準備",
     "nav.2": "ビルド",
@@ -1745,7 +1762,7 @@ var LANGS = {
     "feat.tuner": "<b>调音器设置</b>",
     "feat.tunerS": "\n          <li><i>在调音器自己的第三页</i></li>\n          <li><b>调音器按钮</b> (Hold, Press): Hold 表示按住 TAP 打开调音器；Press 表示按一下即可打开，此时 TAP 不再打拍子。</li>\n          <li><b>调音器锁定</b> (Off, On): On 会锁定调音器的其他设置（Output、Reference、Type、Trails、Offsets）。</li>\n        ",
     "feat.bpm": "<b>BPM 显示</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>字体大小</b> (XL, L, M, S): 主屏幕左上角速度数字的大小。</li>\n          <li><b>颜色</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): 速度数字和节拍点的颜色。</li>\n          <li><b>圆点位置</b> (Left, Right, Both): 节拍点随 TAP 闪烁的位置，在预设编号旁边。</li>\n        ",
+    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>字体大小</b> (XL, L, M, S): 主屏幕左上角速度数字的大小。</li>\n          <li><b>颜色</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): 速度数字和节拍点的颜色。 Tempo 跟随 TAP 踏板的颜色（TAP LED 颜色）。</li>\n          <li><b>圆点位置</b> (Left, Right, Both): 节拍点随 TAP 闪烁的位置，在预设编号旁边。</li>\n        ",
     "feat.line": "<b>呼吸线</b>",
     "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>颜色</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): 主屏幕中间那条线的颜色或渐变。</li>\n          <li><b>类型</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): 它的运动方式；Off 会恢复原厂的线。</li>\n          <li><b>速度</b> (1–10, Tempo): 一个周期在 1 时为 8 秒，在 10 时为 0.8 秒；Tempo 跟随速度（BPM），Heart 每周期一拍，Breathe、Cylon 和 Comet 两拍，Steady 四拍，Sparkle 八拍。</li>\n        ",
     "feat.dsp": "<b>DSP 表</b>",
@@ -1760,6 +1777,8 @@ var LANGS = {
     "feat.snapS": "\n          <li><i>无设置</i></li>\n          <li>每个预设六个 snapshot：再按一次亮着的 snapshot 踏板，就在 snapshot 1–3 和 4–6 之间切换。</li>\n          <li>预设有 snapshot 4–6 后，下一个/上一个 snapshot（SnpshtUp、SnpshtDn、MIDI CC 69）会在全部六个之间切换：在 3 上按下一个会到 4，在 6 上按下一个会回到 1。</li>\n        ",
     "feat.click": "<b>Metronome</b>",
     "feat.clickS": "\n          <li><i>新模块: Looper › Metronome</i></li>\n          <li><b>Time</b> (音符时值，与速度同步): 节拍，与延迟的 Time 相同。</li>\n          <li><b>Level</b> (−60 … +6 dB): 节拍音的音量。</li>\n          <li><b>Accent</b> (Off, 2 … 12): 每 n 拍为一个强拍，节拍音更高。</li>\n          <li><b>Thru</b> (Off, On): On 在节拍音之上播放你的信号；Off 只播放节拍音。</li>\n        ",
+    "feat.tap": "<b>TAP LED 颜色</b>",
+    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>TAP LED 颜色</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): TAP 踏板闪烁的灯环颜色，以及它在主屏幕上的图标和标签的颜色。Red 为出厂颜色。 Rainbow 让灯环每拍沿色环前进一小步，从红经橙、黄、绿、蓝、靛、紫再回到红；Random 每拍随机换一种颜色。两者的标签都保持白色。</li>\n        ",
     "feat.none": "本页面副本不含功能代码，因此只制作 NAM A2 Lite 和开机画面。每个 HXtra 发布版随附的页面则包含这些功能。",
     "nav.1": "准备工作",
     "nav.2": "制作",
@@ -1931,7 +1950,7 @@ var LANGS = {
     "feat.tuner": "<b>튜너 설정</b>",
     "feat.tunerS": "\n          <li><i>튜너 자체 설정의 세 번째 페이지</i></li>\n          <li><b>튜너 버튼</b> (Hold, Press): Hold는 TAP을 길게 누르면 튜너가 열리고, Press는 한 번 누르면 열리며 TAP으로는 더 이상 템포를 입력할 수 없습니다.</li>\n          <li><b>튜너 잠금</b> (Off, On): On이면 튜너의 다른 설정(Output, Reference, Type, Trails, Offsets)을 잠급니다.</li>\n        ",
     "feat.bpm": "<b>BPM 표시</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>글꼴 크기</b> (XL, L, M, S): 홈 화면 왼쪽 위에 표시되는 템포의 크기.</li>\n          <li><b>색상</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): 템포와 비트 점의 색.</li>\n          <li><b>점 위치</b> (Left, Right, Both): TAP에 맞춰 비트 점이 깜빡이는 위치로, 프리셋 번호 옆입니다.</li>\n        ",
+    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>글꼴 크기</b> (XL, L, M, S): 홈 화면 왼쪽 위에 표시되는 템포의 크기.</li>\n          <li><b>색상</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): 템포와 비트 점의 색. Tempo는 TAP 풋스위치의 색상(TAP LED 색상)을 따릅니다.</li>\n          <li><b>점 위치</b> (Left, Right, Both): TAP에 맞춰 비트 점이 깜빡이는 위치로, 프리셋 번호 옆입니다.</li>\n        ",
     "feat.line": "<b>숨쉬는 선</b>",
     "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>색상</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): 홈 화면 가운데를 가로지르는 선의 색 또는 그라데이션.</li>\n          <li><b>종류</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): 선이 움직이는 방식. Off는 기본 선으로 되돌립니다.</li>\n          <li><b>속도</b> (1–10, Tempo): 한 주기는 1에서 8초, 10에서 0.8초입니다. Tempo는 템포를 따르며, 한 주기는 Heart에서 1박, Breathe, Cylon, Comet에서 2박, Steady에서 4박, Sparkle에서 8박입니다.</li>\n        ",
     "feat.dsp": "<b>DSP 미터</b>",
@@ -1946,6 +1965,8 @@ var LANGS = {
     "feat.snapS": "\n          <li><i>설정 없음</i></li>\n          <li>프리셋당 스냅샷 6개: 켜진 스냅샷 풋스위치를 한 번 더 누르면 스냅샷 1–3과 4–6이 번갈아 전환됩니다.</li>\n          <li>스냅샷 4–6이 있는 프리셋에서는 다음/이전 스냅샷(SnpshtUp, SnpshtDn, MIDI CC 69)이 6개 모두를 차례로 오갑니다. 3에서 다음으로 가면 4로, 6에서 다음으로 가면 1로 돌아갑니다.</li>\n        ",
     "feat.click": "<b>Metronome</b>",
     "feat.clickS": "\n          <li><i>새 블록: Looper › Metronome</i></li>\n          <li><b>Time</b> (음표 값, 템포에 동기화): 박자로, 딜레이의 Time과 같습니다.</li>\n          <li><b>Level</b> (−60 … +6 dB): 클릭의 음량.</li>\n          <li><b>Accent</b> (Off, 2 … 12): n번째 박마다 강박이 되며 더 높은 클릭이 납니다.</li>\n          <li><b>Thru</b> (Off, On): On은 클릭을 깔고 신호를 그대로 내보내고, Off는 클릭만 내보냅니다.</li>\n        ",
+    "feat.tap": "<b>TAP LED 색상</b>",
+    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>TAP LED 색상</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): TAP 풋스위치에서 깜박이는 링의 색상과 홈 화면에 표시되는 아이콘 및 라벨의 색상. Red가 기본 색상입니다. Rainbow는 박자마다 링을 색상환을 따라 조금씩 움직여 빨강에서 주황, 노랑, 초록, 파랑, 남색, 보라를 거쳐 다시 빨강으로 돌아가고, Random은 박자마다 새로운 색을 고릅니다. 둘 다 라벨은 흰색으로 둡니다.</li>\n        ",
     "feat.none": "이 페이지 사본에는 기능 코드가 없어서 NAM A2 Lite와 시작 화면만 빌드합니다. HXtra 릴리스마다 공개되는 페이지에는 들어 있습니다.",
     "nav.1": "준비",
     "nav.2": "빌드",
@@ -2117,7 +2138,7 @@ var LANGS = {
     "feat.tuner": "<b>Настройки тюнера</b>",
     "feat.tunerS": "\n          <li><i>На третьей странице собственных настроек тюнера</i></li>\n          <li><b>Кнопка тюнера</b> (Hold, Press): Hold открывает тюнер при удержании TAP; Press открывает его нажатием, и TAP больше не задаёт темп.</li>\n          <li><b>Блокировка тюнера</b> (Off, On): On блокирует остальные настройки тюнера (Output, Reference, Type, Trails, Offsets).</li>\n        ",
     "feat.bpm": "<b>Индикатор BPM</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Размер шрифта</b> (XL, L, M, S): размер темпа в левом верхнем углу экрана Home.</li>\n          <li><b>Цвет</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): цвет темпа и точки доли.</li>\n          <li><b>Положение точки</b> (Left, Right, Both): где мигает точка доли в такт с TAP, рядом с номером пресета.</li>\n        ",
+    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Размер шрифта</b> (XL, L, M, S): размер темпа в левом верхнем углу экрана Home.</li>\n          <li><b>Цвет</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): цвет темпа и точки доли. Tempo берёт цвет педали TAP (Цвет светодиода TAP).</li>\n          <li><b>Положение точки</b> (Left, Right, Both): где мигает точка доли в такт с TAP, рядом с номером пресета.</li>\n        ",
     "feat.line": "<b>Дышащая линия</b>",
     "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Цвет</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): цвет или градиент линии посередине экрана Home.</li>\n          <li><b>Тип</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): как она движется; Off возвращает стандартную линию.</li>\n          <li><b>Скорость</b> (1–10, Tempo): один цикл длится 8 с при 1 и 0,8 с при 10; Tempo следует темпу: одна доля на цикл у Heart, две у Breathe, Cylon и Comet, четыре у Steady, восемь у Sparkle.</li>\n        ",
     "feat.dsp": "<b>Индикатор DSP</b>",
@@ -2132,6 +2153,8 @@ var LANGS = {
     "feat.snapS": "\n          <li><i>Нет настроек</i></li>\n          <li>Шесть снапшотов на пресет: нажмите горящую педаль снапшота ещё раз, чтобы переключаться между снапшотами 1–3 и 4–6.</li>\n          <li>Когда у пресета есть снапшоты 4–6, следующий и предыдущий снапшот (SnpshtUp, SnpshtDn, MIDI CC 69) проходят по всем шести: «следующий» на 3 переходит к 4, а на 6 — обратно к 1.</li>\n        ",
     "feat.click": "<b>Metronome</b>",
     "feat.clickS": "\n          <li><i>Новый блок: Looper › Metronome</i></li>\n          <li><b>Time</b> (длительность ноты, синхронизирована с темпом): доля, как Time у дилея.</li>\n          <li><b>Level</b> (−60 … +6 dB): громкость щелчка.</li>\n          <li><b>Accent</b> (Off, 2 … 12): каждая n-я доля является сильной, с более высоким щелчком.</li>\n          <li><b>Thru</b> (Off, On): On воспроизводит ваш сигнал с щелчком под ним; Off воспроизводит только щелчок.</li>\n        ",
+    "feat.tap": "<b>Цвет светодиода TAP</b>",
+    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Цвет светодиода TAP</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): цвет мигающего кольца педали TAP, а также её значка и подписи на экране Home. Red — заводской цвет. Rainbow на каждой доле сдвигает цвет кольца на небольшой шаг по цветовому кругу: от красного через оранжевый, жёлтый, зелёный, синий, индиго и фиолетовый и обратно; Random на каждой доле выбирает новый цвет. В обоих случаях подпись остаётся белой.</li>\n        ",
     "feat.none": "В этой копии страницы нет кода функций, поэтому она собирает только NAM A2 Lite и загрузочный экран. В странице, опубликованной с каждым релизом HXtra, он есть.",
     "nav.1": "Подготовка",
     "nav.2": "Сборка",

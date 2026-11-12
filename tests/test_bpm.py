@@ -15,14 +15,16 @@ from firmware import assert_virtual, branch_target, menu_entry0, reader, stock_e
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONTS = (4, 5, 2, 1)                # Font's values as font numbers: XL 35 Bold, L 41 Lite, M 28 Bold, S 21 Reg
-COLOURS = (0xffffff, 0xb1b1b1, 0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0080ff, 0xb000ff)
+COLOURS = (0xffffff, 0xb1b1b1, 0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0080ff, 0xb000ff, 0xff0000)   # Tempo: TAP red
+TAP_NOW = 0x28e70000                # Tap LED Color's shown colour, in a build with it
 CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
 
 
 def test_settings_values_defaults_and_ids():
     s = {x.key: x for x in bpm.SETTINGS}
     assert s['font'].values == (b'XL', b'L', b'M', b'S')
-    assert s['color'].values == (b'White', b'Gray', b'Red', b'Orange', b'Yellow', b'Green', b'Cyan', b'Blue', b'Purple')
+    assert s['color'].values == (b'White', b'Gray', b'Red', b'Orange', b'Yellow', b'Green', b'Cyan', b'Blue', b'Purple',
+                                 b'Tempo')
     assert s['dot'].values == (b'Left', b'Right', b'Both')
     assert [x.label for x in bpm.SETTINGS] == [b'Size\nFont', b'Color', b'Position\nDot'], 'Font over Size, Dot over Position'
     assert (s['font'].default, s['color'].default, s['dot'].default) == (1, 0, 0), 'L, White, Left'
@@ -205,8 +207,17 @@ class Bpm:
 @pytest.fixture
 def m4(m4emu):
     if 'bpm' not in _code:
-        _code['bpm'] = m4emu.assemble('src/m4/bpm.s', features.load(), setting_ids.by_name())
+        _code['bpm'] = m4emu.assemble('src/m4/bpm.s', features.load(), setting_ids.by_name(), inc={'tap.inc': '.equ TAP_NOW, 0\n'})
     return Bpm(m4emu, *_code['bpm'])
+
+
+@pytest.fixture
+def m4_tap(m4emu):
+    """bpm.s built with Tap LED Color, whose shown colour is at TAP_NOW."""
+    if 'bpm_tap' not in _code:
+        _code['bpm_tap'] = m4emu.assemble('src/m4/bpm.s', features.load(), setting_ids.by_name(),
+                                          inc={'tap.inc': f'.equ TAP_NOW, {TAP_NOW:#x}\n'})
+    return Bpm(m4emu, *_code['bpm_tap'])
 
 
 def bits(f):
@@ -456,10 +467,37 @@ def test_before_takes_the_default_font_when_unset_or_out_of_range(m4, value):
     assert [r[1] for r in m4.called(SET_FONT)] == [FONTS[1]] == [5], 'L, 41 Lite'
 
 
-@pytest.mark.parametrize('value', [*range(9), None, 9])
+@pytest.mark.parametrize('value', [*range(10), None, 10])
 def test_before_sets_the_colour_bpm_color_says(m4, value):
     before(m4, colour=value)
-    assert [r[1] for r in m4.called(SET_TEXT_COLOUR)] == [COLOURS[value if value in range(9) else 0]]
+    assert [r[1] for r in m4.called(SET_TEXT_COLOUR)] == [COLOURS[value if value in range(10) else 0]]
+
+
+@pytest.mark.parametrize('shown', [0x3cceb5, 0xb049db])
+def test_before_tempo_takes_the_colour_tap_led_color_shows(m4_tap, shown):
+    m4_tap.m.u32(TAP_NOW, shown)
+    before(m4_tap, colour=9)
+    assert [r[1] for r in m4_tap.called(SET_TEXT_COLOUR)] == [shown]
+    before(m4_tap, colour=3)
+    assert [r[1] for r in m4_tap.called(SET_TEXT_COLOUR)] == [COLOURS[3]], 'other colours ignore it'
+
+
+@pytest.mark.firmware
+def test_a_build_with_tap_led_color_hands_bpm_its_shown_colour(monkeypatch):
+    """Tap LED Color is built first (ORDER), so BPM gets the address of its shown colour; without it, 0."""
+    from features import tap_color
+    assert tap_color.ORDER < bpm.ORDER
+    seen, real = {}, pm.Patch.module
+
+    def module(self, path, inc=None):
+        seen[path] = (real(self, path, inc), inc)
+        return seen[path][0]
+    monkeypatch.setattr(pm.Patch, 'module', module)
+    menu_entry0(stock_e0(), None, {'HX_BPM': '1', 'HX_TAP_COLOR': '1'})
+    assert seen['src/m4/bpm.s'][1] == {'tap.inc': f'.equ TAP_NOW, {seen[tap_color.MODULE][0][tap_color.NOW]:#x}\n'}
+    seen.clear()
+    menu_entry0(stock_e0(), None, {'HX_BPM': '1'})
+    assert seen['src/m4/bpm.s'][1] == {'tap.inc': '.equ TAP_NOW, 0x0\n'}
 
 
 @pytest.mark.parametrize('value, xs', [(0, range(69, 99)), (1, range(221, 251)), (2, [*range(69, 99), *range(221, 251)]),

@@ -5,9 +5,11 @@
 .syntax unified
 .thumb
 .include "hxtra.inc"
+.include "tap.inc"                  @ TAP_NOW: Tap LED Color's shown colour, or 0 in a build without it
 .equ BPM_DOTS, 18                   @ rectangles: 9 a dot
 .equ BPM_DOT_TOP, 237               @ the dots' top (y counts up from the bottom)
 .equ FS_FUNCTIONS, 0x28128a74       @ each footswitch's function, two bytes apart: 1 is TAP
+.equ BPM_TEMPO, 9                   @ Color Tempo: the TAP footswitch's colour
 .equ SHOW_MS, 1000                  @ after the first Home paint; the breathing line starts a second later, as both at once glitch at boot
 
 bpm_written:                        @ after the settings store's write (ID, value, how): the Home view only repaints on request
@@ -214,6 +216,12 @@ bpm_before:                         @ before the Home paint (framebuffer, Home v
     bl hxtra_setting_get
     adr.w r1, bpm_colours
     ldr.w r6, [r1, r0, lsl #2]
+.if TAP_NOW
+    cmp r0, #BPM_TEMPO
+    itt eq
+    ldreq r6, =TAP_NOW
+    ldreq r6, [r6]
+.endif
     mov r0, r5
     bl bpm_format
     adr.w r7, bpm_widget
@@ -419,8 +427,8 @@ bpm_none:                           @ the digit-only fonts have no dash: nothing
 HXTRA_SETTING_GET
 .ltorg
 .balign 4
-bpm_colours:                        @ Color: White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple
-    .word 0xffffff, 0xb1b1b1, 0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0080ff, 0xb000ff
+bpm_colours:                        @ Color: White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo (the stock TAP red)
+    .word 0xffffff, 0xb1b1b1, 0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0080ff, 0xb000ff, 0xff0000
 bpm_fonts:                          @ Font Size: XL, L, M, S (35 Bold, 41 Lite, 28 Bold, 21 Reg), as font numbers
     .byte 4, 5, 2, 1
 .balign 4
