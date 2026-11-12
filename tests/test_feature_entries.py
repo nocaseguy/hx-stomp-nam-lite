@@ -782,7 +782,7 @@ def test_patch_menu_writes_entries_7_and_8_and_both_owned_sites(stock, tmp_path,
     assert stub != HOME_PAINT and stub & 1
 
 
-CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
+CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no clang')
 
 
 def renderer_owner(order=100):

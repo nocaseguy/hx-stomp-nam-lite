@@ -21,7 +21,7 @@ STACK_TOP = 0x28f00000
 RETURN = 0x28ff0000                 # where the called function returns to; emulation stops there
 STEPS = 2_000_000
 BX_LR = struct.pack('<H', 0x4770)
-CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
+CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no clang')
 
 
 def assemble(path, mods, ids, virt_set=None, inc=None):
@@ -29,7 +29,7 @@ def assemble(path, mods, ids, virt_set=None, inc=None):
     it would name, a stub's address in a test) and the files of inc ({name: text}), as Patch.module takes them; skips the test
     without clang."""
     if not os.path.exists(m4asm.CLANG):
-        pytest.skip('no Command Line Tools clang')
+        pytest.skip('no clang')
     with tempfile.TemporaryDirectory() as d:
         for name, text in {'hxtra.inc': pm.hxtra_inc(mods, ids, virt_set), **(inc or {})}.items():
             with open(os.path.join(d, name), 'w') as f:

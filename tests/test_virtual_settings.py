@@ -18,7 +18,7 @@ from firmware import branch_target, menu_entry0, reader, stock_e0, stock_entry
 
 MODS = features.load()
 SETTINGS = {f'{features.name(m)}.{s.key}': s for m in MODS for s in getattr(m, 'SETTINGS', ())}
-CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
+CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no clang')
 
 RECORDS, DIRTY, STORE_LOCK = 0x2845ee9c, 0x2845ee95, 0x2845ee88
 MUTEX_LOCK, MUTEX_UNLOCK, MEMCPY = 0x28e24c00, 0x28e24bb0, 0x28e24c78
@@ -93,7 +93,7 @@ GET_STOCK, LIMITS_STOCK, LABEL_STOCK, TRAMPOLINE, DELTA = 0x28d90000, 0x28d90100
 
 def assemble(virt=VIRT, packing=PACKING, stocks=None):
     if not os.path.exists(m4asm.CLANG):
-        pytest.skip('no Command Line Tools clang')
+        pytest.skip('no clang')
     stocks = stocks or {'get': GET_STOCK, 'limits': LIMITS_STOCK, 'label': LABEL_STOCK}
     with tempfile.TemporaryDirectory() as d:
         for name, text in (('hxtra.inc', pm.hxtra_inc(MODS, setting_ids.by_name())),

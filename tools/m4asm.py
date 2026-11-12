@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""m4asm.py - assemble a position-independent Thumb-2 .s file (Apple's Command Line Tools clang) and print its .text as hex.
+"""m4asm.py - assemble a position-independent Thumb-2 .s file (clang) and print its .text as hex.
 
+clang is HX_CLANG (a path, or a name on PATH), else Apple's Command Line Tools clang, else clang on PATH (Linux, WSL).
 With HX_M4_CACHE set to a release's m4cache.json (tools/m4cache.py), modules come from it instead of clang: the web page has none.
 """
 import hashlib
 import json
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
 import tempfile
 
-CLANG = '/Library/Developer/CommandLineTools/usr/bin/clang'
+APPLE_CLANG = '/Library/Developer/CommandLineTools/usr/bin/clang'
 SHT_SYMTAB, SHT_RELA, SHT_REL = 2, 4, 9
 CACHE = 'HX_M4_CACHE'
 SOURCE_TYPES = ('.s', '.inc')
@@ -20,6 +22,20 @@ MARK = 'm4asm_adr_'                 # the labels mark_adr() puts before each adr
 ADR = re.compile(r'^(\s*(?:[\w.$]+:\s*)?)(adr(?:\.[wn])?(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)?)'
                  r'\s+(\w+)\s*,\s*([^@;]*?)\s*(?:[@;].*)?$', re.I)
 TARGET = re.compile(r'^([A-Za-z_.$][\w.$]*)\s*(?:([+-])\s*(0x[0-9a-f]+|\d+))?$', re.I)
+ZERO_ALIGN = re.compile(r'^\s*(?:[\w.$]+:\s*)?\.(?:b?align|p2align)\s+[^,@;]+,\s*(?:0x)?0+\s*(?:,.*)?(?:[@;].*)?$', re.I)
+
+
+def find_clang():
+    """The clang to assemble with, or a path that doesn't exist when there is none, which assemble_module() names."""
+    if os.environ.get('HX_CLANG'):
+        return shutil.which(os.environ['HX_CLANG']) or os.environ['HX_CLANG']
+    # ahead of PATH on a Mac: /usr/bin/clang may be Xcode's, another version than the one the pinned MD5s were made with
+    if os.path.exists(APPLE_CLANG):
+        return APPLE_CLANG
+    return shutil.which('clang') or APPLE_CLANG
+
+
+CLANG = find_clang()
 
 
 def key(src, include=()):
@@ -68,6 +84,15 @@ def mark_adr(text, src):
     return '\n'.join(out), adrs
 
 
+def check_zero_align(text, src):
+    """Refuses a byte alignment filled with 0: clang 18 (Ubuntu) pads it with nops in .text, Apple clang 21 with zeros, so the
+    same build would get two MD5s."""
+    for no, line in enumerate(text.split('\n'), 1):
+        if ZERO_ALIGN.match(line):
+            raise SystemExit(f'm4asm: {src}:{no}: an alignment filled with 0, which clangs pad differently: use .balignl N, 0 '
+                             'where the padding is whole words, else .org label + N, 0')
+
+
 def adr_target(code, at):
     """Where the adr at offset at of code points, or None when it is no adr."""
     hw, = struct.unpack_from('<H', code, at)
@@ -100,8 +125,13 @@ def assemble_module(src, include=()):
     label is out of its reach."""
     if os.environ.get(CACHE):
         return cached(os.environ[CACHE], src, include)
+    if not os.path.exists(CLANG):
+        raise SystemExit(f'm4asm: no clang at {CLANG}: install it (macOS: xcode-select --install; Ubuntu: apt install clang), '
+                         'or set HX_CLANG to one')
     with tempfile.TemporaryDirectory() as d:
-        marked, adrs = mark_adr(open(src).read(), src)
+        text = open(src).read()
+        check_zero_align(text, src)
+        marked, adrs = mark_adr(text, src)
         with open(f'{d}/{os.path.basename(src)}', 'w') as f:
             f.write(marked)
         obj = f'{d}/o.o'

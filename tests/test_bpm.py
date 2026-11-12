@@ -17,7 +17,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONTS = (4, 5, 2, 1)                # Font's values as font numbers: XL 35 Bold, L 41 Lite, M 28 Bold, S 21 Reg; then Off
 COLOURS = (0xffffff, 0xb1b1b1, 0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0080ff, 0xb000ff, 0xff0000)   # Tempo: TAP red
 TAP_NOW = 0x28e70000                # Tap LED Color's shown colour, in a build with it
-CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
+CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no clang')
 
 
 def test_settings_values_defaults_and_ids():

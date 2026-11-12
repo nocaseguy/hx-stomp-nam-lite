@@ -341,7 +341,7 @@ The setup page builds every feature, plus Real block names if you tick their box
 <td valign="top">
 
 ### <img src="docs/assets/icons/faq-platforms.svg" width="28" height="28" align="top" alt=""> Which operating systems are supported?
-The setup page builds HXtra on Windows, macOS and Linux, in any modern browser; its Run from RAM step needs Chrome or Edge. Installing uses Line 6 Updater, which runs on Windows and macOS. Building from the command line with features needs a Mac, since their code is assembled with Apple's Command Line Tools.
+The setup page builds HXtra on Windows, macOS and Linux, in any modern browser; its Run from RAM step needs Chrome or Edge. Installing uses Line 6 Updater, which runs on Windows and macOS. Building from the command line with features needs clang to assemble their code: Apple's Command Line Tools on a Mac, or clang on Linux and WSL (`apt install clang`). Both give the same build, MD5 included.
 
 &nbsp;
 
