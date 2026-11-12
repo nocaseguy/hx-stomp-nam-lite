@@ -11,6 +11,7 @@ the GitHub release, and the Pages workflow publishes it next to the page; m4asm 
 import argparse
 import hashlib
 import importlib.util
+import itertools
 import json
 import os
 import subprocess
@@ -27,8 +28,17 @@ UNIT = 'HX_Stomp'                   # the features are the HX Stomp's only
 
 
 def web_flags():
-    """The switch of every feature, in feature order: the page builds them all."""
-    return [features.flags(m)[0] for m in features.load() if features.flags(m)]
+    """The switch of every feature the page always builds (WEB True, the default), in feature order."""
+    return _web(True)
+
+
+def web_options():
+    """The switch of every feature the page offers as a checkbox, off until ticked (WEB 'opt-in'), in feature order."""
+    return _web('opt-in')
+
+
+def _web(kind):
+    return [features.flags(m)[0] for m in features.load() if features.flags(m) and getattr(m, 'WEB', True) == kind]
 
 
 def combo_key(flags):
@@ -86,9 +96,10 @@ def built_md5(stock, flags):
 def make(stock, release=None):
     if os.environ.get(m4asm.CACHE):
         raise SystemExit(f'm4cache: unset {m4asm.CACHE}: this assembles with clang')
-    flags = web_flags()
-    return {'release': release, 'unit': UNIT, 'features': flags, 'md5': {UNIT: {combo_key(flags): built_md5(stock, flags)}},
-            'modules': modules(stock, flags)}
+    flags, options = web_flags(), web_options()
+    combos = [flags + list(c) for n in range(len(options) + 1) for c in itertools.combinations(options, n)]
+    return {'release': release, 'unit': UNIT, 'features': flags, 'options': options,
+            'md5': {UNIT: {combo_key(c): built_md5(stock, c) for c in combos}}, 'modules': modules(stock, flags + options)}
 
 
 def main():
