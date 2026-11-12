@@ -1,5 +1,6 @@
 @ bpm.s - the tempo as text at the top left of the Home screen, in the font and colour its Font Size and Color settings say, and a 30 px dot
 @ lit in that colour while the TAP footswitch's ring is, red on a tap, left or right of the preset number (or both) as Dot Position says.
+@ Font Size Off hides the tempo and Dot Position Off the dot; with both off nothing is drawn and the Home view is not repainted for it.
 @ The tempo is the Global Setting the stock code uses, Global BPM or Preset BPM as Tempo Select says, as a whole BPM, with " X" while
 @ the tempo screen would show Extrnl. tools/features/bpm.py chains the handlers; only bpm_ledsend is a hook of its own.
 .syntax unified
@@ -18,9 +19,11 @@ bpm_written:                        @ after the settings store's write (ID, valu
     bls bpm_repaint
     bx lr
 
-bpm_repaint:                        @ a repaint, once the Home view has painted: the UI may not be up before
-    adr.w r0, bpm_data
-    ldr r0, [r0]
+bpm_repaint:                        @ a repaint, once the Home view has painted (the UI may not be up before) and while it shows any of it
+    adr.w r1, bpm_data
+    ldr r0, [r1]
+    cbz r0, bpm_unpainted
+    ldrb r0, [r1, #7]
     cbz r0, bpm_unpainted
     movs r0, #0
     movs r1, #1
@@ -203,13 +206,17 @@ bpm_before:                         @ before the Home paint (framebuffer, Home v
     movs r1, #SETTING_BPM_DOT_MAX
     movs r2, #SETTING_BPM_DOT_DEFAULT
     bl hxtra_setting_get
-    add.w r9, r0, #1                @ the dots shown: 1 left, 2 right, 3 both
+    add.w r9, r0, #1                @ the dots shown: 1 left, 2 right, 3 both, 4 (Off) neither
     movs r0, #SETTING_BPM_FONT
     movs r1, #SETTING_BPM_FONT_MAX
     movs r2, #SETTING_BPM_FONT_DEFAULT
     bl hxtra_setting_get
     adr.w r1, bpm_fonts
     ldrb r5, [r1, r0]
+    and r0, r9, #3
+    orrs r0, r5
+    adr.w r1, bpm_data
+    strb r0, [r1, #7]
     movs r0, #SETTING_BPM_COLOR
     movs r1, #SETTING_BPM_COLOR_MAX
     movs r2, #SETTING_BPM_COLOR_DEFAULT
@@ -225,6 +232,8 @@ bpm_before:                         @ before the Home paint (framebuffer, Home v
     mov r0, r5
     bl bpm_format
     adr.w r7, bpm_widget
+    movs r1, #0
+    cbz r5, bpm_textshow            @ Font Size Off: still formatted, for the period the dot's beat runs on
     mov r0, r7
     mov r1, r5
     ldr r3, =0x28e249e9             @ setFont
@@ -238,8 +247,9 @@ bpm_before:                         @ before the Home paint (framebuffer, Home v
     movs r2, #16
     ldr r3, =0x28e24bc1             @ setText
     blx r3
-    mov r0, r7
     movs r1, #1                     @ showing marks it dirty every paint, so it is redrawn whatever else repainted the Home view
+bpm_textshow:
+    mov r0, r7
     ldr r3, =0x28e24bc9             @ setVisible
     blx r3
     adr.w r1, bpm_data
@@ -429,8 +439,8 @@ HXTRA_SETTING_GET
 .balign 4
 bpm_colours:                        @ Color: White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo (the stock TAP red)
     .word 0xffffff, 0xb1b1b1, 0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0080ff, 0xb000ff, 0xff0000
-bpm_fonts:                          @ Font Size: XL, L, M, S (35 Bold, 41 Lite, 28 Bold, 21 Reg), as font numbers
-    .byte 4, 5, 2, 1
+bpm_fonts:                          @ Font Size: XL, L, M, S (35 Bold, 41 Lite, 28 Bold, 21 Reg), as font numbers, and Off
+    .byte 4, 5, 2, 1, 0
 .balign 4
 bpm_dotshape:                       @ x, y below the dots' top, w, h, Dot Position bit, 0: nested rectangles whose union is a 30 px circle
     .byte 80, 0, 8, 30, 1, 0        @ left: the right one mirrored about the preset number's middle, x = 160
@@ -452,8 +462,8 @@ bpm_dotshape:                       @ x, y below the dots' top, w, h, Dot Positi
     .byte 222, 8, 28, 14, 2, 0
     .byte 221, 11, 30, 8, 2, 0
 .balign 4
-bpm_data:                           @ 0 painted, 4 dot lit, 5 tapped red, 6 Tap Tempo LED on, 8 ms since first paint, 12 last turn (µs), 16 period (ms)
-    .word 0, 0x00010000, 0, 0, 0
+bpm_data:                           @ 0 painted, 4 dot lit, 5 tapped red, 6 Tap Tempo LED on, 7 shown, 8 ms since first paint, 12 last turn (µs), 16 period (ms)
+    .word 0, 0x01010000, 0, 0, 0
 bpm_rings:                          @ each footswitch ring lit, as last sent
     .space 4
 bpm_text:

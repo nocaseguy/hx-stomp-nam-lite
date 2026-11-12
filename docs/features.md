@@ -29,9 +29,9 @@ The features' settings are in Global Settings, each feature in a section of its 
 
 | Feature | Setting | Values | What it does |
 |---|---|---|---|
-| BPM | **Font Size** | XL, **L** (default), M, S | The tempo's size. XL is digits only: no ` X` with MIDI clock and nothing with no tempo |
+| BPM | **Font Size** | XL, **L** (default), M, S, Off | The tempo's size. XL is digits only: no ` X` with MIDI clock and nothing with no tempo. Off hides the tempo |
 | BPM | **Color** | **White** (default), Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo | The tempo's and the dot's colour. Tempo follows the TAP footswitch's colour (Tap LED Color; stock red in a build without it) |
-| BPM | **Dot Position** | **Left** (default), Right, Both | Where the beat dot sits, beside the preset number |
+| BPM | **Dot Position** | **Left** (default), Right, Both, Off | Where the beat dot sits, beside the preset number. Off hides the dot; with Font Size Off too the BPM display is off and the TAP ring blinks as stock |
 | Tap LED color | **Tap LED Color** | **Red** (default), DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random | The TAP footswitch's colour: its ring as it blinks the tempo, and its switch icon and TAP/TUNER label on the Home screen. Rainbow steps the ring round the colour wheel at each beat; Random picks a new colour at each beat. Both keep a white label. In Global Settings > Displays, under Tap Tempo LED. |
 | Long press | **FS1 Hold Function** … **FS5 Hold Function** | Off, Tuner, FS4, FS5, FS6 … FS10 (defaults FS6 … FS10) | What holding that footswitch for 1 s does. FS4 and FS5 are external switches. In Global Settings > Footswitches, pages 2 and 3, after FS5 Function. |
 | Long press | **FS6 Function** … **FS10 Function** | Tuner, Stomp 6 … 10, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode>, <FS Mode, AllBypas, TogglEXP (default Stomp) | What that virtual footswitch does, as FS3 … FS5 Function do for the real ones, with Tuner in place of TAP/Tunr. In Global Settings > Footswitches, pages 4 and 5. |
@@ -60,7 +60,7 @@ The Home screen shows the tempo at its top left, and a beat dot beside the prese
 
 - **The tempo** is the one the HX Stomp is using, the global or the preset's as Tempo Select says, as a whole number. It shows ` X` after it while the tempo comes from MIDI clock (the tempo screen's Extrnl), and `--` with no tempo.
 - **The dot** keeps the beat in every footswitch mode, and with Tap Tempo LED off too: the ring then stays dark while the dot blinks.
-- **Settings** (Global Settings > BPM Display): Font Size, Color (the tempo's and the dot's; Tempo takes the TAP footswitch's colour) and Dot Position (left of the preset number, right of it, or both). See [Custom settings](#custom-settings).
+- **Settings** (Global Settings > BPM Display): Font Size, Color (the tempo's and the dot's; Tempo takes the TAP footswitch's colour) and Dot Position (left of the preset number, right of it, or both). Off on Font Size hides the tempo and on Dot Position the dot; both Off turns the display off without a rebuild. See [Custom settings](#custom-settings).
 
 ## Tap LED color
 
