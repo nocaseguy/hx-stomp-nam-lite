@@ -235,7 +235,7 @@ def test_each_feature_is_a_category_with_its_title_and_icon():
     assert names == [b'Ins/Outs', b'Preferences', b'Footswitches', b'EXP Pedals', b'MIDI/Tempo', b'Displays', b'BPM Display',
                      b'Breathing Line']
     assert struct.unpack('<8I', read(arrays['vals'], 32))[6:] == (pm.ICONS['Icon_Tempo'], pm.ICONS['Icon_DualIR'])
-    assert struct.unpack('<8I', read(arrays['pages'], 32)) == (3, 4, 3, 1, 4, 1, 1, 1)
+    assert struct.unpack('<8I', read(arrays['pages'], 32)) == (3, 4, 5, 1, 4, 1, 1, 1)
     assert read(pm.NAV_CMP, 2) == b'\x07\x2b' and read(pm.NAV_WRAP, 2) == b'\x07\x21'
     ids = setting_ids.by_name()
     for site in pm.SITES:
@@ -277,28 +277,30 @@ def page_table(read, cat, site='lookup'):
 
 
 @pytest.mark.firmware
-def test_footswitches_gets_the_hold_pages_and_other_categories_stay_stock():
+def test_footswitches_gets_the_hold_and_function_pages_and_other_categories_stay_stock():
     e0 = stock_e0()
     read, stock = reader(menu_entry0(e0, MODS, {'HX_LONG_PRESS': '1'})[0]), reader(e0)
     assert read(*STOCK_TABLES[:1], STOCK_TABLES[1] - STOCK_TABLES[0]) == stock(STOCK_TABLES[0], STOCK_TABLES[1] - STOCK_TABLES[0])
     assert struct.unpack('<6H', read(FS_TABLE, 12)) == FS_STOCK_IDS
     pages = struct.unpack('<I', read(pm.ARRAYS['pages'][1][0], 4))[0]
-    assert struct.unpack('<6I', read(pages, 24)) == (3, 4, 3, 1, 4, 1)
+    assert struct.unpack('<6I', read(pages, 24)) == (3, 4, 5, 1, 4, 1)
     assert read(pm.NAV_CMP, 2) == pm.NAV_CMP_STOCK, 'no feature with a category of its own: navigation stays stock'
     ids = setting_ids.by_name()
     hold = tuple(ids[f'long_press.fs{n}'] for n in range(1, 6))
-    for site in pm.SITES:      # FS5 Function's page takes FS1 and FS2 Hold in its empty slots, then a page of FS3..FS5 Hold
-        assert struct.unpack('<9H', read(page_table(read, 2, site), 18)) == FS_STOCK_IDS[:4] + hold, site
+    functions = tuple(ids[f'long_press.fs{n}_function'] for n in range(6, 11))
+    for site in pm.SITES:      # FS5 Function's page takes FS1 and FS2 Hold in its empty slots, then FS3..FS5 Hold, FS6..FS10 Function
+        assert struct.unpack('<14H', read(page_table(read, 2, site), 28)) == FS_STOCK_IDS[:4] + hold + functions, site
 
 
 @pytest.mark.firmware
 def test_a_feature_category_and_footswitches_pages_together():
     read, _ = built({'HX_LONG_PRESS': '1', 'HX_BPM': '1'})
     pages = struct.unpack('<I', read(pm.ARRAYS['pages'][1][0], 4))[0]
-    assert struct.unpack('<7I', read(pages, 28)) == (3, 4, 3, 1, 4, 1, 1)
+    assert struct.unpack('<7I', read(pages, 28)) == (3, 4, 5, 1, 4, 1, 1)
     ids = setting_ids.by_name()
     assert struct.unpack('<3H', read(page_table(read, 6), 6)) == tuple(ids[f'bpm.{k}'] for k in ('font', 'color', 'dot'))
-    assert struct.unpack('<5H', read(page_table(read, 2) + 8, 10)) == tuple(ids[f'long_press.fs{n}'] for n in range(1, 6))
+    assert struct.unpack('<10H', read(page_table(read, 2) + 8, 20)) == tuple(ids[f'long_press.fs{n}'] for n in range(1, 6)) + tuple(
+        ids[f'long_press.fs{n}_function'] for n in range(6, 11))
 
 
 @pytest.mark.firmware
