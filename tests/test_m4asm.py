@@ -5,7 +5,7 @@ import pytest
 
 import m4asm
 
-CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
+CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no clang')
 
 
 def module(tmp_path, body, name='m.s'):
@@ -71,3 +71,48 @@ def test_marks_go_before_each_adr_after_any_label():
     text, adrs = m4asm.mark_adr('a:  adr.w r1, b - 8 @ x\n    ldr r0, =adr_table\n3:  ADR r2, c\n', 'm.s')
     assert text == 'a:  m4asm_adr_0: adr.w r1, b - 8 @ x\n    ldr r0, =adr_table\n3:  m4asm_adr_1: ADR r2, c\n'
     assert adrs == [(0, 'b', -8, 1), (1, 'c', 0, 3)]
+
+
+def test_hx_clang_names_the_clang(tmp_path, monkeypatch):
+    clang = tmp_path / 'my-clang'
+    clang.write_text('#!/bin/sh\n')
+    clang.chmod(0o755)
+    monkeypatch.setenv('HX_CLANG', str(clang))
+    assert m4asm.find_clang() == str(clang)
+    monkeypatch.setenv('PATH', str(tmp_path))
+    monkeypatch.setenv('HX_CLANG', 'my-clang')
+    assert m4asm.find_clang() == str(clang)
+
+
+def test_apple_clang_comes_before_path(tmp_path, monkeypatch):
+    monkeypatch.delenv('HX_CLANG', raising=False)
+    monkeypatch.setattr(m4asm.os.path, 'exists', lambda p: p == m4asm.APPLE_CLANG)
+    monkeypatch.setattr(m4asm.shutil, 'which', lambda name: '/usr/bin/clang')
+    assert m4asm.find_clang() == m4asm.APPLE_CLANG
+
+
+def test_clang_on_path_without_apple_clang(monkeypatch):
+    monkeypatch.delenv('HX_CLANG', raising=False)
+    monkeypatch.setattr(m4asm.os.path, 'exists', lambda p: False)
+    monkeypatch.setattr(m4asm.shutil, 'which', lambda name: f'/usr/bin/{name}')
+    assert m4asm.find_clang() == '/usr/bin/clang'
+
+
+def test_no_clang_says_how_to_get_one(tmp_path, monkeypatch):
+    monkeypatch.delenv(m4asm.CACHE, raising=False)
+    monkeypatch.setattr(m4asm, 'CLANG', str(tmp_path / 'none'))
+    with pytest.raises(SystemExit, match='no clang at .*none: install it .*HX_CLANG'):
+        m4asm.assemble_module(module(tmp_path, 'bx lr\n'))
+
+
+@pytest.mark.parametrize('line', ['.balign 16, 0', '.align 4, 0', '.p2align 4, 0x0', 'x: .balign 8, 0, 7', '.balign 16,0 @ pad'])
+def test_an_alignment_filled_with_0_fails_the_build(tmp_path, line):
+    src = module(tmp_path, f'f:\n    bx lr\n{line}\n')
+    with pytest.raises(SystemExit, match=r"m\.s:5: an alignment filled with 0"):
+        m4asm.assemble_module(src)
+
+
+@CLANG
+@pytest.mark.parametrize('line', ['.balign 4', '.balignl 16, 0', '.balign 16, 0xff', '.org f + 16, 0'])
+def test_other_alignments_assemble(tmp_path, line):
+    assert m4asm.assemble_module(module(tmp_path, f'f:\n    bx lr\n    nop\n{line}\n'))[0][:4] == b'\x70\x47\x00\xbf'
