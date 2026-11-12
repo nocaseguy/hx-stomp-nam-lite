@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="72" viewBox="0 0 480 72" role="img" aria-label="Read the feature guide">
+  <rect x="1.5" y="1.5" width="477" height="69" rx="12" fill="#30363d" stroke="#484f58" stroke-width="1.5"/>
+  <text x="222" y="45" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="26" font-weight="700" fill="#fff">Read the feature guide</text>
+  <path d="M380 36h22M390 26l12 10-12 10" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
