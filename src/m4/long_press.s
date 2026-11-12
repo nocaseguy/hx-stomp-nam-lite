@@ -1,6 +1,6 @@
 @ long_press.s - long-press footswitch actions: in Stomp mode, a latching stomp footswitch 1..5 with a Hold action set acts on release
 @ when tapped (its press is held back and replayed on the click) and runs the action when held for 1 s: the tuner, a press of FS4/FS5,
-@ or a virtual footswitch FS6..FS10, which toggles the blocks assigned to MIDI CC 20..24 (Bypass Assign > MIDI In, where they read FS6..FS10).
+@ or a virtual footswitch FS6..FS10, which toggles the blocks assigned to MIDI CC 20..24 (Bypass Assign > MIDI In, where they read FS6..FS10 under the label FootswIn).
 @ tools/features/long_press.py owns the footswitch event handler 0x28dd1978 and enters lp_event with the stock handler in r2.
 .syntax unified
 .thumb
@@ -16,6 +16,7 @@
 .equ VIRTUAL_CC, 20                 @ FS6's MIDI CC; tools/features/long_press.py's VIRTUAL_CC
 .equ CONTROLLERS, 0x28d9608d        @ () -> the parameter controllers; +4 their lock, 64 nodes of 0x48 bytes from +0xac
 .equ MIDI_CC, 8                     @ the MIDI CC controller
+.equ LABEL, 0x28dc63d1              @ (knob, text): a knob's label
 
 .thumb_func
 lp_event:                           @ r0 event {1 key, code, -, -, type}, r1 the handler's object, r2 the stock handler
@@ -256,7 +257,29 @@ cc_text_ten:
 cc_text_out:
     bx lr
 
+.thumb_func
+lp_label_redraw:                    @ in place of Bypass Assign's redraw call of the knob label setter: its MIDI In node is in r5
+    mov r2, r5
+    b lp_label
+.thumb_func
+lp_label_refresh:                   @ the same in the knob refresh, whose node is in r4
+    mov r2, r4
+.thumb_func
+lp_label:                           @ r0 the knob, r1 "MIDI In", r2 the MIDI In node or 0 (Off): FS6..FS10 read "FootswIn"
+    cbz r2, label_out
+    ldr r3, [r2, #0x14]
+    subs r3, #VIRTUAL_CC
+    cmp r3, #4
+    bhi label_out
+    adr r1, footsw_in
+label_out:
+    ldr r3, =LABEL
+    bx r3
+
 .ltorg
+.balign 4
+footsw_in:
+    .asciz "FootswIn"
 .balign 2
 hold_ids:
     .hword SETTING_LONG_PRESS_FS1, SETTING_LONG_PRESS_FS2, SETTING_LONG_PRESS_FS3, SETTING_LONG_PRESS_FS4, SETTING_LONG_PRESS_FS5
