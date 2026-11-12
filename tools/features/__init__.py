@@ -16,6 +16,7 @@ A feature module may have:
              (default True: a section of its own); or a stock
              category's name (patch_menu.STOCK_CATEGORIES, e.g. 'Footswitches'): its settings fill that category's trailing empty
              slots, then pages after its own
+  WEB        False when the web setup page does not offer it (default True): a tool for developers, not for players
   apply(p)   its code and hooks, through tools/patch_menu.py's Patch: p.put() (a write no other feature may overlap), p.expect(),
              p.add() (bytes into the code cave), p.module() (an M4 .s assembled at build time), p.chain_ptr(), p.chain_bl() and
              p.chain_entry() (handlers on a hook other features may share), p.own_entry() and p.own_call() (a function start or

@@ -11,6 +11,7 @@ The repository's tools and the build switches. Status tags as in [conventions.md
 | `tools/features/` | One module a feature: settings, flag, inputs, hooks. |
 | `tools/image_store.py` | Reads the image store: Entry 7's image and font records, Entry 8's items. |
 | `tools/setting_ids.py` | The Global Settings IDs HXtra uses, one line each; `free` lists candidates. |
+| `tools/usb_commands.py` | The HX Edit editor commands HXtra adds, one line per number, and the numbers stock 3.80 leaves free; a feature's M4 code gets its number as `CMD` from `usb.inc`. |
 | `tools/patch_divider.py` | Home divider 2 px green. |
 | `tools/patch_comp.py` | GR knobs on compressor models, and `src/sharc/frame_probe.asm` in Block 3 above NAM's two slots, wrapping the cores `0x271a`, `0x2719` and `0x2710` (`HX_GR=1` builds; after add-model and add-fx-model). |
 | `tools/patch_splash.py` | Boot pictures: a 320x181 or full-screen 320x240 PNG as is, any other picture converted with macOS `sips` (fill or fit), packed for the image store; `export` saves the picture an image has now. The feature that builds them in, with the text and the renderer hook, is `tools/features/splash.py` (`build.py --splash`, `--splash-fit`, `--splash-text`; `hxsplash <picture> ["text"]` in the author's shell builds and RAM-runs it). |
@@ -27,6 +28,8 @@ The repository's tools and the build switches. Status tags as in [conventions.md
 | `tests/m4emu.py` | Runs an M4 module in unicorn (Cortex-M4 Thumb) against stubbed firmware functions, for tests. |
 | `tools/features/bpm.py`, `src/m4/bpm.s` | The BPM on the Home screen and its beat dot (`HX_BPM=1`); `tests/test_bpm.py` runs its handlers in unicorn. |
 | `tools/patch_click.py`, `src/sharc/click.asm` | The Metronome block (`HX_CLICK=1`): a model with a tempo-synced Time and its DSP kernel; `tests/test_click.py` runs the kernel in ssim. |
+| `tools/features/screen_mirror.py`, `src/m4/screen_mirror.s` | The screen mirror (`HX_SCREEN_MIRROR=1`, not on the web page): HX Edit's editor service answers command 0x52 with the frame on the LCD. |
+| `tools/hx_mirror.py`, `tools/mac/mirror_mac.swift` | The HX Stomp's screen on a Mac from a screen mirror build: a PNG (`shot`), a live window (`view`), an H.264 `.mov` (`view --record`), and `Session` for a script that drives the unit while it records. |
 
 Build commands:
 

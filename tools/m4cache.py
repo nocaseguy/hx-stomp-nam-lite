@@ -27,8 +27,8 @@ UNIT = 'HX_Stomp'                   # the features are the HX Stomp's only
 
 
 def web_flags():
-    """The switch of every feature, in feature order: the page builds them all."""
-    return [features.flags(m)[0] for m in features.load() if features.flags(m)]
+    """The switch of every feature the page offers (all but those with WEB = False), in feature order: the page builds them all."""
+    return [features.flags(m)[0] for m in features.load() if features.flags(m) and getattr(m, 'WEB', True)]
 
 
 def combo_key(flags):

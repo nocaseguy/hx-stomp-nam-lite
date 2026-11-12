@@ -12,6 +12,7 @@ import m4asm
 import patch_amp as pa
 import patch_menu as pm
 import setting_ids
+import usb_commands
 from features import Setting
 from firmware import branch_target, built, menu_entry0, reader, stock, stock_e0
 
@@ -26,6 +27,22 @@ def test_ids_claimed_once():
     assert len(pids) == len(set(pids)), 'an ID is listed twice in tools/setting_ids.py'
     assert len(names) == len(set(names)), 'a setting has two IDs in tools/setting_ids.py'
     assert all(pid in pm.MAIN_STORE_IDS for pid in pids)
+
+
+def test_usb_commands_claimed_once_and_free_in_stock():
+    cmds = [cmd for cmd, _, _ in usb_commands.COMMANDS]
+    names = [name for _, name, _ in usb_commands.COMMANDS if name]
+    assert len(cmds) == len(set(cmds)), 'a command is listed twice in tools/usb_commands.py'
+    assert len(names) == len(set(names)), 'a feature has two commands in tools/usb_commands.py'
+    assert set(cmds) <= set(usb_commands.FREE), 'a command stock 3.80 registers'
+    assert set(names) <= {features.name(m) for m in MODS}, 'a command claimed by no feature: set it to None, keeping the note'
+
+
+@pytest.mark.firmware
+def test_usb_commands_free_is_what_stock_leaves():
+    found = usb_commands.registered(reader(stock_e0()), branch_target)
+    assert len(found) == len(set(found)) == 110
+    assert set(range(usb_commands.COUNT)) - set(found) == set(usb_commands.FREE)
 
 
 def test_no_avoided_id_is_claimed():
