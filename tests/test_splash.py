@@ -138,7 +138,7 @@ def build(stock, env, cwd=None):
 
 
 def test_default_text_is_plain_ascii():
-    assert splash.TEXT == "v1.0.0" and all(" " <= c <= "~" for c in splash.TEXT)
+    assert splash.TEXT == "v1.1.0" and all(" " <= c <= "~" for c in splash.TEXT)
 
 
 @pytest.mark.firmware
@@ -146,8 +146,8 @@ def test_default_text_without_inputs(stock):
     entries, on = build(stock, {})
     assert "splash" in on and set(entries) == {0, 8}
     e0 = entries[0]
-    assert reader(e0)(splash.TEXT_SITE, len(splash.TEXT_STOCK)) == b"v1.0.0".ljust(len(splash.TEXT_STOCK), b"\0")
-    assert int.from_bytes(reader(e0)(splash.VERSION_LITERAL, 4), "little") == splash.TEXT_SITE + len("v1.0.0")
+    assert reader(e0)(splash.TEXT_SITE, len(splash.TEXT_STOCK)) == b"v1.1.0".ljust(len(splash.TEXT_STOCK), b"\0")
+    assert int.from_bytes(reader(e0)(splash.VERSION_LITERAL, 4), "little") == splash.TEXT_SITE + len("v1.1.0")
     # no emoji: the line keeps its stock grey
     assert int.from_bytes(reader(e0)(splash.TEXT_COLOUR_LITERAL, 4), "little") == splash.TEXT_COLOUR
 

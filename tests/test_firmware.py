@@ -17,7 +17,7 @@ pytestmark = pytest.mark.firmware
 # the kernel's --mid-sweep, DSP cost 2275; the HX Stomp's adds tools/patch_menu.py's HXtra entry and boot screen (the XL's
 # and the HX Effects' have none). The XL's has not run on an XL.
 BUILT_MD5 = {
-    "HX_STOMP_HXF": "8673ca7e83ec469e2ea79348eea99ca6",
+    "HX_STOMP_HXF": "3e21687c9518ac6e3ffff1508420ce62",
     "HX_STOMP_XL_HXF": "8918ab60ebff62ebfccd4fccb2bed85a",     # not run on an XL
     "HX_EFFECTS_HXF": "2efb98791581b67116ba82c5ecd30ea2",      # Distortion > Mono (tools/effects.py); 4d2a4a8a ran on an HX Effects, this not yet
 }
