@@ -7,6 +7,7 @@ shows, coded as its changes since the frame before (src/m4/screen_mirror.s).
   hx_mirror.py shot screen.png [--scale 2]      # one frame as a PNG
   hx_mirror.py view [--scale 3]                 # a live window (macOS: tools/mac/mirror_mac.swift, built on first use)
   hx_mirror.py view --record demo.mov           # the same, recorded as H.264 at the times the frames arrived
+  hx_mirror.py gif demo 12 20 [--screen]        # seconds 12 to 20 of that take as a looping GIF, the unit or the screen alone
   hx_mirror.py bench [--frames 50]              # frames a second
 
 A script can drive the HX Stomp while recording: Session(record='demo.mov') mirrors in the background, and its ctl (hx_ctl.HxCtl)
@@ -461,17 +462,19 @@ def build_tool(src, exe):
     return exe
 
 
-def render(record, cmap=STOMP, skin='black'):
+def render(record, cmap=STOMP, skin='black', gif=None, screen=False):
     """The recording set in a photo of the HX Stomp (skin: black or white, tools/mac/skins/) with its controls moving, as
-    <take>.mp4 beside it, small enough to attach on GitHub."""
+    <take>.mp4 beside it, small enough to attach on GitHub; with gif=(from, to), those seconds of it as <take>.gif for a README
+    (480 x 360, 15 frames a second, looping), and with screen too, the screen alone."""
     with open(timeline_path(record)) as f:
         timeline = json.load(f)
     base = os.path.splitext(record)[0]
     with open(base + '-tracks.json', 'w') as f:
         json.dump(tracks(timeline, cmap), f)
-    out = base + '.mp4'
-    subprocess.run([build_tool(RENDER_SRC, RENDER), record, base + '-tracks.json', out, os.path.join(SKINS, skin + '.json'), ART],
-                   check=True, stdout=subprocess.DEVNULL)
+    out = base + ('.gif' if gif else '.mp4')
+    extra = ['--gif', '%g' % gif[0], '%g' % gif[1]] + (['--screen'] if screen else []) if gif else []
+    subprocess.run([build_tool(RENDER_SRC, RENDER), record, base + '-tracks.json', out, os.path.join(SKINS, skin + '.json'), ART]
+                   + extra, check=True, stdout=subprocess.DEVNULL)
     return out
 
 
@@ -506,6 +509,12 @@ def main():
     sp.add_argument('--seconds', type=float, help='stop after this long (default: when the window closes)')
     sp.add_argument('--fps', type=float, default=FPS, help='frames a second to ask for, at most (default %(default)s; 0: as fast as '
                     'the unit answers, which makes its own screen and controls lag)')
+    sp = sub.add_parser('gif', help='a window of a take as a looping GIF for a README, beside it')
+    sp.add_argument('record', help='the take: a bare name is in build/recordings/, as view --record wrote it')
+    sp.add_argument('start', type=float, help='seconds into the take')
+    sp.add_argument('end', type=float, help='seconds into the take (4 to 10 s after start loops well)')
+    sp.add_argument('--screen', action='store_true', help='the screen alone, where small text stays readable, not the unit')
+    sp.add_argument('--skin', default='black', choices=['black', 'white'])
     sp = sub.add_parser('events', help='the window, and each UI event printed as it comes: to learn which control is which')
     sp.add_argument('--seconds', type=float, default=120)
     sp = sub.add_parser('learn', help='asks for each control in turn, aloud, and writes which events it gave')
@@ -540,6 +549,12 @@ def main():
             took = time.monotonic() - start
         print(report(s, s.frames, took) + (', recorded to ' + args.record if args.record else '') +
               (', assembled into ' + s.rendered if s.rendered else ''))
+    elif args.cmd == 'gif':
+        record = args.record if os.path.dirname(args.record) else os.path.join(RECORDINGS, args.record)
+        record += '.mov' if not os.path.exists(record) and os.path.exists(record + '.mov') else ''
+        out = render(record, skin=args.skin, gif=(args.start, args.end), screen=args.screen)
+        mb = os.path.getsize(out) / 1e6
+        print('%s, %.1f MB' % (out, mb) + (': over the 5 MB a README GIF should be, so pick a shorter window' if mb > 5 else ''))
     elif args.cmd == 'events':
         def show(new):
             for t, e in new:

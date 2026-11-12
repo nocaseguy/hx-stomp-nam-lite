@@ -2,6 +2,9 @@
 // controls moving as they were used, as an H.264 MP4 at 30 frames a second, small enough to attach on GitHub (10 MB at most).
 //   swiftc -O tools/mac/stomp_render.swift -o build/stomp_render     (hx_mirror.py builds it on first use)
 //   stomp_render IN.mov TRACKS.json OUT.mp4 SKIN.json PHOTO_DIR
+//   stomp_render IN.mov TRACKS.json OUT.gif SKIN.json PHOTO_DIR --gif FROM TO [--screen]
+// --gif: FROM to TO seconds of the take as a looping GIF for a README, 480 x 360 at 15 frames a second: the unit on the skin's
+// background, or with --screen the screen alone, where small text stays readable. IN may be a PNG, a still screen throughout.
 // SKIN.json (tools/mac/skins/): the photo's file name in PHOTO_DIR and, in its pixels (y down), where the unit is ("crop"), its
 // screen, knobs [x, y, r], volume knob (and the level its pointer shows, "volume_at"), buttons [x, y, w, h], footswitch rings
 // (the boxes to find their coloured pixels in), where FS4/FS5 light up ("badges") and, optionally, a touched control's colour
@@ -17,8 +20,11 @@ import AVFoundation
 import AppKit
 
 let args = CommandLine.arguments
-guard args.count == 6 else {
-    FileHandle.standardError.write("usage: stomp_render IN.mov TRACKS.json OUT.mov SKIN.json PHOTO_DIR\n".data(using: .utf8)!)
+let gifWindow: (Double, Double)? = args.count >= 9 && args[6] == "--gif" ? (Double(args[7]) ?? -1, Double(args[8]) ?? -1) : nil
+let gifScreen = args.count == 10 && args[9] == "--screen"
+guard args.count == 6 || (gifWindow.map { $0.0 >= 0 && $0.1 > $0.0 } ?? false) && (args.count == 9 || gifScreen) else {
+    FileHandle.standardError.write("usage: stomp_render IN.mov TRACKS.json OUT.mp4 SKIN.json PHOTO_DIR [--gif FROM TO [--screen]]\n"
+        .data(using: .utf8)!)
     exit(2)
 }
 func fail(_ s: String) -> Never { FileHandle.standardError.write(("stomp_render: " + s + "\n").data(using: .utf8)!); exit(1) }
@@ -84,7 +90,8 @@ func matted(_ img: CGImage) -> CGImage {
 let photo = skin.matte == true ? matted(photoOriginal) : photoOriginal
 func colour(_ hex: String) -> CGColor {
     let v = Int(hex.dropFirst(), radix: 16) ?? 0
-    return CGColor(red: CGFloat(v >> 16 & 255) / 255, green: CGFloat(v >> 8 & 255) / 255, blue: CGFloat(v & 255) / 255, alpha: 1)
+    // sRGB, as a web colour is: CGColor(red:...) is Generic RGB, and #0d1117 came out a shade off the page
+    return CGColor(srgbRed: CGFloat(v >> 16 & 255) / 255, green: CGFloat(v >> 8 & 255) / 255, blue: CGFloat(v & 255) / 255, alpha: 1)
 }
 let backdrop = colour(skin.background ?? "#0d1117")
 let accent = colour(skin.accent ?? "#ff2d6f")          // a touched control's colour: white is lost on a shiny black unit
@@ -363,12 +370,19 @@ extension CGImage {
 }
 
 // Read the recording's frames in order, keeping the latest one at or before each output frame's time
+let still = args[1].lowercased().hasSuffix(".png") ? NSBitmapImageRep(data: (try? Data(contentsOf: URL(fileURLWithPath: args[1])))
+                                                                      ?? Data())?.cgImage : nil
+if args[1].lowercased().hasSuffix(".png") && still == nil { fail("cannot read \(args[1])") }
 let asset = AVURLAsset(url: URL(fileURLWithPath: args[1]))
-guard let track = asset.tracks(withMediaType: .video).first else { fail("no video in \(args[1])") }
-guard let reader = try? AVAssetReader(asset: asset) else { fail("cannot read \(args[1])") }
-let readOut = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
-reader.add(readOut)
-reader.startReading()
+var reader: AVAssetReader? = nil, readOut: AVAssetReaderTrackOutput? = nil     // reader kept: its output stops without it
+if still == nil {
+    guard let track = asset.tracks(withMediaType: .video).first else { fail("no video in \(args[1])") }
+    guard let r = try? AVAssetReader(asset: asset) else { fail("cannot read \(args[1])") }
+    let out = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+    r.add(out)
+    r.startReading()
+    reader = r; readOut = out
+}
 let duration = tracks.duration ?? asset.duration.seconds
 
 let ciContext = CIContext()
@@ -377,8 +391,202 @@ func image(_ sample: CMSampleBuffer) -> CGImage? {
     let ci = CIImage(cvPixelBuffer: pb)
     return ciContext.createCGImage(ci, from: ci.extent)
 }
+var current: CGImage? = still
+var pending = readOut?.copyNextSampleBuffer()
+func screen(at t: Double) -> CGImage? {
+    while let s = pending, CMSampleBufferGetPresentationTimeStamp(s).seconds <= t + 1e-6 {
+        current = image(s) ?? current
+        pending = readOut?.copyNextSampleBuffer()
+    }
+    return current
+}
+
+// A GIF for a README (480 x 360, 15 frames a second, looping, under 5 MB) from FROM to TO seconds of the take. Written here, not by
+// ImageIO, which stores every frame whole: after the first, a frame holds only the pixels that changed, so the photo is sent once
+let GIF_W = 480, GIF_H = 360, GIF_FPS = 15.0
+
+final class Gif {
+    var data = Data("GIF89a".utf8)
+    var last: [UInt32]? = nil
+    var held: Data? = nil, heldDelay = 0          // the frame before, written once the next one shows how long it stays
+
+    init(_ w: Int, _ h: Int) {
+        le(w); le(h)
+        data += [0, 0, 0]                          // no global colour table: each frame brings its own
+        data += [0x21, 0xff, 11] + Array("NETSCAPE2.0".utf8) + [3, 1, 0, 0, 0]     // loop for ever
+    }
+    func le(_ v: Int, into d: inout Data) { d += [UInt8(v & 255), UInt8(v >> 8 & 255)] }
+    func le(_ v: Int) { le(v, into: &data) }
+
+    // rgb: GIF_W x GIF_H pixels, 0xRRGGBB, top row first; shown for delay hundredths of a second
+    func add(_ rgb: [UInt32], delay: Int) {
+        var x0 = 0, y0 = 0, x1 = GIF_W - 1, y1 = GIF_H - 1
+        if let prev = last {
+            x0 = GIF_W; y0 = GIF_H; x1 = -1; y1 = -1
+            for y in 0..<GIF_H {
+                for x in 0..<GIF_W where rgb[y * GIF_W + x] != prev[y * GIF_W + x] {
+                    x0 = min(x0, x); x1 = max(x1, x); y0 = min(y0, y); y1 = max(y1, y)
+                }
+            }
+            if x1 < 0 { heldDelay += delay; return }
+        }
+        let w = x1 - x0 + 1, h = y1 - y0 + 1
+        var changed: [UInt32] = [], keep = [Bool](repeating: false, count: w * h)
+        for y in 0..<h {
+            for x in 0..<w {
+                let i = (y0 + y) * GIF_W + x0 + x
+                if let prev = last, prev[i] == rgb[i] { keep[y * w + x] = true } else { changed.append(rgb[i]) }
+            }
+        }
+        let clear = keep.contains(true)
+        let (palette, index) = quantize(changed, colours: clear ? 255 : 256)
+        var pixels = [UInt8](repeating: UInt8(clear ? palette.count : 0), count: w * h), k = 0
+        for j in 0..<(w * h) where !keep[j] { pixels[j] = index(changed[k]); k += 1 }
+        let bits = max(1, Int(ceil(log2(Double(palette.count + (clear ? 1 : 0))))))
+        var f = Data([0x21, 0xf9, 4, clear ? 0x05 : 0x04])                  // keep the frame drawn under the next
+        f += [0, 0, UInt8(clear ? palette.count : 0), 0]
+        f += [0x2c]
+        le(x0, into: &f); le(y0, into: &f); le(w, into: &f); le(h, into: &f)
+        f += [0x80 | UInt8(bits - 1)]
+        for k in 0..<(1 << bits) {
+            let c = k < palette.count ? palette[k] : 0
+            f += [UInt8(c >> 16 & 255), UInt8(c >> 8 & 255), UInt8(c & 255)]
+        }
+        f += lzw(pixels, max(2, bits))
+        flush()
+        held = f; heldDelay = delay
+        last = rgb
+    }
+    func flush() {
+        guard var f = held else { return }
+        f[4] = UInt8(heldDelay & 255); f[5] = UInt8(heldDelay >> 8 & 255)
+        data += f
+        held = nil
+    }
+    func finish() -> Data { flush(); data += [0x3b]; return data }
+}
+
+// Median cut on 5 bits a channel: the palette (at most colours entries) and a lookup from a colour to its nearest entry. A colour
+// on 1 % of the pixels or more keeps its own entry, exact: the backdrop has to match the page round the GIF
+func quantize(_ px: [UInt32], colours: Int) -> ([UInt32], (UInt32) -> UInt8) {
+    func key(_ c: UInt32) -> Int { Int(c >> 19 & 31) << 10 | Int(c >> 11 & 31) << 5 | Int(c >> 3 & 31) }
+    var tally = [UInt32: Int]()
+    for c in px { tally[c, default: 0] += 1 }
+    let exact = Array(tally.filter { $0.value * 100 >= px.count }.keys.sorted().prefix(colours / 2))
+    var exactIndex = [UInt32: UInt8]()
+    for (j, c) in exact.enumerated() { exactIndex[c] = UInt8(j) }
+    var count = [Int](repeating: 0, count: 32768), sum = [Int](repeating: 0, count: 32768 * 3)
+    for c in px where exactIndex[c] == nil {
+        let k = key(c)
+        count[k] += 1
+        sum[k * 3] += Int(c >> 16 & 255); sum[k * 3 + 1] += Int(c >> 8 & 255); sum[k * 3 + 2] += Int(c & 255)
+    }
+    var boxes: [[Int]] = [(0..<32768).filter { count[$0] > 0 }].filter { !$0.isEmpty }
+    func channel(_ k: Int, _ a: Int) -> Int { k >> (10 - 5 * a) & 31 }
+    func spread(_ b: [Int]) -> (Int, Int) {
+        var best = (0, -1)
+        for a in 0..<3 {
+            let v = b.map { channel($0, a) }
+            if v.max()! - v.min()! > best.1 { best = (a, v.max()! - v.min()!) }
+        }
+        return best
+    }
+    while boxes.count < colours - exact.count {
+        // split the box with the most pixels among those still made of more than one colour
+        guard let (i, _) = boxes.enumerated().filter({ $0.element.count > 1 })
+            .max(by: { $0.element.reduce(0) { $0 + count[$1] } < $1.element.reduce(0) { $0 + count[$1] } }) else { break }
+        let (a, _) = spread(boxes[i])
+        let b = boxes[i].sorted { channel($0, a) < channel($1, a) }
+        var half = 0, seen = 0, total = b.reduce(0) { $0 + count[$1] }
+        while half < b.count - 1 && seen + count[b[half]] <= total / 2 { seen += count[b[half]]; half += 1 }
+        half = max(1, half)
+        boxes[i] = Array(b[..<half]); boxes.append(Array(b[half...]))
+    }
+    let palette: [UInt32] = exact + boxes.map { b in
+        let n = max(1, b.reduce(0) { $0 + count[$1] })
+        let r = b.reduce(0) { $0 + sum[$1 * 3] } / n, g = b.reduce(0) { $0 + sum[$1 * 3 + 1] } / n, bl = b.reduce(0) { $0 + sum[$1 * 3 + 2] } / n
+        return UInt32(r << 16 | g << 8 | bl)
+    }
+    var nearest = [Int16](repeating: -1, count: 32768)
+    return (palette, { c in
+        if let j = exactIndex[c] { return j }
+        let k = key(c)
+        if nearest[k] < 0 {
+            var best = 0, bestD = Int.max
+            for (j, p) in palette.enumerated() {
+                let dr = Int(p >> 16 & 255) - Int(c >> 16 & 255), dg = Int(p >> 8 & 255) - Int(c >> 8 & 255), db = Int(p & 255) - Int(c & 255)
+                let d = 2 * dr * dr + 4 * dg * dg + 3 * db * db
+                if d < bestD { best = j; bestD = d }
+            }
+            nearest[k] = Int16(best)
+        }
+        return UInt8(nearest[k])
+    })
+}
+
+// GIF's LZW: codes grow from minimum + 1 bits to 12, then the table starts again; in sub-blocks of at most 255 bytes
+func lzw(_ px: [UInt8], _ minimum: Int) -> Data {
+    let clearCode = 1 << minimum
+    var table = [Int: Int](), next = clearCode + 2, size = minimum + 1
+    var out = [UInt8](), acc = 0, nbits = 0
+    func put(_ code: Int) {
+        acc |= code << nbits; nbits += size
+        while nbits >= 8 { out.append(UInt8(acc & 255)); acc >>= 8; nbits -= 8 }
+    }
+    put(clearCode)
+    var prefix = Int(px[0])
+    for p in px.dropFirst() {
+        let k = prefix << 8 | Int(p)
+        if let code = table[k] { prefix = code; continue }
+        put(prefix)
+        table[k] = next
+        if next == 1 << size { size += 1 }
+        next += 1
+        if next == 4096 { put(clearCode); table.removeAll(keepingCapacity: true); next = clearCode + 2; size = minimum + 1 }
+        prefix = Int(p)
+    }
+    put(prefix)
+    put(clearCode + 1)
+    if nbits > 0 { out.append(UInt8(acc & 255)) }
+    var d = Data([UInt8(minimum)])
+    for s in stride(from: 0, to: out.count, by: 255) { let e = min(out.count, s + 255); d += [UInt8(e - s)] + out[s..<e] }
+    return d + [0]
+}
 
 try? FileManager.default.removeItem(atPath: args[3])
+if let (from, to) = gifWindow {
+    var px = [UInt8](repeating: 0, count: GIF_W * GIF_H * 4)
+    // sRGB, as browsers show a GIF
+    let ctx = CGContext(data: &px, width: GIF_W, height: GIF_H, bitsPerComponent: 8, bytesPerRow: GIF_W * 4,
+                        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    ctx.interpolationQuality = .high
+    let gif = Gif(GIF_W, GIF_H)
+    let frames = Int(((to - from) * GIF_FPS).rounded())
+    for k in 0..<frames {
+        let t = from + Double(k) / GIF_FPS
+        let shown = screen(at: t)
+        ctx.saveGState()
+        ctx.setFillColor(backdrop)
+        ctx.fill(CGRect(x: 0, y: 0, width: GIF_W, height: GIF_H))
+        if gifScreen {
+            if let img = shown { ctx.draw(img, in: CGRect(x: 0, y: 0, width: GIF_W, height: GIF_H)) }
+        } else {
+            let s = min(Double(GIF_W) / Double(W), Double(GIF_H) / Double(H))
+            ctx.translateBy(x: (Double(GIF_W) - Double(W) * s) / 2, y: (Double(GIF_H) - Double(H) * s) / 2)
+            ctx.scaleBy(x: s, y: s)
+            draw(ctx, shown, t)
+        }
+        ctx.restoreGState()
+        var rgb = [UInt32](repeating: 0, count: GIF_W * GIF_H)
+        for i in 0..<(GIF_W * GIF_H) { rgb[i] = UInt32(px[i * 4]) << 16 | UInt32(px[i * 4 + 1]) << 8 | UInt32(px[i * 4 + 2]) }
+        // whole hundredths that add up to the frame times, as a GIF counts no finer
+        gif.add(rgb, delay: Int((Double(k + 1) * 100 / GIF_FPS).rounded()) - Int((Double(k) * 100 / GIF_FPS).rounded()))
+    }
+    do { try gif.finish().write(to: URL(fileURLWithPath: args[3])) } catch { fail("cannot write \(args[3])") }
+    print(args[3])
+    exit(0)
+}
+
 guard let writer = try? AVAssetWriter(outputURL: URL(fileURLWithPath: args[3]), fileType: .mp4) else { fail("cannot write \(args[3])") }
 let bitRate = Int(min(Double(W * H * 4), MAX_BYTES * 8 / max(duration, 1)))
 let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -398,15 +606,10 @@ writer.add(input)
 writer.startWriting()
 writer.startSession(atSourceTime: .zero)
 
-var current: CGImage? = nil
-var pending = readOut.copyNextSampleBuffer()
 let frames = Int((duration * FPS).rounded(.up)) + 1
 for k in 0..<frames {
     let t = Double(k) / FPS
-    while let s = pending, CMSampleBufferGetPresentationTimeStamp(s).seconds <= t + 1e-6 {
-        current = image(s) ?? current
-        pending = readOut.copyNextSampleBuffer()
-    }
+    let shown = screen(at: t)
     while !input.isReadyForMoreMediaData { usleep(1000) }
     var pb: CVPixelBuffer?
     CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &pb)
@@ -415,7 +618,7 @@ for k in 0..<frames {
     let ctx = CGContext(data: CVPixelBufferGetBaseAddress(buf), width: W, height: H, bitsPerComponent: 8,
                         bytesPerRow: CVPixelBufferGetBytesPerRow(buf), space: CGColorSpaceCreateDeviceRGB(),
                         bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)!
-    draw(ctx, current, t)
+    draw(ctx, shown, t)
     CVPixelBufferUnlockBaseAddress(buf, [])
     adaptor.append(buf, withPresentationTime: CMTime(value: CMTimeValue(k), timescale: CMTimeScale(FPS)))
 }

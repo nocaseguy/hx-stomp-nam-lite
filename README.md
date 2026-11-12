@@ -197,7 +197,7 @@ Every feature's M4 code runs in an emulator before it runs on a unit: [unicorn](
 <td valign="top">
 
 ### <img src="docs/assets/icons/dev-mirror.svg" width="28" height="28" align="top" alt=""> Screen mirror and demo videos
-A developer build (`HX_SCREEN_MIRROR=1`) streams the HX Stomp's screen over USB, through the channel HX Edit uses, to a window on a Mac at 15 frames a second. `tools/hx_mirror.py` records it with every footswitch, knob and button event, and renders a demo video: the screen set into a photo of the unit (your own copy in `build/art/`, never committed), its controls moving and its footswitch LEDs lighting in time, as an MP4 small enough to attach on GitHub. Scripts can drive the unit while it records.
+A developer build (`HX_SCREEN_MIRROR=1`) streams the HX Stomp's screen over USB, through the channel HX Edit uses, to a window on a Mac at 15 frames a second. `tools/hx_mirror.py` records it with every footswitch, knob and button event, and renders a demo video: the screen set into a photo of the unit (your own copy in `build/art/`, never committed), its controls moving and its footswitch LEDs lighting in time, as an MP4 small enough to attach on GitHub, and a looping GIF of any part of it. Scripts can drive the unit while it records.
 
 </td>
 </tr>

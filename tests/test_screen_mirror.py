@@ -3,7 +3,10 @@ changes since the one before), the command's registration and reply run in tests
 functions, and the build on the stock firmware."""
 import json
 import random
+import shutil
 import struct
+import subprocess
+import sys
 import time
 import zlib
 
@@ -297,6 +300,166 @@ def test_tracks_give_a_footswitchs_touch_beside_its_press():
     timeline = {'frames': [0, 2], 'events': [e(0.2, 9, 1), e(0.4, 12, 1), e(0.6, 12, 2), e(0.9, 9, 2)]}
     assert hm.tracks(timeline, {'fs1': hm.STOMP['fs1']})['controls']['fs1'] == {'down': [[0.4, 0.6]], 'turns': [], 'touch': [[0.2, 0.9]],
                                                                                'led': []}
+
+
+# --- GIFs for a README (stomp_render --gif) ---
+
+BACKDROP = (0x0d, 0x11, 0x17)
+
+
+def lzw_decode(data, minimum, n):
+    clear = 1 << minimum
+    bits, pos, size, out, prev = int.from_bytes(data, 'little'), 0, minimum + 1, [], None
+    table = [[i] for i in range(clear)] + [None, None]
+    while pos + size <= len(data) * 8:
+        code = bits >> pos & ((1 << size) - 1)
+        pos += size
+        if code == clear:
+            table, size, prev = [[i] for i in range(clear)] + [None, None], minimum + 1, None
+            continue
+        if code == clear + 1:
+            break
+        entry = table[code] if code < len(table) else prev + prev[:1]
+        if prev is not None:
+            table.append(prev + entry[:1])
+        out += entry
+        prev = entry
+        if len(table) == 1 << size and size < 12:
+            size += 1
+    return out[:n]
+
+
+def gif_frames(blob):
+    """A GIF's size, its loop count and each frame as (delay in hundredths, its rectangle, whether it has a transparent colour,
+    the picture shown once it is drawn over the ones before)."""
+    assert blob[:6] == b'GIF89a' and blob[-1] == 0x3b
+    w, h, packed = struct.unpack('<HHB', blob[6:11])
+    assert not packed & 0x80, 'no global colour table'
+    pos, canvas, out, loop, gce = 13, np.zeros((h, w, 3), np.uint8), [], None, None
+
+    def blocks():
+        nonlocal pos
+        subs = []
+        while blob[pos]:
+            subs.append(blob[pos + 1:pos + 1 + blob[pos]])
+            pos += 1 + blob[pos]
+        pos += 1
+        return subs
+    while blob[pos] != 0x3b:
+        kind = blob[pos]
+        pos += 1
+        if kind == 0x21:
+            label = blob[pos]
+            pos += 1
+            subs = blocks()
+            if label == 0xf9:
+                gce = subs[0]
+            elif label == 0xff and subs[0] == b'NETSCAPE2.0':
+                loop = struct.unpack('<H', subs[1][1:3])[0]
+            continue
+        assert kind == 0x2c
+        x, y, fw, fh, packed = struct.unpack('<HHHHB', blob[pos:pos + 9])
+        pos += 9
+        n = 2 << (packed & 7)
+        palette = np.frombuffer(blob[pos:pos + 3 * n], np.uint8).reshape(n, 3)
+        pos += 3 * n
+        minimum = blob[pos]
+        pos += 1
+        idx = np.array(lzw_decode(b''.join(blocks()), minimum, fw * fh))
+        assert len(idx) == fw * fh, 'the frame has all its pixels'
+        idx = idx.reshape(fh, fw)
+        assert gce[0] >> 2 & 7 == 1, 'each frame stays under the next'
+        shown = idx != (gce[3] if gce[0] & 1 else -1)
+        canvas[y:y + fh, x:x + fw][shown] = palette[idx[shown]]
+        out.append((struct.unpack('<H', gce[1:3])[0], (x, y, fw, fh), bool(gce[0] & 1), canvas.copy()))
+        gce = None
+    return w, h, loop, out
+
+
+def test_render_makes_a_gif_of_seconds_of_the_take_and_of_the_screen_alone(tmp_path, monkeypatch):
+    take = tmp_path / 'take'
+    (tmp_path / 'take.json').write_text(json.dumps({'frames': [0, 12], 'events': [], 'leds': []}))
+    runs = []
+    monkeypatch.setattr(hm, 'build_tool', lambda src, exe: 'stomp_render')
+    monkeypatch.setattr(hm.subprocess, 'run', lambda a, **kw: runs.append(a))
+    assert hm.render(str(take), gif=(2, 8.5)) == str(tmp_path / 'take.gif')
+    assert hm.render(str(take), gif=(2, 8.5), screen=True) == str(tmp_path / 'take.gif')
+    assert hm.render(str(take)) == str(tmp_path / 'take.mp4')
+    assert runs[0][:4] == ['stomp_render', str(take), str(tmp_path / 'take-tracks.json'), str(tmp_path / 'take.gif')]
+    assert runs[0][6:] == ['--gif', '2', '8.5'] and runs[1][6:] == ['--gif', '2', '8.5', '--screen'] and len(runs[2]) == 6
+
+
+def test_the_gif_command_finds_a_bare_take_in_recordings(tmp_path, monkeypatch, capsys):
+    got = {}
+
+    def render(record, skin, gif, screen):
+        got.update(record=record, gif=gif, screen=screen)
+        (tmp_path / 'tour.gif').write_bytes(b'x' * 6_000_000)
+        return str(tmp_path / 'tour.gif')
+    monkeypatch.setattr(hm, 'RECORDINGS', str(tmp_path))
+    monkeypatch.setattr(hm, 'render', render)
+    monkeypatch.setattr('sys.argv', ['hx_mirror.py', 'gif', 'tour', '3', '9', '--screen'])
+    hm.main()
+    assert got == {'record': str(tmp_path / 'tour'), 'gif': (3.0, 9.0), 'screen': True}
+    assert 'over the 5 MB' in capsys.readouterr().out
+    (tmp_path / 'bpm.mov').write_bytes(b'')
+    monkeypatch.setattr('sys.argv', ['hx_mirror.py', 'gif', 'bpm', '1', '7'])
+    hm.main()
+    assert got == {'record': str(tmp_path / 'bpm.mov'), 'gif': (1.0, 7.0), 'screen': False}, 'the take named without its .mov'
+
+
+@pytest.fixture(scope='module')
+def stomp_render(tmp_path_factory):
+    """stomp_render built from the source, with a made-up photo and its skin: noise, so every colour table and LZW's table fill."""
+    if sys.platform != 'darwin' or not shutil.which('swiftc'):
+        pytest.skip('stomp_render needs macOS and swiftc')
+    d = tmp_path_factory.mktemp('render')
+    exe = hm.build_tool(hm.RENDER_SRC, str(d / 'stomp_render'))
+    rng = np.random.default_rng(1)
+    (d / 'photo.png').write_bytes(hm.png(rng.integers(0, 256, (200, 300, 3), np.uint8)))
+    (d / 'skin.json').write_text(json.dumps({
+        'photo': 'photo.png', 'crop': [0, 0, 300, 200], 'screen': [100, 40, 80, 60], 'knobs': [[50, 150, 15]],
+        'volume': [250, 50, 15], 'volume_at': 0.5, 'buttons': {}, 'rings': [[200, 130, 40, 40]], 'badges': []}))
+    quads = np.zeros((hm.H, hm.W, 3), np.uint8)
+    quads[:hm.H // 2, :hm.W // 2] = (255, 0, 0)
+    quads[:hm.H // 2, hm.W // 2:] = (0, 255, 0)
+    quads[hm.H // 2:, :hm.W // 2] = (0, 0, 255)
+    quads[hm.H // 2:, hm.W // 2:] = (255, 255, 255)
+    (d / 'screen.png').write_bytes(hm.png(quads))
+    (d / 'tracks.json').write_text(json.dumps({'duration': 2, 'controls': {
+        'knob1': {'turns': [[0.2, 3]]}, 'fs1': {'led': [[0, 0, 0], [0.5, 0x0000ff, 1]]}}}))
+
+    def run(name, start, end, *more):
+        out = d / name
+        subprocess.run([exe, str(d / 'screen.png'), str(d / 'tracks.json'), str(out), str(d / 'skin.json'), str(d), '--gif',
+                        str(start), str(end), *more], check=True, capture_output=True)
+        return gif_frames(out.read_bytes())
+    return run
+
+
+def test_a_gif_is_480_by_360_looping_with_its_frames_adding_up_to_the_window(stomp_render):
+    w, h, loop, frames = stomp_render('unit.gif', 0, 1)
+    assert (w, h, loop) == (480, 360, 0)
+    assert sum(f[0] for f in frames) == 100
+    assert frames[0][1] == (0, 0, 480, 360) and not frames[0][2], 'the first frame is whole, so the loop starts clean'
+    assert all(f[2] and f[1][2] * f[1][3] < 480 * 360 / 4 for f in frames[1:]), 'the rest only where the knob and ring changed'
+    assert len(frames) < 15, 'a still stretch is one frame held'
+    assert tuple(frames[0][3][0, 0]) == BACKDROP and tuple(frames[0][3][-1, -1]) == BACKDROP, 'the unit sits on the page colour'
+
+
+def test_a_gifs_changes_draw_the_same_picture_as_a_whole_frame(stomp_render):
+    *_, frames = stomp_render('unit.gif', 0, 1)
+    *_, last = stomp_render('end.gif', 0.9, 1)
+    diff = np.abs(frames[-1][3].astype(int) - last[0][3].astype(int))
+    assert diff.mean() < 8 and diff.max() < 96, 'only the colour tables differ: a misplaced change would differ by up to 255'
+
+
+def test_a_screen_gif_is_the_screen_alone_in_its_exact_colours(stomp_render):
+    w, h, _, frames = stomp_render('screen.gif', 0, 1, '--screen')
+    assert len(frames) == 1 and frames[0][0] == 100, 'a still screen is one frame'
+    img = frames[0][3]
+    assert [tuple(img[y, x]) for y, x in ((90, 120), (90, 360), (270, 120), (270, 360))] == [
+        (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 255)]
 
 
 # --- the command, in the M4 ---
