@@ -1,6 +1,7 @@
 @ long_press.s - long-press footswitch actions: in Stomp mode, a latching stomp footswitch 1..5 with a Hold action set acts on release
 @ when tapped (its press is held back and replayed on the click) and runs the action when held for 1 s: the tuner, a press of FS4/FS5,
-@ or a virtual footswitch FS6..FS10, which toggles the blocks assigned to MIDI CC 20..24 (Bypass Assign > MIDI In, where they read FS6..FS10 under the label FootswIn).
+@ or a press of a virtual footswitch FS6..FS10, which runs its FS6..FS10 Function: as Stomp it toggles the blocks assigned to MIDI CC 20..24
+@ (Bypass Assign > MIDI In, where they read FS6..FS10 under the label FootswIn), and any other function runs in the stock dispatch's code, as footswitch 1..5's would.
 @ tools/features/long_press.py owns the footswitch event handler 0x28dd1978 and enters lp_event with the stock handler in r2.
 .syntax unified
 .thumb
@@ -11,6 +12,11 @@
 .equ HOLD, 5
 .equ FS1_CODE, 12                   @ footswitches 1..5 are key codes 12..16
 .equ STOMP, 2                       @ the footswitch function that toggles blocks
+.equ TUNER, 0                       @ FS6..FS10 Function's value in TAP/Tunr's place; the others are function value + 1
+.equ TOGGLE_EXP, 12                 @ the function that switches EXP 1/2, then toggles its blocks
+.equ SWITCH, 0x28dd14e1             @ the dispatch 0x28dd14a0's tbh on the function - 1; tools/features/long_press.py's SWITCH
+.equ TOGGLE_EXP_BODY, 0x28dd17fd    @ its TogglEXP case past the press check; long_press.py's TOGGLE_EXP
+.equ PRESSED, 0x78                  @ the handler's object: footswitch k pressed at +0x78 + k
 .equ SWITCHES, 5                    @ footswitches 1..5, 4 and 5 the external pair
 .equ VIRTUAL, 4                     @ Hold values 4..8 are FS6..FS10
 .equ VIRTUAL_CC, 20                 @ FS6's MIDI CC; tools/features/long_press.py's VIRTUAL_CC
@@ -62,16 +68,10 @@ other_switch:
     b out
 virtual_switch:
     subs r0, #VIRTUAL
-    bl toggle_cc
+    bl virtual_press
     b out
-tuner:                              @ as the stock hold of TAP does it
-    movs r0, #5
-    ldr r3, =0x28d96135
-    blx r3
-    cmp r0, #0
-    bne out
-    ldr r3, =0x28d96589
-    blx r3
+tuner:
+    bl open_tuner
     b out
 press:
     mov r0, r7
@@ -120,6 +120,77 @@ replay:                             @ r0 a footswitch code: its press, then its 
     blx r6
     add sp, #8
     pop {r7, pc}
+
+virtual_press:                      @ r0 virtual footswitch 0..4: its function, for footswitch r7 (r5 the handler's object)
+    push {r4, r9, r10, lr}
+    mov r4, r0
+    adr r3, function_ids
+    ldrh.w r0, [r3, r4, lsl #1]
+    movs r1, #SETTING_LONG_PRESS_FS6_FUNCTION_MAX
+    adr r2, function_defaults
+    ldrb r2, [r2, r4]
+    bl hxtra_setting_get
+    cmp r0, #TUNER
+    beq vp_tuner
+    adds r0, #1
+    add.w r10, r5, r7
+    movs r1, #0
+    strb.w r1, [r10, #PRESSED]
+    cmp r0, #STOMP
+    beq vp_toggle
+    cmp r0, #TOGGLE_EXP
+    beq vp_exp
+    subs r9, r0, #1
+    movs r0, #1                     @ a press, then a release: the preset and snapshot steps act on the release
+    strb.w r0, [r10, #PRESSED]
+    lsls r1, r7, #1
+    ldr r2, =SWITCH
+    mov r3, r9
+    bl stock_case
+    movs r0, #0
+    strb.w r0, [r10, #PRESSED]
+    lsls r1, r7, #1
+    ldr r2, =SWITCH
+    mov r3, r9
+    bl stock_case
+    b vp_out
+vp_exp:                             @ unpressed past its check, so its stomp tail leaves footswitch r7's blocks alone
+    mov r1, r10
+    ldr r2, =TOGGLE_EXP_BODY
+    bl stock_case
+vp_toggle:
+    mov r0, r4
+    bl toggle_cc
+    b vp_out
+vp_tuner:
+    bl open_tuner
+vp_out:
+    pop {r4, r9, r10, pc}
+
+open_tuner:                         @ as the stock hold of TAP does it
+    push {r3, lr}
+    movs r0, #5
+    ldr r3, =0x28d96135
+    blx r3
+    cmp r0, #0
+    bne open_tuner_out
+    ldr r3, =0x28d96589
+    blx r3
+open_tuner_out:
+    pop {r3, pc}
+
+stock_case:                         @ r1 its r5, r2 the dispatch's code to enter, r3 its r3: run as 0x28dd14a0(r5, r7) does, back here
+    push {r4, r5, r6, lr}           @ the dispatch's own frame, which its exits pop
+    sub sp, #16
+    mov r6, r5
+    mov r4, r7
+    mov r5, r1
+    strd r2, r3, [sp]
+    ldr r3, =0x28d9607d             @ the footswitch functions, k's at +4 + 2k
+    blx r3
+    add.w r0, r0, r4, lsl #1
+    ldrd r12, r3, [sp]
+    bx r12
 
 toggle_cc:                          @ r0 virtual footswitch 0..4: its blocks on MIDI CC 20 + r0 go to the opposite of the first one's state
     push {r4-r8, lr}
@@ -287,6 +358,14 @@ hold_ids:
 hold_defaults:
     .byte SETTING_LONG_PRESS_FS1_DEFAULT, SETTING_LONG_PRESS_FS2_DEFAULT, SETTING_LONG_PRESS_FS3_DEFAULT
     .byte SETTING_LONG_PRESS_FS4_DEFAULT, SETTING_LONG_PRESS_FS5_DEFAULT
+.balign 2
+function_ids:
+    .hword SETTING_LONG_PRESS_FS6_FUNCTION, SETTING_LONG_PRESS_FS7_FUNCTION, SETTING_LONG_PRESS_FS8_FUNCTION
+    .hword SETTING_LONG_PRESS_FS9_FUNCTION, SETTING_LONG_PRESS_FS10_FUNCTION
+.balign 4
+function_defaults:
+    .byte SETTING_LONG_PRESS_FS6_FUNCTION_DEFAULT, SETTING_LONG_PRESS_FS7_FUNCTION_DEFAULT, SETTING_LONG_PRESS_FS8_FUNCTION_DEFAULT
+    .byte SETTING_LONG_PRESS_FS9_FUNCTION_DEFAULT, SETTING_LONG_PRESS_FS10_FUNCTION_DEFAULT
 .balign 4
 pending:                            @ per footswitch 0..4: its press was held back
     .space 8

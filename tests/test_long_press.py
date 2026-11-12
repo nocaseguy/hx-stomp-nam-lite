@@ -8,11 +8,12 @@ import features
 import patch_menu as pm
 import setting_ids
 from features import long_press
-from firmware import assert_virtual, branch_target, built, built_e0
+from firmware import assert_virtual, branch_target, built, built_e0, reader, stock_e0
 
 MODS = features.load()
 IDS = setting_ids.by_name()
 HOLD_IDS = [IDS[f'long_press.fs{n}'] for n in (1, 2, 3, 4, 5)]
+FUNCTION_IDS = [IDS[f'long_press.fs{n}_function'] for n in (6, 7, 8, 9, 10)]
 HOME_CTOR_CALL, HOME_CTOR = 0x28d96c44, 0x28dc91d0
 
 CODE, OBJ, EVENT, LISTS = 0x28e60000, 0x28128a80, 0x28600000, 0x28128b4c
@@ -25,6 +26,10 @@ FS6 = 4                             # FS6..FS10: 4..8
 GET_CONTROLLERS, CONTROLLERS, LOCK, UNLOCK = 0x28d9608c, 0x28480000, 0x28e24c00, 0x28e24bb0
 TONE_OF, TONE, GET_BYPASS, CONTROL = 0x28d92a98, 0x28490000, 0x28e04514, 0x28dde408
 ON, OFF = 0x3f800000, 0
+GET_FUNCTIONS, FUNCTIONS_BASE = 0x28d9607c, 0x28128a70
+DISPATCH_EXIT = bytes.fromhex('04b0 70bd')      # add sp,#16; pop {r4,r5,r6,pc}: how the dispatch's cases return
+TUNER_FN, STOMP, BANK_UP, PRESET_UP, SNAPSHOT_DN, FS_MODE_UP, TOGGLE_EXP = 0, 1, 2, 4, 7, 8, 11     # FS6..FS10 Function values
+TAP_CORE = 0x28d9bfa8
 
 
 class Handler:
@@ -52,6 +57,23 @@ class Handler:
             self.node(i)
         for k in range(5):
             self.function(k, 2)
+        self.cases = []
+        self.m.stub(GET_FUNCTIONS, lambda m: m.reg('r0', FUNCTIONS_BASE))
+        for at in (long_press.SWITCH + 0xe, long_press.TOGGLE_EXP):
+            self.m.stub(at, lambda m, at=at: self._case(m, at), code=DISPATCH_EXIT)
+
+    def _case(self, m, at):
+        """Entered as the dispatch is there: its frame on the stack, r4 k, r6 the object, r0 footswitch k's function slot."""
+        k = m.reg('r4')
+        assert m.reg('r6') == OBJ and m.reg('r0') == FUNCTIONS_BASE + 2 * k
+        r5 = m.reg('r5')
+        pressed = m.read(OBJ + 0x78 + k, 1)[0]
+        if at == long_press.TOGGLE_EXP:
+            assert r5 == OBJ + k, 'TogglEXP reads the pressed byte at r5 + 0x78'
+            self.cases.append(('exp', k, pressed))
+        else:
+            assert r5 == 2 * k
+            self.cases.append(('switch', k, m.reg('r3') + 1, pressed))
 
     def _get_value(self, m):
         pid, out = m.reg('r0'), m.reg('r1')
@@ -94,6 +116,9 @@ class Handler:
     def hold_action(self, n, action):
         self.settings[HOLD_IDS[n - 1]] = action
 
+    def virtual_function(self, n, value):
+        self.settings[FUNCTION_IDS[n - 6]] = value
+
     def event(self, code, kind, source=1):
         self.m.write(EVENT, bytes([source, code, 0, 0]) + struct.pack('<I', kind))
         self.m.call(CODE + self.sym['lp_event'], EVENT, OBJ, STOCK | 1)
@@ -122,13 +147,38 @@ def h(m4emu):
 
 
 def test_hold_settings():
-    assert len(long_press.SETTINGS) == 5
-    for n, s in zip((1, 2, 3, 4, 5), long_press.SETTINGS):
+    assert long_press.SETTINGS[:5] == long_press.HOLDS
+    for n, s in zip((1, 2, 3, 4, 5), long_press.HOLDS):
         assert (s.key, s.label, s.default) == (f'fs{n}', f'Function\nFS{n} Hold'.encode(), n + 3), 'FS1..FS5 Hold default to FS6..FS10'
         assert s.values == (b'Off', b'Tuner', b'FS4', b'FS5', b'FS6', b'FS7', b'FS8', b'FS9', b'FS10')
         assert all(len(v) <= 8 for v in s.values)
     assert HOLD_IDS == [0xd2, 0xd3, 0xd4, 0xd5, 0xd6], 'a unit keeps a setting\'s value by ID: never move it once a build has used it'
     assert long_press.FLAG == 'HX_LONG_PRESS' and long_press.VIRTUAL_CC == 20
+
+
+def test_function_settings():
+    """FS6..FS10 Function: FS3..FS5 Function's values with Tuner for TAP/Tunr, Stomp N for this footswitch."""
+    assert long_press.SETTINGS[5:] == long_press.FUNCTIONS
+    for n, s in zip((6, 7, 8, 9, 10), long_press.FUNCTIONS):
+        assert (s.key, s.label, s.default) == (f'fs{n}_function', f'Function\nFS{n}'.encode(), STOMP)
+        assert s.values == (b'Tuner', f'Stomp {n}'.encode(), b'Bank Up', b'Bank Dn', b'PresetUp', b'PresetDn', b'SnpshtUp',
+                            b'SnpshtDn', b'FS Mode>', b'<FS Mode', b'AllBypas', b'TogglEXP')
+        assert all(len(v) <= 8 for v in s.values)
+    assert FUNCTION_IDS == [0xda, 0xdb, 0xdc, 0xdd, 0xde], 'a unit keeps a setting\'s value by ID: never move it once a build has used it'
+
+
+@pytest.mark.firmware
+def test_the_values_follow_the_stock_ones_and_the_dispatch_switches_on_value_plus_one():
+    """FS3 Function's stock value strings (20-byte slots) are FS6's values from Stomp on, each at its stock value, and the
+    dispatch's bytes are as expected."""
+    e0 = stock_e0()
+    values = long_press.FUNCTIONS[0].values
+    first = e0.index(b'TAP/Tunr' + b'\0' * 12 + b'Stomp 3\0')
+    stock = [e0[first + 20 * i:].split(b'\0')[0] for i in range(12)]
+    assert stock[0] == b'TAP/Tunr' and stock[1:] == [b'Stomp 3'] + list(values[2:])
+    read = reader(e0)
+    assert read(long_press.SWITCH, len(long_press.SWITCH_STOCK)) == long_press.SWITCH_STOCK
+    assert read(long_press.TOGGLE_EXP, len(long_press.TOGGLE_EXP_STOCK)) == long_press.TOGGLE_EXP_STOCK
 
 
 def test_with_no_hold_action_every_event_reaches_the_stock_handler_unchanged(h):
@@ -286,6 +336,63 @@ def test_an_unset_hold_reads_its_default(h):
     assert h.hold(14) == [('control', CONTROLLERS, 8, 22, ON)]
 
 
+def test_a_virtual_footswitch_on_stomp_toggles_its_cc_and_skips_the_dispatch(h):
+    h.hold_action(1, FS6)
+    h.virtual_function(6, STOMP)
+    h.node(5, kind=2, cc=20, block=7)
+    h.bypassed[7] = 1
+    assert h.hold(12) == [('get', 7), ('control', CONTROLLERS, 8, 20, ON)]
+    assert h.cases == []
+
+
+@pytest.mark.parametrize('value', [BANK_UP, PRESET_UP, SNAPSHOT_DN, FS_MODE_UP, 10])
+def test_a_virtual_footswitch_runs_its_function_as_a_press_and_release_of_the_held_footswitch(h, value):
+    """The dispatch's switch, for footswitch k, with function value + 1: pressed, then released, as a stock press and release."""
+    h.hold_action(2, FS6 + 2)
+    h.virtual_function(8, value)
+    assert h.hold(13) == []
+    assert h.cases == [('switch', 1, value + 1, 1), ('switch', 1, value + 1, 0)]
+    assert h.m.read(OBJ + 0x78 + 1, 1) == b'\0', 'footswitch 2 left unpressed, as its held-back press left it'
+    assert h.seen == [(1, 13, RELEASE)]
+
+
+@pytest.mark.parametrize('n, code', [(1, 12), (5, 16)])
+def test_each_virtual_footswitch_has_its_own_function_and_runs_on_the_held_footswitch(h, n, code):
+    h.hold_action(n, FS6 + 4)
+    h.virtual_function(10, PRESET_UP)
+    h.virtual_function(9, BANK_UP)
+    h.hold(code)
+    assert h.cases == [('switch', n - 1, PRESET_UP + 1, 1), ('switch', n - 1, PRESET_UP + 1, 0)]
+
+
+def test_toggle_exp_switches_exp_unpressed_then_toggles_the_cc(h):
+    """TogglEXP's body past its press check, unpressed so its stomp tail leaves the held footswitch's blocks alone, then CC 20 + n."""
+    h.hold_action(3, FS6 + 1)
+    h.virtual_function(7, TOGGLE_EXP)
+    h.m.u8(OBJ + 0x78 + 2, 1)
+    h.node(1, kind=2, cc=21, block=3)
+    h.bypassed[3] = 0
+    assert h.hold(14) == [('get', 3), ('control', CONTROLLERS, 8, 21, OFF)]
+    assert h.cases == [('exp', 2, 0)]
+
+
+def test_tuner_opens_the_tuner_as_a_tuner_hold_does(h):
+    h.m.stub(TAP_CORE)
+    h.hold_action(3, FS6 + 4)
+    h.virtual_function(10, TUNER_FN)
+    assert h.run(*held(14)) == ([(14, RELEASE)], 1)
+    assert h.m.calls(GUARD)[0][0] == 5 and not h.m.calls(TAP_CORE) and h.cases == []
+    h.guard = 1
+    assert h.run(*held(14)) == ([(14, RELEASE)], 0)
+
+
+def test_a_stored_function_out_of_range_reads_stomp(h):
+    h.hold_action(1, FS6)
+    h.virtual_function(6, 12)
+    assert h.hold(12) == [('control', CONTROLLERS, 8, 20, ON)]
+    assert h.cases == []
+
+
 BUF = 0x28610000
 
 
@@ -356,6 +463,7 @@ def test_build_owns_the_handler_and_hands_lp_event_the_stock_handler():
     lp_event = branch_target(veneer + 8, read(veneer + 8, 4))
     assert read(lp_event, 2) == bytes.fromhex('2de9')    # push.w {r4-r8,lr}
     assert read(HOME_CTOR_CALL, 4) == pm.bl(HOME_CTOR_CALL, HOME_CTOR), 'no boot hook: unset virtual settings read their defaults'
+    assert read(long_press.SWITCH, len(long_press.SWITCH_STOCK)) == long_press.SWITCH_STOCK, 'the dispatch stays stock: lp enters it'
     assert read(long_press.MIDI_IN_FIRST, 2) == bytes([20, 0x22]), 'MIDI In: the first step up from Off is FS6\'s CC 20'
     for site in long_press.CC_TEXT_CALLS:
         assert read(site, 4) != pm.bl(site, long_press.ITOA), f'the CC text at {site:#x} is chained'
@@ -364,7 +472,7 @@ def test_build_owns_the_handler_and_hands_lp_event_the_stock_handler():
 
 
 @pytest.mark.firmware
-def test_build_serves_the_holds_as_virtual_settings():
+def test_build_serves_the_holds_and_functions_as_virtual_settings():
     e0 = built_e0({'HX_LONG_PRESS': '1'})
     for s in long_press.SETTINGS:
         assert_virtual(e0, long_press, s)
