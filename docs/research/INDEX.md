@@ -60,6 +60,7 @@ Before writing anything, read [conventions.md](conventions.md): the status tags,
 | [features/long-press.md](features/long-press.md) | holds per footswitch, FS6..FS10 on CC 20..24, CC text, the footswitch probes | working on long press, or footswitch holds |
 | [features/more-snapshots.md](features/more-snapshots.md) | bank B (snapshots 4..6), the bank marker, saving and the preset file key, next and previous across the banks | working on more snapshots |
 | [features/metronome.md](features/metronome.md) | the Metronome block: model, browser folder, look, kernel | working on the Metronome, or adding an effect model |
+| [features/tap-color.md](features/tap-color.md) | Tap LED Color: the TAP ring, icon and label in a palette colour | working on the TAP footswitch's look |
 | [features/boot-splash.md](features/boot-splash.md) | a custom boot picture, the boot line's text, colour emoji | working on the boot screen |
 
 ## Other docs

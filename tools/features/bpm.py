@@ -1,5 +1,5 @@
 """BPM: the tempo as text at the top left of the Home screen, and a beat dot that follows the TAP footswitch's ring (src/m4/bpm.s)."""
-from features import Setting
+from features import Setting, tap_color
 import patch_menu as pm
 
 FLAG = 'HX_BPM'
@@ -8,7 +8,8 @@ ICON = 'Icon_Tempo'
 ORDER = 20
 SETTINGS = (     # 'Position\nDot' reads Dot over Position: the line after the newline is the top one
     Setting('font', b'Size\nFont', (b'XL', b'L', b'M', b'S'), default=1),
-    Setting('color', b'Color', (b'White', b'Gray', b'Red', b'Orange', b'Yellow', b'Green', b'Cyan', b'Blue', b'Purple')),
+    Setting('color', b'Color', (b'White', b'Gray', b'Red', b'Orange', b'Yellow', b'Green', b'Cyan', b'Blue', b'Purple',
+                                b'Tempo')),
     Setting('dot', b'Position\nDot', (b'Left', b'Right', b'Both')),
 )
 
@@ -25,7 +26,9 @@ LED_SEND, LED_SEND_STOCK, LED_SEND_LIT, LED_SEND_LIT_VALUE = 0x28d98f74, bytes.f
 
 
 def apply(p):
-    m = p.module('src/m4/bpm.s')
+    tap = p.modules.get(tap_color.MODULE)     # Color Tempo takes the TAP footswitch's colour, stock red without Tap LED Color
+    now = tap[tap_color.NOW] if tap else 0
+    m = p.module('src/m4/bpm.s', inc={'tap.inc': f'.equ TAP_NOW, {now:#x}\n'})
     p.chain_bl(HOME_CTOR_CALL, HOME_CTOR, after=m['bpm_construct'])
     p.chain_ptr(HOME_PAINT_LIT, HOME_PAINT, before=m['bpm_before'], after=m['bpm_after'])
     for site in STORE_WRITE_CALLS:

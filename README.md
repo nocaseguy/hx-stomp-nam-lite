@@ -35,28 +35,30 @@ Each feature is a module in `tools/features/`; the Metronome's block itself, wit
 | **Breathing line** | `HX_BREATHING_LINE=1` | Just for fun: the line comes alive in the colours, motion and speed you pick (Breathe, Cylon, Comet, Heart, Sparkle). See [Breathing line](#breathing-line). | Home screen: the line across the middle, between the signal flow and the knobs. Settings: Global Settings > Breathing Line. |
 | **Long press** | `HX_LONG_PRESS=1` | Hold a footswitch for 1 s for a second action: the tuner, FS4 or FS5, or a virtual footswitch FS6–FS10, each with a stock footswitch function of its own. A tap still toggles the switch's own blocks. See [Long press](#long-press). | FS1–FS5, in Stomp footswitch mode. Settings: Global Settings > Footswitches, pages 2 to 5 (FS1 Hold Function … FS5 Hold Function, FS6 Function … FS10 Function). |
 | **More snapshots** | `HX_MORE_SNAPSHOTS=1` | Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6; next and previous snapshot step through all six. Snapshots 4–6 are saved with the preset. See [More snapshots](#more-snapshots). | The snapshot footswitches, with Footswitch Mode on Snapshot; in 4–6, the camera icon at the top right and the footswitch labels show the bank. No settings. |
+| **Tap LED color** | `HX_TAP_COLOR=1` | The TAP footswitch in a colour of your choice: its blinking ring, and its icon and label on the Home screen. See [Tap LED color](#tap-led-color). | The TAP footswitch, in Stomp footswitch mode. Settings: Global Settings > Displays, Tap LED Color, under Tap Tempo LED. |
 | **Metronome** | `HX_CLICK=1` | A block that plays a click on every beat of the tempo, with an optional accent on the downbeat. HX Stomp only. See [Metronome](#metronome). | Model browser: Looper > Metronome > Metronome. Its settings are the block's knobs: Time, Level, Accent and Thru. |
 | **GR meter** | `HX_GR=1` | A gain-reduction meter on the Home screen, lit by the compressor you turn it on in. With it, NAM A2 Lite runs up to two blocks instead of three. HX Stomp only. | Knobs on the Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester and Red Squeeze compressors: Mtr Pos (Middle, Top, Left, Bottom, Right), Mtr Dir (Normal, Reverse) and Mtr Thk (0 … 20; 0, the default, is off). |
 | **Boot screen** | `--splash`, `--splash-text` | The stock boot picture reads "HXtra STOMP" and the boot text "v1.0.0". Your own boot picture and boot text, with emoji. See [Boot screen](#boot-screen-hx-stomp-only). | The screen at power-on, once the firmware starts. Set when you build: no settings on the HX Stomp. |
 
 ```sh
-HX_TUNER=1 HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
+HX_TUNER=1 HX_BPM=1 HX_DSP_METER=1 HX_MORE_SNAPSHOTS=1 HX_TAP_COLOR=1 python3 build.py path/to/HX_Stomp_v3.80.0_0x103966115.hxf
 ```
 
 ### Custom settings
 
-The other features' settings are in Global Settings, each feature in a section of its own after Displays (turn the knob right past Displays): **BPM Display**, then **Breathing Line**, each with its own icon by the title (see [Icons](docs/icons.md), which also makes an icon library of every stock icon from your firmware file). The section strip at the top has room for the six stock sections only, so none of its icons is lit while you are in a feature's. A build with none of these features has no sections after Displays. Long press's settings are in **Footswitches** instead, after FS5 Function.
+The other features' settings are in Global Settings, each feature in a section of its own after Displays (turn the knob right past Displays): **BPM Display**, then **Breathing Line**, each with its own icon by the title (see [Icons](docs/icons.md), which also makes an icon library of every stock icon from your firmware file). The section strip at the top has room for the six stock sections only, so none of its icons is lit while you are in a feature's. A build with none of these features has no sections after Displays. Long press's settings are in **Footswitches** instead, after FS5 Function, and Tap LED color's in **Displays**, under Tap Tempo LED.
 
 | Feature | Setting | Values | What it does |
 |---|---|---|---|
 | BPM | **Font Size** | XL, **L** (default), M, S | The tempo's size. XL is digits only: no ` X` with MIDI clock and nothing with no tempo |
-| BPM | **Color** | **White** (default), Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple | The tempo's and the dot's colour |
+| BPM | **Color** | **White** (default), Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo | The tempo's and the dot's colour. Tempo follows the TAP footswitch's colour (Tap LED Color; stock red in a build without it) |
 | BPM | **Dot Position** | **Left** (default), Right, Both | Where the beat dot sits, beside the preset number |
 | Long press | **FS1 Hold Function** … **FS5 Hold Function** | Off, Tuner, FS4, FS5, FS6 … FS10 (defaults FS6 … FS10) | What holding that footswitch for 1 s does. FS4 and FS5 are external switches. In Global Settings > Footswitches, pages 2 and 3, after FS5 Function. |
 | Long press | **FS6 Function** … **FS10 Function** | Tuner, Stomp 6 … 10, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode>, <FS Mode, AllBypas, TogglEXP (default Stomp) | What that virtual footswitch does, as FS3 … FS5 Function do for the real ones, with Tuner in place of TAP/Tunr. In Global Settings > Footswitches, pages 4 and 5. |
 | Breathing line | **Color** | White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, **Rainbow** (default) | The line's colours. The gradients flow along the line: Fire is red, orange and yellow; Ice blue, cyan and white; Sunset purple, pink and orange; Ocean deep blue, blue and aqua; Aurora green, sky blue and violet; Neon magenta, indigo and cyan; Rainbow every hue. Where the motion dims the line, the colours dim with it. |
 | Breathing line | **Type** | Off, Steady, **Breathe** (default), Cylon, Comet, Heart, Sparkle | How it moves. Breathe slowly fades the whole line in and out. Cylon sweeps a wide light from end to end and back, slowing at the ends, with a trail behind it. Comet shoots a light across with a long tail. Heart beats lub-dub from the middle. Sparkle twinkles at random. Steady holds the full colour. Off gives back the stock line. |
 | Breathing line | **Speed** | 1 … 10, Tempo (default **4**) | One cycle takes 8 s at 1, 4 s at 4, 0.8 s at 10. Tempo follows the tempo (Global BPM or Preset BPM, as Tempo Select says): a beat a cycle for Heart, two for Breathe, Cylon and Comet, four for Steady, eight for Sparkle; with no tempo it runs at 4. |
+| Tap LED color | **Tap LED Color** | **Red** (default), DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random | The TAP footswitch's colour: its ring as it blinks the tempo, and its switch icon and TAP/TUNER label on the Home screen. Rainbow fades the ring a small step round the colour wheel at each beat, from red through orange, yellow, green, blue, indigo and violet and back; Random picks a new colour at each beat. Both keep a white label. In Global Settings > Displays, under Tap Tempo LED. |
 
 Every feature's settings are virtual settings: HXtra serves their IDs itself and keeps their values in spare records of the Global Settings store, which the HX Stomp saves with the rest. `tools/setting_ids.py` assigns each its ID and place. A setting no build has stored yet, or whose stored value is out of range, shows its default. Builds before virtual settings kept these settings on real IDs, so the first virtual build starts them on their defaults.
 
@@ -115,6 +117,18 @@ With Footswitch Mode on Snapshot, the three footswitches select snapshots 1–3 
 - **Stock firmware and HX Edit:** a preset saved with 4–6 still loads on a stock firmware, as snapshots 1–3, and the stock firmware drops 4–6 if it saves the preset again. HX Edit opens, exports and imports these presets, but its exports (`.hlx`) and backups (`.hxb`) hold snapshots 1–3 only. Snapshots 4–6 live on the HX Stomp.
 - **Next and previous:** once a preset has snapshots 4–6 (saved with it, or made by a flip since it loaded), the SnpshtUp and SnpshtDn footswitch functions and MIDI CC 69's next and previous (values 8 and 9) step through all six: next on 3 goes to 4 and next on 6 to 1; previous on 1 goes to 6 and previous on 4 to 3. A preset with only 1–3 wraps within them, as stock.
 - **What else changes:** pressing the lit snapshot footswitch no longer does what Reselect Snapshot says. MIDI CC 69's snapshots 1–3 (values 0–2) and HX Edit's snapshot buttons work within the bank you're in.
+
+### Tap LED color
+
+The TAP footswitch's ring blinks red with the tempo, and its icon and label on the Home screen are red. Tap LED Color (Global Settings > Displays, under Tap Tempo LED) picks another colour for all three, from the colours the HX Stomp gives its other footswitches. Ran on an HX Stomp from RAM (Rainbow not yet).
+
+- **The colours** are the stock footswitch palette: each ring colour is the one the HX Stomp lights for a block of that colour, and each icon the stock switch icon of that colour.
+- **External MIDI clock:** the ring keeps the stock colour it blinks with then.
+- **Rainbow** moves the ring a small step round the colour wheel at each beat: 42 shades blended from the palette's Red, DkOrange, Yellow, Green, Blue and Violet (indigo falls between Blue and Violet), back to Red, about 21 s round at 120 BPM.
+- **Random** lights the ring in a random colour of the palette at each beat, never the same twice running.
+- With Rainbow and Random, the icon and label stay White, and a tap or a preset change re-lights the ring in its current colour without moving on.
+- **Tap Tempo LED** still decides whether the ring blinks at all.
+- **BPM Display's Color Tempo** gives the tempo and the beat dot the TAP footswitch's colour, the ring's current one with Rainbow and Random.
 
 ### Metronome
 
