@@ -276,7 +276,7 @@
           <li><i>Global Settings › Breathing Line</i></li>
           <li><b>Color</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): the colour or gradient of the line across the middle of the Home screen.</li>
           <li><b>Type</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): how it moves; Off gives back the stock line.</li>
-          <li><b>Speed</b> (1–10): one cycle takes 8 s at 1 and 0.8 s at 10.</li>
+          <li><b>Speed</b> (1–10, Tempo): one cycle takes 8 s at 1 and 0.8 s at 10; Tempo follows the tempo, a beat a cycle for Heart, two for Breathe, Cylon and Comet, four for Steady, eight for Sparkle.</li>
         </ul></div>
       <div class="feat" data-feature="HX_DSP_METER"><span data-i18n="feat.dsp"><b>DSP meter</b></span>
         <ul data-i18n="feat.dspS">
@@ -630,7 +630,7 @@ var LANGS = {
     "feat.bpm": "<b>Pantalla de BPM</b>",
     "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Tamaño de fuente</b> (XL, L, M, S): el tamaño del tempo en la parte superior izquierda de la pantalla Home.</li>\n          <li><b>Color</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): el color del tempo y del punto de pulso.</li>\n          <li><b>Posición del punto</b> (Left, Right, Both): dónde parpadea con TAP el punto de pulso, junto al número de preset.</li>\n        ",
     "feat.line": "<b>Línea que respira</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Color</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): el color o degradado de la línea que cruza el centro de la pantalla Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): cómo se mueve; Off devuelve la línea original.</li>\n          <li><b>Velocidad</b> (1–10): un ciclo dura 8 s con 1 y 0,8 s con 10.</li>\n        ",
+    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Color</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): el color o degradado de la línea que cruza el centro de la pantalla Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): cómo se mueve; Off devuelve la línea original.</li>\n          <li><b>Velocidad</b> (1–10, Tempo): un ciclo dura 8 s con 1 y 0,8 s con 10; Tempo sigue el tempo, un tiempo por ciclo en Heart, dos en Breathe, Cylon y Comet, cuatro en Steady, ocho en Sparkle.</li>\n        ",
     "feat.dsp": "<b>Medidor de DSP</b>",
     "feat.dspS": "\n          <li><i>Sin ajustes</i></li>\n          <li>Cada bloque muestra su parte del DSP, y la esquina superior derecha el total, en la vista Edit y en el explorador de modelos.</li>\n        ",
     "feat.gr": "<b>Medidor de reducción de ganancia</b>",
@@ -816,7 +816,7 @@ var LANGS = {
     "feat.bpm": "<b>Display de BPM</b>",
     "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Tamanho da fonte</b> (XL, L, M, S): o tamanho do tempo no canto superior esquerdo da tela Home.</li>\n          <li><b>Cor</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): a cor do tempo e do ponto de pulso.</li>\n          <li><b>Posição do ponto</b> (Left, Right, Both): onde o ponto de pulso pisca com o TAP, ao lado do número do preset.</li>\n        ",
     "feat.line": "<b>Linha que respira</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Cor</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): a cor ou o degradê da linha no meio da tela Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): como ela se move; Off devolve a linha original.</li>\n          <li><b>Velocidade</b> (1–10): um ciclo leva 8 s com 1 e 0,8 s com 10.</li>\n        ",
+    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Cor</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): a cor ou o degradê da linha no meio da tela Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): como ela se move; Off devolve a linha original.</li>\n          <li><b>Velocidade</b> (1–10, Tempo): um ciclo leva 8 s com 1 e 0,8 s com 10; Tempo segue o andamento, um tempo por ciclo em Heart, dois em Breathe, Cylon e Comet, quatro em Steady, oito em Sparkle.</li>\n        ",
     "feat.dsp": "<b>Medidor de DSP</b>",
     "feat.dspS": "\n          <li><i>Sem ajustes</i></li>\n          <li>Cada bloco mostra a sua parte do DSP, e o canto superior direito o total, na visão Edit e no navegador de modelos.</li>\n        ",
     "feat.gr": "<b>Medidor de redução de ganho</b>",
@@ -1002,7 +1002,7 @@ var LANGS = {
     "feat.bpm": "<b>Affichage BPM</b>",
     "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Taille de police</b> (XL, L, M, S): la taille du tempo en haut à gauche de l'écran Home.</li>\n          <li><b>Couleur</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): la couleur du tempo et du point de pulsation.</li>\n          <li><b>Position du point</b> (Left, Right, Both): l'endroit où le point de pulsation clignote avec TAP, à côté du numéro de preset.</li>\n        ",
     "feat.line": "<b>Ligne qui respire</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Couleur</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): la couleur ou le dégradé de la ligne au milieu de l'écran Home.</li>\n          <li><b>Type</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): la façon dont elle bouge ; Off rend la ligne d'origine.</li>\n          <li><b>Vitesse</b> (1–10): un cycle dure 8 s à 1 et 0,8 s à 10.</li>\n        ",
+    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Couleur</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): la couleur ou le dégradé de la ligne au milieu de l'écran Home.</li>\n          <li><b>Type</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): la façon dont elle bouge ; Off rend la ligne d'origine.</li>\n          <li><b>Vitesse</b> (1–10, Tempo) : un cycle dure 8 s à 1 et 0,8 s à 10 ; Tempo suit le tempo, un temps par cycle pour Heart, deux pour Breathe, Cylon et Comet, quatre pour Steady, huit pour Sparkle.</li>\n        ",
     "feat.dsp": "<b>Indicateur DSP</b>",
     "feat.dspS": "\n          <li><i>Aucun réglage</i></li>\n          <li>Chaque bloc affiche sa part du DSP, et le coin supérieur droit le total, dans la vue Edit et dans le navigateur de modèles.</li>\n        ",
     "feat.gr": "<b>Indicateur de réduction de gain</b>",
@@ -1188,7 +1188,7 @@ var LANGS = {
     "feat.bpm": "<b>BPM-Anzeige</b>",
     "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Schriftgröße</b> (XL, L, M, S): die Größe des Tempos oben links auf dem Home-Screen.</li>\n          <li><b>Farbe</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): die Farbe von Tempo und Beat-Punkt.</li>\n          <li><b>Punktposition</b> (Left, Right, Both): wo der Beat-Punkt mit TAP blinkt, neben der Preset-Nummer.</li>\n        ",
     "feat.line": "<b>Atmende Linie</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Farbe</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): die Farbe oder der Farbverlauf der Linie quer durch die Mitte des Home-Screens.</li>\n          <li><b>Typ</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): wie sie sich bewegt; Off bringt die Original-Linie zurück.</li>\n          <li><b>Geschwindigkeit</b> (1–10): ein Durchlauf dauert 8 s bei 1 und 0,8 s bei 10.</li>\n        ",
+    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Farbe</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): die Farbe oder der Farbverlauf der Linie quer durch die Mitte des Home-Screens.</li>\n          <li><b>Typ</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): wie sie sich bewegt; Off bringt die Original-Linie zurück.</li>\n          <li><b>Geschwindigkeit</b> (1–10, Tempo): ein Durchlauf dauert 8 s bei 1 und 0,8 s bei 10; Tempo folgt dem Tempo, ein Schlag je Durchlauf bei Heart, zwei bei Breathe, Cylon und Comet, vier bei Steady, acht bei Sparkle.</li>\n        ",
     "feat.dsp": "<b>DSP-Anzeige</b>",
     "feat.dspS": "\n          <li><i>Keine Einstellungen</i></li>\n          <li>Jeder Block zeigt seinen DSP-Anteil und die obere rechte Ecke die Summe, in der Edit-Ansicht und im Modellbrowser.</li>\n        ",
     "feat.gr": "<b>Gain-Reduction-Anzeige</b>",
@@ -1374,7 +1374,7 @@ var LANGS = {
     "feat.bpm": "<b>Display BPM</b>",
     "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Dimensione carattere</b> (XL, L, M, S): la dimensione del tempo in alto a sinistra nella schermata Home.</li>\n          <li><b>Colore</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): il colore del tempo e del punto del beat.</li>\n          <li><b>Posizione del punto</b> (Left, Right, Both): dove lampeggia il punto del beat con TAP, accanto al numero del preset.</li>\n        ",
     "feat.line": "<b>Linea che respira</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Colore</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): il colore o il gradiente della linea al centro della schermata Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): come si muove; Off ripristina la linea originale.</li>\n          <li><b>Velocità</b> (1–10): un ciclo dura 8 s a 1 e 0,8 s a 10.</li>\n        ",
+    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Colore</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): il colore o il gradiente della linea al centro della schermata Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): come si muove; Off ripristina la linea originale.</li>\n          <li><b>Velocità</b> (1–10, Tempo): un ciclo dura 8 s a 1 e 0,8 s a 10; Tempo segue il tempo, un battito per ciclo con Heart, due con Breathe, Cylon e Comet, quattro con Steady, otto con Sparkle.</li>\n        ",
     "feat.dsp": "<b>Indicatore DSP</b>",
     "feat.dspS": "\n          <li><i>Nessuna impostazione</i></li>\n          <li>Ogni blocco mostra la sua quota di DSP, e l'angolo in alto a destra il totale, nella vista Edit e nel browser dei modelli.</li>\n        ",
     "feat.gr": "<b>Indicatore di gain reduction</b>",
@@ -1560,7 +1560,7 @@ var LANGS = {
     "feat.bpm": "<b>BPM 表示</b>",
     "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>フォントサイズ</b> (XL, L, M, S): Home 画面の左上に表示するテンポの大きさ。</li>\n          <li><b>カラー</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): テンポとビートドットの色。</li>\n          <li><b>ドット位置</b> (Left, Right, Both): TAP に合わせてビートドットが点滅する場所。プリセット番号の横です。</li>\n        ",
     "feat.line": "<b>Breathing Line</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>カラー</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): Home 画面の中央を横切るラインの色またはグラデーション。</li>\n          <li><b>タイプ</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): ラインの動き方。Off にすると標準のラインに戻ります。</li>\n          <li><b>スピード</b> (1–10): 1 周期は 1 で 8 秒、10 で 0.8 秒です。</li>\n        ",
+    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>カラー</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): Home 画面の中央を横切るラインの色またはグラデーション。</li>\n          <li><b>タイプ</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): ラインの動き方。Off にすると標準のラインに戻ります。</li>\n          <li><b>スピード</b> (1–10, Tempo): 1 周期は 1 で 8 秒、10 で 0.8 秒です。Tempo はテンポに合わせ、1 周期は Heart で 1 拍、Breathe、Cylon、Comet で 2 拍、Steady で 4 拍、Sparkle で 8 拍です。</li>\n        ",
     "feat.dsp": "<b>DSP メーター</b>",
     "feat.dspS": "\n          <li><i>設定なし</i></li>\n          <li>Edit 画面とモデルブラウザで、各ブロックの DSP 使用率を、右上にその合計を表示します。</li>\n        ",
     "feat.gr": "<b>ゲインリダクションメーター</b>",
@@ -1746,7 +1746,7 @@ var LANGS = {
     "feat.bpm": "<b>BPM 显示</b>",
     "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>字体大小</b> (XL, L, M, S): 主屏幕左上角速度数字的大小。</li>\n          <li><b>颜色</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): 速度数字和节拍点的颜色。</li>\n          <li><b>圆点位置</b> (Left, Right, Both): 节拍点随 TAP 闪烁的位置，在预设编号旁边。</li>\n        ",
     "feat.line": "<b>呼吸线</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>颜色</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): 主屏幕中间那条线的颜色或渐变。</li>\n          <li><b>类型</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): 它的运动方式；Off 会恢复原厂的线。</li>\n          <li><b>速度</b> (1–10): 一个周期在 1 时为 8 秒，在 10 时为 0.8 秒。</li>\n        ",
+    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>颜色</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): 主屏幕中间那条线的颜色或渐变。</li>\n          <li><b>类型</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): 它的运动方式；Off 会恢复原厂的线。</li>\n          <li><b>速度</b> (1–10, Tempo): 一个周期在 1 时为 8 秒，在 10 时为 0.8 秒；Tempo 跟随速度（BPM），Heart 每周期一拍，Breathe、Cylon 和 Comet 两拍，Steady 四拍，Sparkle 八拍。</li>\n        ",
     "feat.dsp": "<b>DSP 表</b>",
     "feat.dspS": "\n          <li><i>无设置</i></li>\n          <li>在编辑视图和型号浏览器中，每个模块显示自己占用的 DSP 比例，右上角显示总量。</li>\n        ",
     "feat.gr": "<b>增益衰减表</b>",
@@ -1932,7 +1932,7 @@ var LANGS = {
     "feat.bpm": "<b>BPM 표시</b>",
     "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>글꼴 크기</b> (XL, L, M, S): 홈 화면 왼쪽 위에 표시되는 템포의 크기.</li>\n          <li><b>색상</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): 템포와 비트 점의 색.</li>\n          <li><b>점 위치</b> (Left, Right, Both): TAP에 맞춰 비트 점이 깜빡이는 위치로, 프리셋 번호 옆입니다.</li>\n        ",
     "feat.line": "<b>숨쉬는 선</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>색상</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): 홈 화면 가운데를 가로지르는 선의 색 또는 그라데이션.</li>\n          <li><b>종류</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): 선이 움직이는 방식. Off는 기본 선으로 되돌립니다.</li>\n          <li><b>속도</b> (1–10): 한 주기는 1에서 8초, 10에서 0.8초입니다.</li>\n        ",
+    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>색상</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): 홈 화면 가운데를 가로지르는 선의 색 또는 그라데이션.</li>\n          <li><b>종류</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): 선이 움직이는 방식. Off는 기본 선으로 되돌립니다.</li>\n          <li><b>속도</b> (1–10, Tempo): 한 주기는 1에서 8초, 10에서 0.8초입니다. Tempo는 템포를 따르며, 한 주기는 Heart에서 1박, Breathe, Cylon, Comet에서 2박, Steady에서 4박, Sparkle에서 8박입니다.</li>\n        ",
     "feat.dsp": "<b>DSP 미터</b>",
     "feat.dspS": "\n          <li><i>설정 없음</i></li>\n          <li>편집 화면과 모델 브라우저에서 각 블록이 차지하는 DSP 비율을, 오른쪽 위 모서리에는 총합을 보여 줍니다.</li>\n        ",
     "feat.gr": "<b>게인 리덕션 미터</b>",
@@ -2118,7 +2118,7 @@ var LANGS = {
     "feat.bpm": "<b>Индикатор BPM</b>",
     "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Размер шрифта</b> (XL, L, M, S): размер темпа в левом верхнем углу экрана Home.</li>\n          <li><b>Цвет</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple): цвет темпа и точки доли.</li>\n          <li><b>Положение точки</b> (Left, Right, Both): где мигает точка доли в такт с TAP, рядом с номером пресета.</li>\n        ",
     "feat.line": "<b>Дышащая линия</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Цвет</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): цвет или градиент линии посередине экрана Home.</li>\n          <li><b>Тип</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): как она движется; Off возвращает стандартную линию.</li>\n          <li><b>Скорость</b> (1–10): один цикл длится 8 с при 1 и 0,8 с при 10.</li>\n        ",
+    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Цвет</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): цвет или градиент линии посередине экрана Home.</li>\n          <li><b>Тип</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): как она движется; Off возвращает стандартную линию.</li>\n          <li><b>Скорость</b> (1–10, Tempo): один цикл длится 8 с при 1 и 0,8 с при 10; Tempo следует темпу: одна доля на цикл у Heart, две у Breathe, Cylon и Comet, четыре у Steady, восемь у Sparkle.</li>\n        ",
     "feat.dsp": "<b>Индикатор DSP</b>",
     "feat.dspS": "\n          <li><i>Нет настроек</i></li>\n          <li>Каждый блок показывает свою долю DSP, а правый верхний угол — общую, в режиме Edit и в браузере моделей.</li>\n        ",
     "feat.gr": "<b>Индикатор gain reduction</b>",

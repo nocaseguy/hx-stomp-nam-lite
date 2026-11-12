@@ -21,6 +21,7 @@
 .equ TAIL, 20 * 16                  @ Comet's tail
 .equ SPARKS, 3                      @ Sparkle: strips that flash in a quarter cycle of each layer, in 16
 .equ RAINBOW, 10                    @ the Color without a row in bl_schemes
+.equ TEMPO, 10                      @ the Speed without a row in bl_rates
 
 bl_tick:                            @ after the LED task's 1 ms sleep: a repaint every FRAME_MS while the line runs and the Home view is up
     adr.w r0, bl_data
@@ -112,8 +113,18 @@ bl_animate:
     movs r1, #SETTING_BREATHING_LINE_SPEED_MAX
     movs r2, #SETTING_BREATHING_LINE_SPEED_DEFAULT
     bl hxtra_setting_get
+    cmp r0, #TEMPO
+    bne bl_speed
+    mov r0, r6
+    bl bl_tempo_rate
+    cmp r0, #0
+    bne bl_rated
+    movs r0, #SETTING_BREATHING_LINE_SPEED_DEFAULT  @ no tempo to follow
+bl_speed:
     adr.w r1, bl_rates
-    ldr.w r10, [r1, r0, lsl #2]
+    ldr.w r0, [r1, r0, lsl #2]
+bl_rated:
+    mov r10, r0
     ldr r3, =0x28da6459             @ the µs clock
     blx r3
     ldr r1, [r9, #12]
@@ -186,6 +197,56 @@ bl_dirty:
     bne bl_dirty
     ldr r3, =0x28e24ae9
     blx r3
+    pop {r4, pc}
+
+bl_tempo_rate:                      @ r0 Type -> r0 the rate for bl_beats of its beats a cycle at the tempo, 0 if there is none
+    push {r4, lr}
+    adr.w r1, bl_beats
+    ldrb r4, [r1, r0]
+    movs r0, #14                    @ Tempo Select: Global BPM when Global, else Preset BPM, as bpm.s picks
+    bl bl_get
+    cmp r0, #2
+    ite eq
+    moveq r0, #15
+    movne r0, #16
+    bl bl_get
+    ubfx r2, r0, #23, #8
+    subs r2, #127
+    cmp r2, #9
+    bhi bl_untimed                  @ not 1..1023 BPM
+    vmov s15, r0
+    ldr r1, =0x476a6000             @ 60000.0f: the beat in whole ms, as the stock beat and bpm.s work it out
+    vmov s14, r1
+    vdiv.f32 s15, s14, s15
+    vcvt.u32.f32 s15, s15
+    vmov r0, s15
+    cbz r0, bl_untimed
+    movw r1, #1000
+    muls r0, r1, r0
+    muls r0, r4, r0                 @ the cycle in µs
+    mov.w r1, #-1
+    udiv r2, r1, r0
+    mls r1, r2, r0, r1
+    cmp.w r1, r0, lsr #1
+    it hs
+    addhs r2, #1                    @ 2^32 / the cycle, rounded
+    mov r0, r2
+    pop {r4, pc}
+bl_untimed:
+    movs r0, #0
+    pop {r4, pc}
+
+bl_get:                             @ r0 a stock setting ID -> r0 its value as stored (a float for the BPM), -1 if it has none
+    push {r4, lr}
+    sub sp, #8
+    mov r1, sp
+    ldr r3, =0x28e1f845             @ GET_VALUE(id, out): the value at out + 4
+    blx r3
+    cmp r0, #0
+    ldr r0, [sp, #4]
+    it lt
+    movlt r0, #-1
+    add sp, #8
     pop {r4, pc}
 
 bl_level:                           @ r0 Type, r1 a strip, r2 the phase (2^16 a cycle) -> r0 the strip's level 0..255
@@ -469,6 +530,9 @@ HXTRA_SETTING_GET
 .balign 4
 bl_rates:                           @ Speed 1..10: 2^32 / the cycle in µs, for cycles of 8, 6, 4.8, 4, 3.2, 2.5, 2, 1.5, 1.1 and 0.8 s
     .word 537, 716, 895, 1074, 1342, 1718, 2147, 2863, 3905, 5369
+bl_beats:                           @ Speed Tempo: beats a cycle for each Type (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle)
+    .byte 1, 4, 2, 2, 2, 1, 8
+.balign 4
 bl_schemes:                         @ Color's three stops but Rainbow's; a plain colour repeats its one
     .word 0xffffff, 0xffffff, 0xffffff  @ White
     .word 0xff0000, 0xff0000, 0xff0000  @ Red
