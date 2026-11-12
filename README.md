@@ -120,7 +120,7 @@ With Footswitch Mode on Snapshot, the three footswitches select snapshots 1–3 
 
 ### Tap LED color
 
-The TAP footswitch's ring blinks red with the tempo, and its icon and label on the Home screen are red. Tap LED Color (Global Settings > Displays, under Tap Tempo LED) picks another colour for all three, from the colours the HX Stomp gives its other footswitches. Ran on an HX Stomp from RAM (Rainbow not yet).
+The TAP footswitch's ring blinks red with the tempo, and its icon and label on the Home screen are red. Tap LED Color (Global Settings > Displays, under Tap Tempo LED) picks another colour for all three, from the colours the HX Stomp gives its other footswitches. Ran on an HX Stomp from RAM.
 
 - **The colours** are the stock footswitch palette: each ring colour is the one the HX Stomp lights for a block of that colour, and each icon the stock switch icon of that colour.
 - **External MIDI clock:** the ring keeps the stock colour it blinks with then.
