@@ -7,10 +7,10 @@ TITLE = 'BPM Display'
 ICON = 'Icon_Tempo'
 ORDER = 20
 SETTINGS = (     # 'Position\nDot' reads Dot over Position: the line after the newline is the top one
-    Setting('font', b'Size\nFont', (b'XL', b'L', b'M', b'S'), default=1),
+    Setting('font', b'Size\nFont', (b'XL', b'L', b'M', b'S', b'Off'), default=1),
     Setting('color', b'Color', (b'White', b'Gray', b'Red', b'Orange', b'Yellow', b'Green', b'Cyan', b'Blue', b'Purple',
                                 b'Tempo')),
-    Setting('dot', b'Position\nDot', (b'Left', b'Right', b'Both')),
+    Setting('dot', b'Position\nDot', (b'Left', b'Right', b'Both', b'Off')),
 )
 
 HOME_CTOR_CALL, HOME_CTOR = 0x28d96c44, 0x28dc91d0                  # bl to the Home view's constructor at boot
