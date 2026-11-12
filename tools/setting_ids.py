@@ -62,6 +62,11 @@ VIRTUAL = (   # (virtual ID, container ID, first bit, bits, the '<feature>.<key>
     (0xd7, 109, 0, 4, 'breathing_line.color', ''),
     (0xd8, 109, 4, 4, 'breathing_line.motion', ''),
     (0xd9, 109, 8, 4, 'breathing_line.speed', ''),
+    (0xda, 110, 0, 4, 'long_press.fs6_function', "long press's second container: its Hold settings fill 108 to bit 19"),
+    (0xdb, 110, 4, 4, 'long_press.fs7_function', ''),
+    (0xdc, 110, 8, 4, 'long_press.fs8_function', ''),
+    (0xdd, 110, 12, 4, 'long_press.fs9_function', ''),
+    (0xde, 110, 16, 4, 'long_press.fs10_function', ''),
 )
 
 

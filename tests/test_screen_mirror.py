@@ -383,4 +383,4 @@ def test_build_registers_the_command_after_the_editors():
 
 def test_the_web_page_does_not_offer_it():
     import m4cache
-    assert sm.FLAG not in m4cache.web_flags()
+    assert sm.FLAG not in m4cache.web_flags() + m4cache.web_options()

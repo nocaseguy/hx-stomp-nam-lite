@@ -46,6 +46,22 @@ def test_web_flags_are_every_feature():
                                         "HX_MORE_SNAPSHOTS", "HX_CLICK"}
 
 
+def test_web_options_are_the_opt_in_features():
+    assert m4cache.web_options() == ["HX_REAL_NAMES"]
+
+
+def test_make_pins_every_option_combination(monkeypatch):
+    monkeypatch.delenv(m4asm.CACHE, raising=False)
+    monkeypatch.setattr(m4cache, "web_flags", lambda: ["HX_B", "HX_A"])
+    monkeypatch.setattr(m4cache, "web_options", lambda: ["HX_X", "HX_Y"])
+    monkeypatch.setattr(m4cache, "built_md5", lambda stock, flags: m4cache.combo_key(flags))
+    monkeypatch.setattr(m4cache, "modules", lambda stock, flags: {"flags": flags})
+    cache = m4cache.make("stock.hxf", "v1")
+    assert cache["features"] == ["HX_B", "HX_A"] and cache["options"] == ["HX_X", "HX_Y"]
+    assert sorted(cache["md5"]["HX_Stomp"]) == ["HX_A+HX_B", "HX_A+HX_B+HX_X", "HX_A+HX_B+HX_X+HX_Y", "HX_A+HX_B+HX_Y"]
+    assert cache["modules"] == {"flags": ["HX_B", "HX_A", "HX_X", "HX_Y"]}
+
+
 def test_make_refuses_a_cache_build(monkeypatch):
     monkeypatch.setenv(m4asm.CACHE, "m4cache.json")
     with pytest.raises(SystemExit, match="unset HX_M4_CACHE"):
