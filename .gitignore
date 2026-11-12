@@ -12,3 +12,8 @@ __pycache__/
 !tools/ramboot/*.bin
 tools/*.hex
 /m4cache.json
+# Screen-mirror recordings show the HX Stomp's own UI: hosted outside the repo, never committed
+*.mov
+*.mp4
+*.gif
+*.webp

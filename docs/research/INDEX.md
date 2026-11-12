@@ -37,6 +37,7 @@ Before writing anything, read [conventions.md](conventions.md): the status tags,
 | [m4/snapshots.md](m4/snapshots.md) | the snapshot manager and records, select and its callers, the snapshot footswitch mode, the snapshot icon | anything about snapshots |
 | [m4/presets.md](m4/presets.md) | the eMMC stores (presets, globals, IRs) and the preset file's layout | storing data in a preset, or reading preset files |
 | [m4/dsp-link.md](m4/dsp-link.md) | the SPI frames between the DSP and the M4, and sending DSP values in a frame's tail | getting a value from the DSP to the screen |
+| [m4/usb-editor.md](m4/usb-editor.md) | HX Edit's editor service on the M4: the command table, a command's request and reply, the reply functions, the free command numbers | adding a USB command, or reading the unit from a computer |
 
 ## The SHARC (DSP) side
 
@@ -62,6 +63,7 @@ Before writing anything, read [conventions.md](conventions.md): the status tags,
 | [features/metronome.md](features/metronome.md) | the Metronome block: model, browser folder, look, kernel | working on the Metronome, or adding an effect model |
 | [features/tap-color.md](features/tap-color.md) | Tap LED Color: the TAP ring, icon and label in a palette colour | working on the TAP footswitch's look |
 | [features/boot-splash.md](features/boot-splash.md) | a custom boot picture, the boot line's text, colour emoji | working on the boot screen |
+| [features/screen-mirror.md](features/screen-mirror.md) | the screen on a computer: the command, the frame coding, the Mac viewer and recorder | working on the screen mirror, or recording a demo |
 
 ## Other docs
 
