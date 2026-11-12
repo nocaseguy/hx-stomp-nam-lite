@@ -130,6 +130,11 @@
   .feat ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; }
   .feat li { margin: 2px 0; }
   .feat li:first-child { list-style: none; margin-left: -18px; }
+  /* recorded with tools/hx_mirror.py; GitHub hosts them, as the recordings stay out of the repository */
+  .demo { display: flex; gap: 6px; margin-top: 8px; }
+  .demo img, .demo video { flex: 0 1 calc(50% - 3px); min-width: 0; aspect-ratio: 4 / 3; border-radius: 6px; background: #0d1117; }
+  .demo video { aspect-ratio: 1280 / 914; }
+  .tour { width: 480px; max-width: 100%; height: auto; margin-top: 6px; border-radius: 8px; background: #0d1117; }
 
   .files { display: grid; gap: 6px; font-size: 14px; }
   .files div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); }
@@ -253,6 +258,7 @@
     </div>
     <h1 data-i18n="hero.title">HXtra for HX Stomp</h1>
     <p class="lede" data-i18n="hero.lede">HXtra is a custom firmware for the HX Stomp. This page builds it from your own Line 6 file, walks you through installing it, and turns your <b>.nam</b> captures into files the HX Stomp can play, all running locally in this browser.</p>
+    <img class="tour" src="https://github.com/user-attachments/assets/b804955a-3275-40b6-932b-d1ccf10c4d95" alt="" width="480" height="360">
   </header>
 
   <div class="warning" data-i18n="warn"><b>Unofficial and experimental.</b> HXtra isn't made or supported by Line 6. Installing modified firmware is at your own risk and may void your warranty. Don't worry though: if anything goes wrong, the <a href="#recovery">Recovery</a> steps put the stock firmware back easily.</div>
@@ -268,59 +274,77 @@
           <li><i>On the tuner's own third page</i></li>
           <li><b>Tuner button</b> (Hold, Press): Hold opens the tuner when you hold TAP; Press opens it with a press, and TAP no longer taps the tempo.</li>
           <li><b>Tuner lock</b> (Off, On): On locks the tuner's other settings (Output, Reference, Type, Trails, Offsets).</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><img src="https://github.com/user-attachments/assets/7decba81-b026-4fb5-95f9-6c8899b2e47c" alt="" loading="lazy"></div>
+      </div>
       <div class="feat" data-feature="HX_BPM"><span data-i18n="feat.bpm"><b>BPM display</b></span>
         <ul data-i18n="feat.bpmS">
           <li><i>Global Settings › BPM Display</i></li>
           <li><b>Font size</b> (XL, L, M, S, Off): the size of the tempo at the top left of the Home screen. Off hides it.</li>
           <li><b>Color</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): the tempo's and the beat dot's colour. Tempo follows the TAP footswitch's colour (Tap LED Color).</li>
           <li><b>Dot position</b> (Left, Right, Both, Off): where the beat dot blinks with TAP, beside the preset number. Off hides it; with both Off the BPM display is off.</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><img src="https://github.com/user-attachments/assets/62783af2-506f-4878-80ed-e2705acba51c" alt="" loading="lazy"><img src="https://github.com/user-attachments/assets/4579e864-8a7d-46fd-a764-ec5cd102b6e9" alt="" loading="lazy"></div>
+      </div>
       <div class="feat" data-feature="HX_BREATHING_LINE"><span data-i18n="feat.line"><b>Breathing line</b></span>
         <ul data-i18n="feat.lineS">
           <li><i>Global Settings › Breathing Line</i></li>
           <li><b>Color</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): the colour or gradient of the line across the middle of the Home screen.</li>
           <li><b>Type</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): how it moves; Off gives back the stock line.</li>
           <li><b>Speed</b> (1–10, Tempo): one cycle takes 8 s at 1 and 0.8 s at 10; Tempo follows the tempo, a beat a cycle for Heart, two for Breathe, Cylon and Comet, four for Steady, eight for Sparkle.</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><img src="https://github.com/user-attachments/assets/d492b0aa-1151-42c6-b84a-27f6fd36e5d8" alt="" loading="lazy"><img src="https://github.com/user-attachments/assets/dd1085e1-c51d-4377-8dee-26b8ce5e1423" alt="" loading="lazy"></div>
+      </div>
       <div class="feat" data-feature="HX_DSP_METER"><span data-i18n="feat.dsp"><b>DSP meter</b></span>
         <ul data-i18n="feat.dspS">
           <li><i>No settings</i></li>
           <li>Each block shows its share of the DSP, and the top right corner the total, in the Edit view and in the model browser.</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><img src="https://github.com/user-attachments/assets/fb8644f3-b5ab-4803-b3be-fefcfb23c7b3" alt="" loading="lazy"></div>
+      </div>
       <div class="feat" data-feature="HX_GR"><span data-i18n="feat.gr"><b>Gain reduction meter</b></span>
         <ul data-i18n="feat.grS">
           <li><i>Knobs on the Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester and Red Squeeze compressors</i></li>
           <li><b>Mtr Thk</b> (0 … 20): the meter's thickness in pixels; 0, the default, turns it off.</li>
           <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): where on the Home screen the meter lights up to show how much the compressor is reducing the gain. Middle takes the place of the line across the middle.</li>
           <li><b>Mtr Dir</b> (Normal, Reverse): Normal fills left to right or top to bottom; Reverse the other way.</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><video src="https://github.com/user-attachments/assets/50b5cd91-f578-4252-a1df-4b73d8ca1995" controls muted playsinline preload="none"></video></div>
+      </div>
       <div class="feat"><span data-i18n="feat.vfs"><b>Virtual footswitches</b></span>
         <ul data-i18n="feat.vfsS">
           <li><i>Five extra footswitches, FS6 … FS10, that come with Footswitch long press</i></li>
           <li><b>Assign a block</b>: in the block's Bypass Assign, press Page › once to see MIDI In, then turn MIDI In up from Off: FS6 is one click up, FS10 five, and while it's on one of them the knob reads FootswIn. The preset keeps the assignment.</li>
           <li><b>Parameters</b>: assign one to the same FS in Controller Assign, and it follows the footswitch too.</li>
           <li><b>MIDI</b>: <b>underneath, FS6 … FS10 are MIDI CC 20 … 24.</b> HX Edit shows them that way, and a MIDI controller sending those CCs switches them as well.</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><img src="https://github.com/user-attachments/assets/f0261c29-ef31-4527-8d96-21ef176b67aa" alt="" loading="lazy"></div>
+      </div>
       <div class="feat" data-feature="HX_LONG_PRESS"><span data-i18n="feat.hold"><b>Footswitch long press</b></span>
         <ul data-i18n="feat.holdS">
           <li><i>Global Settings › Footswitches</i></li>
           <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): what holding that footswitch for a second does in Stomp mode. FS6 … FS10 are virtual footswitches: assign blocks to them in Bypass Assign.</li>
           <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): what that virtual footswitch does, as FS3 … FS5 Function do for the real ones. Stomp, the default, toggles its blocks.</li>
           <li><b>Switch a virtual footswitch</b>: hold the footswitch whose Hold is set to that FS. By default, holding FS1 switches FS6, and so on up to FS5 and FS10. A tap still toggles the footswitch's own blocks.</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><img src="https://github.com/user-attachments/assets/50a6ecf0-6d87-4556-8ffd-035e4b40987b" alt="" loading="lazy"></div>
+      </div>
       <div class="feat" data-feature="HX_MORE_SNAPSHOTS"><span data-i18n="feat.snap"><b>More snapshots</b></span>
         <ul data-i18n="feat.snapS">
           <li><i>No settings</i></li>
           <li>Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6.</li>
           <li>Once a preset has snapshots 4–6, next and previous snapshot (SnpshtUp, SnpshtDn, MIDI CC 69) step through all six: next on 3 goes to 4, and next on 6 back to 1.</li>
           <li>MIDI CC 69 selects any of the six directly: values 0–2 for snapshots 1–3, 3–5 for 4–6.</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><img src="https://github.com/user-attachments/assets/8ce9d86c-cffb-491e-9c47-0430a02a4af7" alt="" loading="lazy"></div>
+      </div>
       <div class="feat" data-feature="HX_TAP_COLOR"><span data-i18n="feat.tap"><b>Tap LED color</b></span>
         <ul data-i18n="feat.tapS">
           <li><i>Global Settings › Displays</i></li>
           <li><b>Tap LED Color</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): the colour of the TAP footswitch's blinking ring, and of its icon and label on the Home screen. Red is the stock colour. Rainbow fades the ring a small step round the colour wheel at each beat, from red through orange, yellow, green, blue, indigo and violet and back; Random picks a new colour at each beat. Both keep the label white.</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><img src="https://github.com/user-attachments/assets/29f1b0a3-fa13-4d40-bfb0-cb426b15079d" alt="" loading="lazy"></div>
+      </div>
       <div class="feat" data-feature="HX_CLICK"><span data-i18n="feat.click"><b>Metronome</b></span>
         <ul data-i18n="feat.clickS">
           <li><i>New block: Looper › Metronome</i></li>
@@ -328,14 +352,18 @@
           <li><b>Level</b> (−60 … +6 dB): the click's volume.</li>
           <li><b>Accent</b> (Off, 2 … 12): every nth beat is a downbeat, a higher click.</li>
           <li><b>Thru</b> (Off, On): On plays your signal with the click under it; Off plays the click alone.</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><video src="https://github.com/user-attachments/assets/f25be41c-3ab0-45a1-87fa-99cd50194933" controls muted playsinline preload="none"></video></div>
+      </div>
     </div>
     <div class="checks" id="opts" hidden>
       <div class="feat" data-option="HX_REAL_NAMES" hidden><label><input type="checkbox"> <span data-i18n="feat.names"><b>Real block names</b> (optional, off unless you tick it)</span></label>
         <ul data-i18n="feat.namesS">
           <li><i>No settings</i></li>
           <li>Each block's title in the model browser and the Edit view names the gear it's based on: Deez One Mod becomes Boss DS-1 Mod. Line 6 originals keep theirs.</li>
-        </ul></div>
+        </ul>
+        <div class="demo"><img src="https://github.com/user-attachments/assets/607728e6-773b-41ae-9619-5a30ca2f50ad" alt="" loading="lazy"></div>
+      </div>
     </div>
     <p class="tip" id="featNone" hidden data-i18n="feat.none">This copy of the page has no feature code, so it builds NAM A2 Lite and the boot screen only. The page published with each HXtra release has it.</p>
 

@@ -1,11 +1,12 @@
 // mirror_mac.swift - the window tools/hx_mirror.py shows the HX Stomp's screen in, and its recorder, without ffmpeg.
 //   swiftc -O tools/mac/mirror_mac.swift -o build/mirror_mac     (hx_mirror.py builds it on first use)
-//   mirror_mac WIDTH HEIGHT SCALE TITLE [OUT.mov [REC_SCALE [h264|prores]]]
+//   mirror_mac WIDTH HEIGHT SCALE TITLE [OUT.mov [REC_SCALE [h264|prores [AUDIO_DEVICE]]]]
 // Reads frames on stdin, each a little-endian Double (seconds, any clock) then WIDTH x HEIGHT RGB pixels, top row first, and
 // shows each one SCALE times as big with square pixels. With OUT.mov it also writes them REC_SCALE times as big (4 by default),
 // each frame at its time after the first, so the video keeps the HX Stomp's timing however unevenly the frames came: as H.264,
 // or ProRes 4444, which keeps every pixel's colour. An even REC_SCALE keeps H.264's half-resolution colour inside each screen
 // pixel; at an odd one, colours bleed across pixel edges. It finishes the file and exits when stdin ends or the window closes.
+// With AUDIO_DEVICE (part of an input's name, e.g. HX Stomp; - for none) it records that device's sound beside the video.
 import AVFoundation
 import AppKit
 
@@ -14,12 +15,14 @@ let args = CommandLine.arguments
 let w = args.count >= 5 ? Int(args[1]) ?? 0 : 0, h = args.count >= 5 ? Int(args[2]) ?? 0 : 0
 let scale = args.count >= 5 ? Int(args[3]) ?? 0 : 0
 if w < 1 || h < 1 || scale < 1 {
-    FileHandle.standardError.write("usage: mirror_mac WIDTH HEIGHT SCALE TITLE [OUT.mov [REC_SCALE [h264|prores]]]\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: mirror_mac WIDTH HEIGHT SCALE TITLE [OUT.mov [REC_SCALE [h264|prores [AUDIO_DEVICE]]]]\n"
+        .data(using: .utf8)!)
     exit(2)
 }
 let title = args[4], outPath = args.count > 5 ? args[5] : nil
 let rscale = args.count > 6 ? max(1, Int(args[6]) ?? 4) : 4
 let prores = args.count > 7 && args[7] == "prores"
+let audioName = args.count > 8 && args[8] != "-" ? args[8] : nil
 let sw = w * scale, sh = h * scale, rw = w * rscale, rh = h * rscale
 func say(_ s: String) { FileHandle.standardError.write(("mirror_mac: " + s + "\n").data(using: .utf8)!) }
 
@@ -91,9 +94,78 @@ func scaled(_ rgb: [UInt8]) -> [UInt8] {
     return out
 }
 
+// The device's sound as <take>-audio.m4a, and in <take>-audio.json when it began on the host clock (mach time, which Python's
+// time.monotonic reads too): the frames run on the unit's clock, so hx_mirror places the sound against them from both
+final class AudioTake: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
+    let session = AVCaptureSession(), queue = DispatchQueue(label: "audio")
+    let writer: AVAssetWriter, input: AVAssetWriterInput, meta: String
+    var start: Double?
+
+    init?(named name: String, base: String) {
+        let found = AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified)
+        guard let dev = found.devices.first(where: { $0.localizedName.localizedCaseInsensitiveContains(name) }) else {
+            say("no sound input named \(name): recording without sound"); return nil
+        }
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            let asked = DispatchSemaphore(value: 0)
+            AVCaptureDevice.requestAccess(for: .audio) { _ in asked.signal() }
+            asked.wait()
+        }
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+            say("this terminal may not record sound (System Settings > Privacy & Security > Microphone): recording without sound")
+            return nil
+        }
+        meta = base + "-audio.json"
+        try? FileManager.default.removeItem(atPath: meta)
+        try? FileManager.default.removeItem(atPath: base + "-audio.m4a")
+        guard let devIn = try? AVCaptureDeviceInput(device: dev),
+              let w = try? AVAssetWriter(outputURL: URL(fileURLWithPath: base + "-audio.m4a"), fileType: .m4a) else {
+            say("cannot record sound from \(dev.localizedName)"); return nil
+        }
+        writer = w
+        input = AVAssetWriterInput(mediaType: .audio, outputSettings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48000,
+                                                                         AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 256000])
+        input.expectsMediaDataInRealTime = true
+        super.init()
+        w.add(input)
+        let out = AVCaptureAudioDataOutput()
+        // the device's first two channels, USB 1/2: the HX Stomp's main output
+        out.audioSettings = [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48000, AVNumberOfChannelsKey: 2,
+                             AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false]
+        out.setSampleBufferDelegate(self, queue: queue)
+        session.addInput(devIn)
+        session.addOutput(out)
+        w.startWriting()
+        session.startRunning()
+        say("recording sound from \(dev.localizedName)")
+    }
+
+    func captureOutput(_ output: AVCaptureOutput, didOutput sample: CMSampleBuffer, from connection: AVCaptureConnection) {
+        let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+        if start == nil {
+            let host = CMClockGetHostTimeClock()
+            start = CMSyncConvertTime(pts, from: session.synchronizationClock ?? host, to: host).seconds
+            writer.startSession(atSourceTime: pts)
+        }
+        if input.isReadyForMoreMediaData { input.append(sample) }
+    }
+
+    func finish() {
+        session.stopRunning()
+        queue.sync {}
+        guard let began = start else { writer.cancelWriting(); return }
+        input.markAsFinished()
+        let done = DispatchSemaphore(value: 0)
+        writer.finishWriting { done.signal() }
+        done.wait()
+        try? "{\"host_start\": \(began)}\n".write(toFile: meta, atomically: true, encoding: .utf8)
+    }
+}
+
 let recorder: Recorder? = outPath.map { p in
     do { return try Recorder(path: p) } catch { say("cannot record to \(p): \(error)"); exit(1) }
 }
+let audioTake: AudioTake? = outPath.flatMap { p in audioName.flatMap { AudioTake(named: $0, base: (p as NSString).deletingPathExtension) } }
 var finished = false
 let finishLock = NSLock()
 func finish() {
@@ -102,6 +174,7 @@ func finish() {
     if finished { return }
     finished = true
     recorder?.finish()
+    audioTake?.finish()
 }
 
 final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
