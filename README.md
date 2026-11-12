@@ -274,8 +274,3 @@ Found something else? [Open an issue](https://github.com/wisemandenny/hxtra/issu
 ## License
 
 HXtra is [GPL-3.0-or-later](LICENSE). Third-party notices are in [NOTICE](NOTICE). Line 6, Helix, HX Stomp, HX Effects and HX Edit are trademarks of Yamaha Guitar Group, Inc. HXtra is not affiliated with, endorsed by or supported by Line 6 or Yamaha Guitar Group.
-
-<div align="center">
-<br>
-<sub>If HXtra makes your rig better, <a href="https://github.com/wisemandenny/hxtra/stargazers">star the repo</a> so other players can find it.</sub>
-</div>
