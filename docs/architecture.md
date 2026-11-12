@@ -40,7 +40,7 @@ docs/research/INDEX.md        what is known about the 3.80.0 firmware: the index
 tools/patch_menu.py           HXtra: the feature engine, the Global Settings section and its caves (HX Stomp)
 tools/features/               the features: tuner.py, bpm.py, breathing_line.py, dsp_meter.py, long_press.py, more_snapshots.py, splash.py
 tools/setting_ids.py          which setting ID each feature's setting uses
-tools/m4asm.py                assembles a feature's src/m4/*.s with Apple's clang, or takes it from a release's m4cache.json
+tools/m4asm.py                assembles a feature's src/m4/*.s with clang, or takes it from a release's m4cache.json
 tools/m4cache.py              a release's m4cache.json: the M4 code of the setup page's features
 tools/release.py              makes a release: its m4cache.json on a GitHub release, which publishes the setup page
 src/m4/                       the features' M4 code (tuner.s, bpm.s, breathing_line.s, dsp_meter.s, long_press.s, more_snapshots.s)

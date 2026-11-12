@@ -269,21 +269,21 @@ colours:                            @ (function, colour) as the stock paints a k
     .word 0x28dc6505, 0xb1b1b1
     .word 0x28dc6569, 0xb1b1b1
 colours_end:
-.balign 16, 0
+.balignl 16, 0                      @ not .balign: clang 18 pads that with nops in .text, Apple clang 21 with zeros
 labels:                             @ per knob, 16 bytes: tools/features/tuner.py's labels
     .asciz "Activate"
-    .balign 16, 0
+    .org labels + 16, 0
     .asciz "Lock"
-    .balign 16, 0
+    .org labels + 32, 0
 values:                             @ per knob, 32 bytes: its two values, 16 bytes each
     .asciz "Hold"
-    .balign 16, 0
+    .org values + 16, 0
     .asciz "Press"
-    .balign 16, 0
+    .org values + 32, 0
     .asciz "Off"
-    .balign 16, 0
+    .org values + 48, 0
     .asciz "On"
-    .balign 16, 0
+    .org values + 64, 0
 
 HXTRA_SETTING_GET
 HXTRA_SETTING_SET

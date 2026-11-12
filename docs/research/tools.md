@@ -18,7 +18,7 @@ The repository's tools and the build switches. Status tags as in [conventions.md
 | `tools/splash_emoji.py` | Emoji for the boot line: text split into emoji, an emoji's picture as a glyph of `hx21_regularFont`; used by `tools/features/splash.py`. |
 | `tools/splash_topo.py` | A 320x240 boot picture: neon contour lines of a seeded random terrain. |
 | `tools/emoji_png.swift` | Renders one emoji (Apple Color Emoji, macOS) to a PNG for `tools/splash_emoji.py`. |
-| `tools/m4asm.py` | Assemble a Thumb-2 `.s` with Apple clang: its `.text` and symbols; refuses relocations. |
+| `tools/m4asm.py` | Assemble a Thumb-2 `.s` with clang (`HX_CLANG`, Apple's Command Line Tools or `PATH`): its `.text` and symbols; refuses relocations. |
 | `tools/sharc/sasm.py`, `ssim.py` | SHARC assembler and simulator. |
 | `tools/hxf_ram.py`, `tools/ramboot/` | Run an image from RAM over USB. |
 | `src/sharc/frame_probe.asm` | DSP-side wrapper and frame-tail writer of the GR meter, beside the NAM kernel. |
