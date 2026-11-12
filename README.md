@@ -89,7 +89,7 @@ Every block shows its share of the DSP, and the total sits at the top right (`47
 
 ### <img src="docs/assets/icons/snapshots.svg" width="104" height="32" align="top" alt=""> Six snapshots
 <!-- demo: snapshots -->
-Press the lit snapshot footswitch again to flip to snapshots 4–6. Next and previous step through all six, and all six are saved with the preset.
+Press the lit snapshot footswitch again to flip to snapshots 4–6. Next and previous step through all six, MIDI CC 69 values 0–5 select any of them, and all six are saved with the preset.
 
 &nbsp;
 

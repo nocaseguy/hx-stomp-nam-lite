@@ -174,7 +174,8 @@ class Manager:
         return self.call('snaps_cc_select', mgr, (cur + way) % 3)
 
     def cc(self, value):
-        """CC 69 with value 0..2: select straight, with no wrap read."""
+        """CC 69 with value 0..5: the manager getter, then select of the value."""
+        assert self.call('snaps_cc_value') == MGR, 'the manager, as the stock getter returns it'
         return self.call('snaps_cc_select', MGR, value)
 
     def go(self, i):
@@ -623,6 +624,68 @@ def test_cc_69_on_the_lit_snapshot_stays_stock(mgr, lit):
     assert [(new, old) for new, old, _, _ in mgr.selects] == [(lit, lit)] and not mgr.bank_b_live()
 
 
+@pytest.mark.parametrize('i', [0, 1, 2])
+def test_cc_69_3_to_5_without_bank_b_makes_it_as_a_flip_does(mgr, i):
+    """Snapshot 4..6 from a preset with no bank B: its records start as defaults, and select fills the new one from the sound."""
+    mgr.go(1)
+    assert mgr.cc(3 + i) == 1
+    assert mgr.inits == [b'SNAPSHOT 4', b'SNAPSHOT 5', b'SNAPSHOT 6']
+    (new, old, old_rec, new_rec), = mgr.selects
+    assert new == i and old != i and old_rec == bank_a(1) and not new_rec[VALID]
+    assert mgr.bank_b_live() and mgr.cur() == i and mgr.depth == 0
+
+
+@pytest.mark.parametrize('start', [0, 1, 2])
+@pytest.mark.parametrize('i', [0, 1, 2])
+def test_cc_69_3_to_5_from_bank_a_cross_into_bank_b(mgr, start, i):
+    bank_b = with_bank_b(mgr)
+    mgr.go(start)
+    assert mgr.cc(3 + i) == 1
+    (new, old, old_rec, new_rec), = mgr.selects
+    assert new == i and old != i, 'a select of another index, so it recalls rather than reselects'
+    assert (old_rec, new_rec) == (bank_a(start), bank_b[i])
+    assert [mgr.rec(j) for j in range(3)] == bank_b and mgr.bank_b_live() and mgr.cur() == i and mgr.inits == []
+
+
+@pytest.mark.parametrize('start', [0, 1, 2])
+@pytest.mark.parametrize('i', [0, 1, 2])
+def test_cc_69_0_to_2_from_bank_b_cross_back_to_bank_a(mgr, start, i):
+    bank_b = with_bank_b(mgr)
+    mgr.press(0)
+    mgr.go(start)
+    mgr.cc(i)
+    (new, _, old_rec, new_rec), = mgr.selects
+    assert (new, old_rec, new_rec) == (i, bank_b[start], bank_a(i))
+    assert [mgr.rec(j) for j in range(3)] == [bank_a(j) for j in range(3)] and not mgr.bank_b_live() and mgr.cur() == i
+
+
+@pytest.mark.parametrize('start, i', [(0, 1), (0, 2), (1, 0), (2, 1)])
+def test_cc_69_3_to_5_in_bank_b_select_within_it(mgr, start, i):
+    with_bank_b(mgr)
+    mgr.press(0)
+    mgr.go(start)
+    mgr.cc(3 + i)
+    assert [(new, old) for new, old, _, _ in mgr.selects] == [(i, start)] and mgr.bank_b_live()
+
+
+@pytest.mark.parametrize('lit', [0, 1, 2])
+def test_cc_69_3_to_5_on_the_lit_snapshot_in_bank_b_stays_stock(mgr, lit):
+    """As 0..2 in bank A: select with the current index, which Reselect Snapshot handles, and no flip."""
+    with_bank_b(mgr)
+    mgr.press(0)
+    mgr.go(lit)
+    mgr.cc(3 + lit)
+    assert [(new, old) for new, old, _, _ in mgr.selects] == [(lit, lit)] and mgr.bank_b_live()
+
+
+def test_cc_69_3_to_5_while_select_is_held_off_goes_to_select(mgr):
+    with_bank_b(mgr)
+    mgr.m.u8(MGR + BUSY, 1)
+    assert mgr.cc(4) == 0
+    assert mgr.held == [1] and mgr.selects == [] and not mgr.bank_b_live()
+    assert [mgr.rec(i) for i in range(3)] == [bank_a(i) for i in range(3)]
+
+
 def test_a_bank_b_from_the_file_is_crossed_into_without_a_flip(mgr):
     records = b''.join(bytes([0xb0 + i]) * REC for i in range(3))
     mgr.section = bank_b_file(records)
@@ -655,7 +718,7 @@ def test_build_sends_the_snapshot_footswitch_to_the_module_and_wraps_load_and_sa
     assert [branch_target(s, read(s, 4)) for s in ms.FS_SELECT_CALLS] == [module + sym['snaps_select']] * 2
     assert [branch_target(s, read(s, 4)) for s, _, _ in ms.FILE_CALLS] == [module + sym[h] for _, _, h in ms.FILE_CALLS]
     hooks = ((ms.NEXT_CUR, 'snaps_next_cur'), (ms.PREV_CUR, 'snaps_prev_cur'), (ms.CC_SELECT, 'snaps_cc_select'),
-             *((s, 'snaps_cc_wrap') for s in ms.CC_WRAP_CALLS))
+             (ms.CC_VALUE_CALL, 'snaps_cc_value'), *((s, 'snaps_cc_wrap') for s in ms.CC_WRAP_CALLS))
     assert [branch_target(s, read(s, 4)) for s, _ in hooks] == [module + sym[h] for _, h in hooks]
     for fn, before, after in ((ms.PARSE, 'snaps_loaded', None), *((fn, 'snaps_saving', 'snaps_saved') for fn, _ in ms.SERIALIZERS)):
         stub = branch_target(fn, read(fn, 4))
@@ -698,6 +761,32 @@ def test_the_built_dispatch_crosses_the_banks_for_a_virtual_footswitch(m4emu, k)
     mgr.call('snaps_loaded', MGR, 0, 0, 0)
     mgr.m.u8(MGR + CUR, 2)
     assert release(NEXT_FN) == 1 and mgr.inits == [], 'with no bank B, next on 3 wraps to 1'
+
+
+CC_HANDLER, CC_HANDLER_END = 0x28d9b120, 0x28d9b700
+
+
+@pytest.mark.firmware
+def test_the_built_cc_handler_selects_all_six_snapshots_by_cc_69(m4emu):
+    """The built firmware's CC handler (cc, value), from its entry: CC 69's 0..5 land on snapshots 1..6 from either bank, 6 and 7
+    still do nothing, and next and previous still run through all six."""
+    code, sym = m4emu.assemble('src/m4/more_snapshots.s', MODS, IDS)
+    read, on = built({'HX_MORE_SNAPSHOTS': '1'})
+    assert 'more_snapshots' in on and read(ms.CC_RANGE, 2) == ms.CC_RANGE_SIX
+    module = branch_target(ms.FS_SELECT_CALLS[0], read(ms.FS_SELECT_CALLS[0], 4)) - sym['snaps_select']
+    mgr = Manager(m4emu, module)
+    mgr.m.load(CC_HANDLER, read(CC_HANDLER, CC_HANDLER_END - CC_HANDLER))
+    mgr.m.stub(ms.MANAGER_GET, lambda m: m.reg('r0', MGR))
+
+    def cc(value):
+        mgr.m.call(CC_HANDLER, 69, value)
+        return mgr.cur() + 3 * mgr.bank_b_live() + 1
+
+    assert [cc(v) for v in (4, 1, 5, 0, 3, 2)] == [5, 2, 6, 1, 4, 3]
+    mgr.selects.clear()
+    assert [cc(v) for v in (6, 7)] == [3, 3] and mgr.selects == [], '6 and 7 are ignored, as stock'
+    assert [cc(8) for _ in range(6)] == [4, 5, 6, 1, 2, 3]
+    assert [cc(9) for _ in range(6)] == [2, 1, 6, 5, 4, 3]
 
 
 @pytest.mark.firmware
@@ -766,7 +855,8 @@ def test_without_the_flag_the_sites_stay_stock():
     assert 'more_snapshots' not in on
     assert all(read(s, 4) == pm.thumb_bw(s, ms.SELECT) for s in (*ms.FS_SELECT_CALLS, ms.CC_SELECT))
     assert read(ms.NEXT_CUR, 4) == pm.bl(ms.NEXT_CUR, ms.CUR_GET) and read(ms.PREV_CUR, 4) == pm.bl(ms.PREV_CUR, ms.CUR_GET)
-    assert all(read(s, 4) == pm.bl(s, ms.MANAGER_GET) for s in ms.CC_WRAP_CALLS)
+    assert all(read(s, 4) == pm.bl(s, ms.MANAGER_GET) for s in (*ms.CC_WRAP_CALLS, ms.CC_VALUE_CALL))
+    assert read(ms.CC_RANGE, 2) == ms.CC_RANGE_STOCK
     assert all(read(s, 4) == pm.bl(s, fn) for s, fn, _ in ms.FILE_CALLS)
     assert read(ms.PARSE, 4) == ms.PARSE_STOCK and all(read(fn, 4) == stock for fn, stock in ms.SERIALIZERS)
     assert struct.unpack('<I', read(ms.TOP_PAINT_LIT, 4))[0] == ms.TOP_PAINT
