@@ -41,7 +41,7 @@ jobs:
           cp -r src/m4 src/sharc _site/src/
           find _site -name __pycache__ -prune -exec rm -rf {} +
           gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p m4cache.json -D _site
-          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=web/"><title>HXtra Setup</title><a href="web/">HXtra Setup</a>\n' > _site/index.html
+          printf '<!doctype html><meta charset="utf-8"><script>location.replace("web/" + location.hash)</script><meta http-equiv="refresh" content="0; url=web/"><title>HXtra Setup</title><a href="web/">HXtra Setup</a>\n' > _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

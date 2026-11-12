@@ -107,6 +107,29 @@ def test_page_lists_the_web_options():
     assert sorted(boxes) == sorted(m4cache.web_options())
 
 
+def test_page_anchors_are_readable():
+    # every section a link can land on is named in words, and each step's nav link points at one
+    page = (ROOT / "web/index.html").read_text()
+    sections = re.findall(r'<section class="step[^"]*" id="([^"]+)"', page)
+    assert all(re.fullmatch(r"[a-z]+(-[a-z]+)*", s) for s in sections), sections
+    assert set(re.findall(r'<a href="#([^"]+)" id="nav\d">', page)) <= set(sections)
+    assert len(sections) == page.count("<section class=\"step")
+
+
+def test_page_moves_old_anchors_to_their_names():
+    # #s1..#s6 from links shared before the steps were named go to the step's section
+    page = (ROOT / "web/index.html").read_text()
+    old = dict(re.findall(r'(s\d): "([a-z-]+)"', re.search(r"var named = \{(.*?)\}", page).group(1)))
+    nav = dict(re.findall(r'<a href="#([^"]+)" id="nav(\d)">', page))
+    assert old == {"s" + n: name for name, n in nav.items()}
+
+
+def test_site_root_keeps_the_anchor():
+    # wisemandenny.github.io/hxtra/#install lands on the page's install step
+    site = (ROOT / ".github/workflows/pages.yml").read_text()
+    assert 'location.replace("web/" + location.hash)' in site
+
+
 @pytest.mark.firmware
 def test_page_copy_builds_features_from_the_cache(tmp_path):
     stock = os.environ.get("HX_STOMP_HXF")
