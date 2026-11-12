@@ -1,8 +1,11 @@
 @ screen_mirror.s - HX Edit's editor service gets one more command, CMD: it replies with the frame the LCD shows, coded as changes
 @ to the frame it sent before, so a computer can mirror the screen (tools/hx_mirror.py). The reply is the editor's own: {0x66: seq,
 @ 0x67: 0, 0x68: bin32}, the bin32 being halfwords over the framebuffer's pixels in order (column-major, bottom-up, 5-6-5 blue
-@ high): c < SKIP, then c pixels; SKIP + c: c pixels as before; RUN + c, then one pixel c times; then 0 and two u32 times in µs,
-@ as halfwords low first: coding the frame, and sending it. A request whose seq does not follow the last one's (a new session, or
+@ high): c < SKIP, then c pixels; SKIP + c: c pixels as before; RUN + c, then one pixel c times; then 0, the count n of UI events
+@ posted since the last reply (at most RING), n records {u32 µs, the 8-byte event}, the footswitch rings' LEDs as three u32
+@ {colour as the driver keeps it, its mode on top} and three u32: the µs the frame was taken at, the µs coding it took and sending
+@ it; all as halfwords, low first. sm_event logs each event as it is posted, for a video that
+@ shows the controls being used (tools/hx_mirror.py). A request whose seq does not follow the last one's (a new session, or
 @ another command in between) gets every pixel, with no skips. USB carries about 0.5 MB/s, so bytes are what the frame rate
 @ costs; and code runs from uncached SDRAM, so each instruction counts. tools/features/screen_mirror.py chains sm_register after
 @ the editor's command registration at boot.
@@ -23,13 +26,21 @@
 .equ LOCK, 0x28e24c01               @ (stream - 8): the stream's lock, held around a reply's writes
 .equ UNLOCK, 0x28e24bb1
 .equ CLOCK, 0x28da6459              @ () -> µs
+.equ SLEEP, 0x28e24c59              @ (µs): the task sleeps, so others run
+.equ YIELD_BYTES, FB_BYTES / 8      @ the coding sleeps each time it passes another eighth of the frame: knob turns waited for it
+.equ YIELD_US, 1000
 .equ BIN32, 0xc6
 .equ RUN, 0x8000
 .equ SKIP, 0x4000
 .equ MAX_RUN_BYTES, 2 * 0x7fff      @ a count's most, in bytes of frame
 .equ MAX_SKIP, 0x3fff
 .equ MAX_LITERAL_BYTES, 2 * 0x3fff
-.equ TRAILER, 10                    @ bytes: 0, then the two times
+.equ TRAILER, 12                    @ bytes: the frame's µs, then the coding's and the sending's
+.equ RING, 64                       @ events kept for the next reply: a power of two
+.equ LED_COLOURS, 0x281f35e0        @ the LED driver's colour of each footswitch ring: 3 bytes each, as the LED send takes it
+.equ LED_MODES, 0x281f35f8          @ and its mode: 0 off, 1 on, 2 blinking
+.equ LEDS, 3
+.equ EVENT, 12                      @ a record's bytes: µs, then the event
 .equ CHUNK, 4096                    @ bytes sent at a time
 
 sm_register:                        @ after the editor registers its commands at boot: CMD too
@@ -51,7 +62,7 @@ sm_register:                        @ after the editor registers its commands at
 
 sm_cmd:                             @ r0 the editor's stream, r1 the request -> r0 the stream's result
     push {r4-r11, lr}
-    sub sp, #20                     @ [sp] the headers, [sp, #8] a start time, [sp, #12] the coding's time
+    sub sp, #20                     @ [sp] the headers, [sp, #8] a start time, [sp, #12] the coding's time, [sp, #16] the frame's
     mov r10, r0
     ldrh r9, [r1, #0xc]             @ the request's seq
     adr.w r3, sm_seq
@@ -77,12 +88,18 @@ sm_cmd:                             @ r0 the editor's stream, r1 the request -> 
     ldr r3, =CLOCK
     blx r3
     str r0, [sp, #8]
+    str r0, [sp, #16]
     mov r0, r11
     adr.w r1, sm_prev
     add.w r1, r1, #FB_BYTES         @ sm_out, beyond adr's reach
     mov r2, r4
     bl sm_encode
     mov r8, r0                      @ the coded frame's bytes
+    adr.w r0, sm_prev
+    add.w r0, r0, #FB_BYTES
+    add r0, r8
+    bl sm_events_out
+    add r8, r0
     ldr r3, =CLOCK
     blx r3
     ldr r1, [sp, #8]
@@ -162,15 +179,11 @@ sm_sent:
     ldr r1, [sp, #8]
     subs r0, r0, r1
     adr.w r1, sm_trailer
-    movs r2, #0
-    strh r2, [r1]
-    ldr r2, [sp, #12]
-    strh r2, [r1, #2]
-    lsrs r2, r2, #16
-    strh r2, [r1, #4]
-    strh r0, [r1, #6]
-    lsrs r0, r0, #16
-    strh r0, [r1, #8]
+    str r0, [r1, #8]
+    ldr r0, [sp, #12]
+    str r0, [r1, #4]
+    ldr r0, [sp, #16]
+    str r0, [r1]
     movs r2, #TRAILER
     bl sm_write
     mov r0, r10
@@ -186,6 +199,85 @@ sm_sent:
     add sp, #20
     pop {r4-r11, pc}
 
+sm_event:                           @ before each UI event's post: r0 the 8-byte event, logged with the µs clock
+    push {r4, lr}
+    mov r4, r0
+    ldr r3, =CLOCK
+    blx r3
+    adr.w r1, sm_events
+    ldr r2, [r1]                    @ the events ever logged
+    and r3, r2, #RING - 1
+    add r3, r3, r3, lsl #1
+    add r3, r1, r3, lsl #2
+    str r0, [r3, #4]
+    ldr r0, [r4]
+    str r0, [r3, #8]
+    ldr r0, [r4, #4]
+    str r0, [r3, #12]
+    adds r2, #1
+    str r2, [r1]                    @ counted once written: the reply reads up to the count
+    pop {r4, pc}
+
+sm_events_out:                      @ r0 where: 0, n, the events logged since the last reply and the LEDs, as halfwords -> r0 the bytes
+    push {r4-r6, lr}
+    adr.w r1, sm_events
+    ldr r2, [r1]
+    adr.w r3, sm_events_sent
+    ldr r4, [r3]
+    str r2, [r3]
+    subs r5, r2, r4
+    cmp r5, #RING
+    itt hi
+    movhi r5, #RING
+    subhi r4, r2, #RING             @ more than the ring holds: the newest
+    mov r6, r0
+    movs r3, #0
+    strh r3, [r6], #2
+    strh r5, [r6], #2
+sm_events_next:
+    cbz r5, sm_events_done
+    and r3, r4, #RING - 1
+    add r3, r3, r3, lsl #1
+    add r3, r1, r3, lsl #2
+    ldrh r2, [r3, #4]
+    strh r2, [r6], #2
+    ldrh r2, [r3, #6]
+    strh r2, [r6], #2
+    ldrh r2, [r3, #8]
+    strh r2, [r6], #2
+    ldrh r2, [r3, #10]
+    strh r2, [r6], #2
+    ldrh r2, [r3, #12]
+    strh r2, [r6], #2
+    ldrh r2, [r3, #14]
+    strh r2, [r6], #2
+    adds r4, #1
+    subs r5, #1
+    b sm_events_next
+sm_events_done:
+    mov r5, r0
+    ldr r1, =LED_COLOURS
+    ldr r12, =LED_MODES
+    movs r3, #0
+sm_leds:
+    add r2, r3, r3, lsl #1
+    add r2, r1
+    ldrb r0, [r2]
+    ldrb r4, [r2, #1]
+    orr r0, r0, r4, lsl #8
+    ldrb r4, [r2, #2]
+    orr r0, r0, r4, lsl #16
+    ldrb r4, [r12, r3]
+    orr r0, r0, r4, lsl #24
+    strh r0, [r6], #2
+    lsrs r0, r0, #16
+    strh r0, [r6], #2
+    adds r3, #1
+    cmp r3, #LEDS
+    blo sm_leds
+    sub r0, r6, r5
+    pop {r4-r6, pc}
+
 sm_write:                           @ r1 bytes, r2 how many: to the stream, r10
     mov r0, r10
     ldr r3, [r10]
@@ -194,10 +286,14 @@ sm_write:                           @ r1 bytes, r2 how many: to the stream, r10
 
 sm_encode:                          @ r0 a frame, r1 the output, r2 1 for every pixel -> r0 the bytes coded; sm_prev becomes the frame
     push {r4-r11, lr}
-    push {r1}                       @ the output's start
+    sub sp, #12                     @ [sp] the output's start, [sp, #4] where to sleep next, [sp, #8] the frame's end
+    str r1, [sp]
     mov r4, r0                      @ the next pixel
     ldr r5, =FB_BYTES
     add r5, r0                      @ the frame's end
+    str r5, [sp, #8]
+    add r3, r0, #YIELD_BYTES
+    str r3, [sp, #4]
     mov r6, r1                      @ the next output halfword
     adr.w r8, sm_prev
     subs r8, r8, r0                 @ from a pixel to its place in sm_prev
@@ -205,8 +301,25 @@ sm_encode:                          @ r0 a frame, r1 the output, r2 1 for every 
 sm_next:
     cmp r4, r5
     bhs sm_coded
+    ldr r0, [sp, #4]
+    cmp r4, r0
+    blo sm_awake
+sm_later:
+    add r0, r0, #YIELD_BYTES
+    cmp r4, r0
+    bhs sm_later
+    str r0, [sp, #4]
+    ldr r0, =YIELD_US
+    ldr r3, =SLEEP
+    blx r3
+sm_awake:
     cmp r11, #0
     bne sm_changed
+    ldr r5, [sp, #4]                @ the unchanged scan stops where the coding sleeps next, so a still frame sleeps too
+    ldr r0, [sp, #8]
+    cmp r5, r0
+    it hi
+    movhi r5, r0
     mov r7, r4                      @ as far as the pixels are as before: eight words a step, then two, then one pixel
     tst r7, #2
     beq sm_same_eights
@@ -271,6 +384,7 @@ sm_same_tail:
     adds r7, #2
     b sm_same_tail
 sm_same_end:
+    ldr r5, [sp, #8]
     subs r1, r7, r4
     lsrs r1, r1, #1
     cmp r1, #2
@@ -390,8 +504,9 @@ sm_literal_end:
     mov r4, r7
     b sm_next
 sm_coded:
-    pop {r1}
+    ldr r1, [sp]
     sub r0, r6, r1
+    add sp, #12
     pop {r4-r11, pc}
 
 .ltorg
@@ -399,8 +514,12 @@ sm_coded:
 sm_seq:                             @ the last request's seq
     .space 4
 sm_trailer:
-    .space 12
+    .space TRAILER
+sm_events_sent:                     @ sm_events' count at the last reply
+    .space 4
+sm_events:                          @ the events ever logged, then RING records {µs, event}
+    .space 4 + RING * EVENT
 sm_prev:                            @ the frame as the host has it
     .space FB_BYTES
-sm_out:                             @ right after sm_prev; at most a halfword a pixel, and a count
-    .space FB_BYTES + 16
+sm_out:                             @ right after sm_prev; at most a halfword a pixel and a count, then the events
+    .space FB_BYTES + 16 + 4 + RING * EVENT + 4 * LEDS

@@ -1,10 +1,11 @@
 // mirror_mac.swift - the window tools/hx_mirror.py shows the HX Stomp's screen in, and its recorder, without ffmpeg.
 //   swiftc -O tools/mac/mirror_mac.swift -o build/mirror_mac     (hx_mirror.py builds it on first use)
-//   mirror_mac WIDTH HEIGHT SCALE TITLE [OUT.mov]
+//   mirror_mac WIDTH HEIGHT SCALE TITLE [OUT.mov [REC_SCALE [h264|prores]]]
 // Reads frames on stdin, each a little-endian Double (seconds, any clock) then WIDTH x HEIGHT RGB pixels, top row first, and
-// shows each one SCALE times as big with square pixels. With OUT.mov it also writes them as H.264 at that size, each frame at
-// its time after the first, so the video keeps the HX Stomp's timing however unevenly the frames came. It finishes the file
-// and exits when stdin ends or the window closes.
+// shows each one SCALE times as big with square pixels. With OUT.mov it also writes them REC_SCALE times as big (4 by default),
+// each frame at its time after the first, so the video keeps the HX Stomp's timing however unevenly the frames came: as H.264,
+// or ProRes 4444, which keeps every pixel's colour. An even REC_SCALE keeps H.264's half-resolution colour inside each screen
+// pixel; at an odd one, colours bleed across pixel edges. It finishes the file and exits when stdin ends or the window closes.
 import AVFoundation
 import AppKit
 
@@ -13,11 +14,13 @@ let args = CommandLine.arguments
 let w = args.count >= 5 ? Int(args[1]) ?? 0 : 0, h = args.count >= 5 ? Int(args[2]) ?? 0 : 0
 let scale = args.count >= 5 ? Int(args[3]) ?? 0 : 0
 if w < 1 || h < 1 || scale < 1 {
-    FileHandle.standardError.write("usage: mirror_mac WIDTH HEIGHT SCALE TITLE [OUT.mov]\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: mirror_mac WIDTH HEIGHT SCALE TITLE [OUT.mov [REC_SCALE [h264|prores]]]\n".data(using: .utf8)!)
     exit(2)
 }
 let title = args[4], outPath = args.count > 5 ? args[5] : nil
-let sw = w * scale, sh = h * scale
+let rscale = args.count > 6 ? max(1, Int(args[6]) ?? 4) : 4
+let prores = args.count > 7 && args[7] == "prores"
+let sw = w * scale, sh = h * scale, rw = w * rscale, rh = h * rscale
 func say(_ s: String) { FileHandle.standardError.write(("mirror_mac: " + s + "\n").data(using: .utf8)!) }
 
 final class Recorder {
@@ -31,13 +34,13 @@ final class Recorder {
         try? FileManager.default.removeItem(atPath: path)
         writer = try AVAssetWriter(outputURL: URL(fileURLWithPath: path), fileType: .mov)
         input = AVAssetWriterInput(mediaType: .video, outputSettings: [
-            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: sw, AVVideoHeightKey: sh,
-            AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 8_000_000],
-        ])
+            AVVideoCodecKey: prores ? AVVideoCodecType.proRes4444 : AVVideoCodecType.h264, AVVideoWidthKey: rw, AVVideoHeightKey: rh,
+        ].merging(prores ? [:] : [AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: rw * rh * 16,
+                                                                     AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel]]) { a, _ in a })
         input.expectsMediaDataInRealTime = true
         adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferWidthKey as String: sw, kCVPixelBufferHeightKey as String: sh,
+            kCVPixelBufferWidthKey as String: rw, kCVPixelBufferHeightKey as String: rh,
         ])
         writer.add(input)
         writer.startWriting()
@@ -55,7 +58,7 @@ final class Recorder {
         let dst = CVPixelBufferGetBaseAddress(buf)!.assumingMemoryBound(to: UInt8.self)
         let stride = CVPixelBufferGetBytesPerRow(buf)
         bgra.withUnsafeBufferPointer { src in
-            for y in 0..<sh { memcpy(dst + y * stride, src.baseAddress! + y * sw * 4, sw * 4) }
+            for y in 0..<rh { memcpy(dst + y * stride, src.baseAddress! + y * rw * 4, rw * 4) }
         }
         CVPixelBufferUnlockBaseAddress(buf, [])
         if adaptor.append(buf, withPresentationTime: t) { last = t }
@@ -70,15 +73,15 @@ final class Recorder {
     }
 }
 
-// Each pixel scale x scale, as BGRA
+// Each pixel rscale x rscale, as BGRA
 func scaled(_ rgb: [UInt8]) -> [UInt8] {
-    var out = [UInt8](repeating: 255, count: sw * sh * 4)
+    var out = [UInt8](repeating: 255, count: rw * rh * 4)
     for y in 0..<h {
         for x in 0..<w {
             let s = (y * w + x) * 3
-            for dy in 0..<scale {
-                var d = ((y * scale + dy) * sw + x * scale) * 4
-                for _ in 0..<scale {
+            for dy in 0..<rscale {
+                var d = ((y * rscale + dy) * rw + x * rscale) * 4
+                for _ in 0..<rscale {
                     out[d] = rgb[s + 2]; out[d + 1] = rgb[s + 1]; out[d + 2] = rgb[s]
                     d += 4
                 }

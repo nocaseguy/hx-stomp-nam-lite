@@ -29,7 +29,8 @@ The repository's tools and the build switches. Status tags as in [conventions.md
 | `tools/features/bpm.py`, `src/m4/bpm.s` | The BPM on the Home screen and its beat dot (`HX_BPM=1`); `tests/test_bpm.py` runs its handlers in unicorn. |
 | `tools/patch_click.py`, `src/sharc/click.asm` | The Metronome block (`HX_CLICK=1`): a model with a tempo-synced Time and its DSP kernel; `tests/test_click.py` runs the kernel in ssim. |
 | `tools/features/screen_mirror.py`, `src/m4/screen_mirror.s` | The screen mirror (`HX_SCREEN_MIRROR=1`, not on the web page): HX Edit's editor service answers command 0x52 with the frame on the LCD. |
-| `tools/hx_mirror.py`, `tools/mac/mirror_mac.swift` | The HX Stomp's screen on a Mac from a screen mirror build: a PNG (`shot`), a live window (`view`), an H.264 `.mov` (`view --record`), and `Session` for a script that drives the unit while it records. |
+| `tools/hx_mirror.py`, `tools/mac/mirror_mac.swift` | The HX Stomp's screen on a Mac from a screen mirror build: a PNG (`shot`), a live window (`view`), an H.264 `.mov` with the controls used (`view --record`), the event codes of each control (`events`, `learn`), and `Session` for a script that drives the unit while it records. |
+| `tools/mac/stomp_render.swift`, `tools/mac/skins/` | A recording set into a photo of the HX Stomp (photos in `build/art/`, out of git), its controls moving as they were used, as an MP4 small enough to attach on GitHub. |
 
 Build commands:
 
