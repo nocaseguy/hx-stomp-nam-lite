@@ -13,7 +13,7 @@ body:
     attributes:
       label: HXtra version
       description: The boot screen shows it at power-on, or see the release you downloaded.
-      placeholder: v1.0.0
+      placeholder: v1.1.0
     validations:
       required: true
   - type: dropdown

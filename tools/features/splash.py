@@ -16,7 +16,7 @@ import patch_splash as ps
 import splash_emoji
 import splash_hxtra
 
-TEXT = 'v1.0.0'
+TEXT = 'v1.1.0'
 INPUTS = (Input('HX_SPLASH', path=True), Input('HX_SPLASH_FIT', choices=('fill', 'fit'), default='fill'),
           Input('HX_SPLASH_TEXT', default=TEXT), Input('HX_SPLASH_GLYPHS', path=True, mapping=True))
 
