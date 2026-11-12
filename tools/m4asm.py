@@ -6,6 +6,7 @@ With HX_M4_CACHE set to a release's m4cache.json (tools/m4cache.py), modules com
 import hashlib
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -15,6 +16,10 @@ CLANG = '/Library/Developer/CommandLineTools/usr/bin/clang'
 SHT_SYMTAB, SHT_RELA, SHT_REL = 2, 4, 9
 CACHE = 'HX_M4_CACHE'
 SOURCE_TYPES = ('.s', '.inc')
+MARK = 'm4asm_adr_'                 # the labels mark_adr() puts before each adr
+ADR = re.compile(r'^(\s*(?:[\w.$]+:\s*)?)(adr(?:\.[wn])?(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)?)'
+                 r'\s+(\w+)\s*,\s*([^@;]*?)\s*(?:[@;].*)?$', re.I)
+TARGET = re.compile(r'^([A-Za-z_.$][\w.$]*)\s*(?:([+-])\s*(0x[0-9a-f]+|\d+))?$', re.I)
 
 
 def key(src, include=()):
@@ -41,14 +46,68 @@ def cached(path, src, include):
     return bytes.fromhex(hit['code']), hit['symbols']
 
 
+def mark_adr(text, src):
+    """text with a label MARK<n> before each adr, and [(n, target label, addend, line)]: clang takes an adr's offset mod 4096
+    without a word when its label is further (Apple clang 21), so assemble_module() checks each one's encoding."""
+    out, adrs, macro = [], [], False
+    for no, line in enumerate(text.split('\n'), 1):
+        word = line.split('@')[0].strip().lower()
+        macro = (macro or word.startswith('.macro')) and not word.startswith('.endm')
+        m = ADR.match(line)
+        if m:
+            if macro:
+                raise SystemExit(f'm4asm: {src}:{no}: an adr inside a .macro, which m4asm cannot check: move it out')
+            t = TARGET.match(m.group(4))
+            if not t:
+                raise SystemExit(f'm4asm: {src}:{no}: m4asm checks an adr to a label, or a label + a number: {m.group(4)!r}')
+            addend = int(t.group(3), 0) * (-1 if t.group(2) == '-' else 1) if t.group(2) else 0
+            out.append(f'{m.group(1)}{MARK}{len(adrs)}: {line[len(m.group(1)):]}')
+            adrs.append((len(adrs), t.group(1), addend, no))
+        else:
+            out.append(line)
+    return '\n'.join(out), adrs
+
+
+def adr_target(code, at):
+    """Where the adr at offset at of code points, or None when it is no adr."""
+    hw, = struct.unpack_from('<H', code, at)
+    base = (at + 4) & ~3
+    if hw & 0xf800 == 0xa000:
+        return base + ((hw & 0xff) << 2)
+    if at + 4 <= len(code) and hw & 0xfbff in (0xf20f, 0xf2af):
+        hw2, = struct.unpack_from('<H', code, at + 2)
+        imm = (hw >> 10 & 1) << 11 | (hw2 >> 12 & 7) << 8 | hw2 & 0xff
+        return base + (imm if hw & 0xfbff == 0xf20f else -imm)
+    return None
+
+
+def check_adr(code, symbols, adrs, src):
+    for n, label, addend, no in adrs:
+        at, want = symbols[f'{MARK}{n}'], symbols.get(label)
+        if want is None:
+            continue                                # an .equ or another section: clang refuses or relocates those itself
+        got = adr_target(code, at)
+        if got is None:
+            raise SystemExit(f'm4asm: {src}:{no}: no adr assembled at its line')
+        if got != want + addend:
+            raise SystemExit(f'm4asm: {src}:{no}: the adr to {label} is {want + addend - (at + 4 & ~3):#x} bytes from it, out of an '
+                             f"adr's reach (4095), and clang assembled it to {got:#x} instead of {want + addend:#x}: adr to a near "
+                             'label and add the rest')
+
+
 def assemble_module(src, include=()):
-    """(.text, {symbol: offset}) of src; refuses relocations and data outside .text, which nothing would place."""
+    """(.text, {symbol: offset}) of src; refuses relocations, data outside .text, which nothing would place, and an adr whose
+    label is out of its reach."""
     if os.environ.get(CACHE):
         return cached(os.environ[CACHE], src, include)
     with tempfile.TemporaryDirectory() as d:
+        marked, adrs = mark_adr(open(src).read(), src)
+        with open(f'{d}/{os.path.basename(src)}', 'w') as f:
+            f.write(marked)
         obj = f'{d}/o.o'
         subprocess.run([CLANG, '-target', 'thumbv7em-none-eabi', '-mcpu=cortex-m4', '-mfpu=fpv4-sp-d16', '-mfloat-abi=hard',
-                        *(f'-I{i}' for i in include), '-c', src, '-o', obj], check=True)
+                        *(f'-I{i}' for i in (*include, os.path.dirname(os.path.abspath(src)))), '-c', f.name, '-o', obj],
+                       check=True)
         e = open(obj, 'rb').read()
     shoff, = struct.unpack_from('<I', e, 0x20)
     shentsize, shnum, shstrndx = struct.unpack_from('<3H', e, 0x2e)
@@ -77,7 +136,9 @@ def assemble_module(src, include=()):
             if shndx == text and sym and not sym.startswith('$'):
                 symbols[sym] = value & ~1
     s = secs[text]
-    return e[s[4]:s[4] + s[5]], symbols
+    code = e[s[4]:s[4] + s[5]]
+    check_adr(code, symbols, adrs, src)
+    return code, {k: v for k, v in symbols.items() if not k.startswith(MARK)}
 
 
 def assemble(src, include=()):
