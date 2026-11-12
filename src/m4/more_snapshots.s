@@ -35,6 +35,7 @@
 .equ FILE_LEN, 8 + 3 * REC          @ its bin16: "HX6B", version, 3 spare, the three records
 .equ DARK, 0x101010                 @ the digit on a lit camera's white circle; black would be the renderer's transparent
 .equ WRAP, 5                        @ in snaps_data: the select on its way is a next or previous past the bank's end
+.equ VALUE, 2                       @ in WRAP instead: the select on its way is CC 69's value, 0..5
 
 snaps_select:                       @ a footswitch press's call of select (manager, index)
     adr.w r2, snaps_data
@@ -51,13 +52,15 @@ snaps_stock:
     ldr r12, =SELECT
     bx r12
 
-snaps_cc_select:                    @ MIDI CC 69's call of select (manager, index): stock, bar a next or previous past the bank's end
+snaps_cc_select:                    @ MIDI CC 69's call of select (manager, index): stock, bar a value 0..5 or a next or previous past the bank's end
     adr.w r2, snaps_data
     ldrb r3, [r2, #WRAP]
+    cmp r3, #VALUE
+    beq snaps_value
     cmp r3, #0
     beq snaps_stock
 
-snaps_wrap:                         @ (manager, index, snaps_data): the other bank's first or last, if this preset has a bank B
+snaps_wrap:                        @ (manager, index, snaps_data): the other bank's first or last, if this preset has a bank B
     movs r3, #0
     strb r3, [r2, #WRAP]
     ldrb r3, [r2, #1]
@@ -65,13 +68,26 @@ snaps_wrap:                         @ (manager, index, snaps_data): the other ba
     beq snaps_stock
     cmp r1, #2
     bhi snaps_stock
+snaps_cc_cross:
     ldrb.w r3, [r0, #BUSY]
     cmp r3, #0
     bne snaps_stock
     ldrb.w r2, [r0, #CUR]
     b snaps_cross
 
-snaps_next_cur:                     @ in place of footswitch next's read of the current snapshot (manager): marks a wrap past 3 or 6
+snaps_value:                        @ (manager, value, snaps_data): 0..2 snapshots 1..3 and 3..5 snapshots 4..6, from either bank
+    movs r3, #0
+    strb r3, [r2, #WRAP]
+    ldrb r3, [r2]
+    cmp r1, #3
+    itt hs
+    subhs r1, #3
+    eorhs r3, r3, #1                @ r3 set: the value's bank is not the live one
+    cmp r3, #0
+    beq snaps_stock
+    b snaps_cc_cross
+
+snaps_next_cur:                    @ in place of footswitch next's read of the current snapshot (manager): marks a wrap past 3 or 6
     ldrb.w r0, [r0, #CUR]
     cmp r0, #2
     beq snaps_mark
@@ -82,11 +98,17 @@ snaps_prev_cur:                     @ in place of footswitch previous's read: ma
     cbz r0, snaps_mark
     bx lr
 
+snaps_cc_value:                     @ in place of CC 69's manager getter before its select of the value: marks it
+    ldr r0, =MANAGER
+    movs r2, #VALUE
+    b snaps_mark_as
+
 snaps_cc_wrap:                      @ in place of CC 69's manager getter where next leaves 3 or previous leaves 1: marks the wrap
     ldr r0, =MANAGER
 snaps_mark:
-    adr.w r1, snaps_data
     movs r2, #1
+snaps_mark_as:
+    adr.w r1, snaps_data
     strb r2, [r1, #WRAP]
     bx lr
 
