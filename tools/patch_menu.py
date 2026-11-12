@@ -61,7 +61,7 @@ STRIP_DIMMED = 0.39             # a stock strip icon's dim pixels are its lit on
 STRIP_SCALE = 1.6               # a stock strip icon is its section icon at 1.38..1.78 times the size, 1.6 on average
 # Stock categories a feature's MENU may name: (category, its page table, as each dispatch's own literal loads it). The table is
 # copied with the features' settings in its trailing empty slots and on pages after it, since the next category's table follows it.
-STOCK_CATEGORIES = {'Footswitches': (2, 0x28e3b550)}
+STOCK_CATEGORIES = {'Footswitches': (2, 0x28e3b550), 'Displays': (5, 0x28e3b540)}
 TITLE_LEN = 64                   # the title setter 0x28dc5f20 copies at most 64 bytes
 ICONS = {   # the stock image index of each icon a feature may name (tests check them against Entry 7's names)
     'Icon_Displays': 0x48,       # a feature's section icon when it names none

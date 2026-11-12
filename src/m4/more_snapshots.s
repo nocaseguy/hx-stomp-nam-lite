@@ -34,8 +34,12 @@
 .equ FILE_KEY, 0x64                 @ bank B's key in the preset's map; stock uses 0..12
 .equ FILE_LEN, 8 + 3 * REC          @ its bin16: "HX6B", version, 3 spare, the three records
 .equ DARK, 0x101010                 @ the digit on a lit camera's white circle; black would be the renderer's transparent
+.equ WRAP, 5                        @ in snaps_data: the select on its way is a next or previous past the bank's end
 
 snaps_select:                       @ a footswitch press's call of select (manager, index)
+    adr.w r2, snaps_data
+    ldrb r3, [r2, #WRAP]
+    cbnz r3, snaps_wrap
     cmp r1, #2
     bhi snaps_stock
     ldrb.w r2, [r0, #CUR]
@@ -47,10 +51,52 @@ snaps_stock:
     ldr r12, =SELECT
     bx r12
 
+snaps_cc_select:                    @ MIDI CC 69's call of select (manager, index): stock, bar a next or previous past the bank's end
+    adr.w r2, snaps_data
+    ldrb r3, [r2, #WRAP]
+    cmp r3, #0
+    beq snaps_stock
+
+snaps_wrap:                         @ (manager, index, snaps_data): the other bank's first or last, if this preset has a bank B
+    movs r3, #0
+    strb r3, [r2, #WRAP]
+    ldrb r3, [r2, #1]
+    cmp r3, #0
+    beq snaps_stock
+    cmp r1, #2
+    bhi snaps_stock
+    ldrb.w r3, [r0, #BUSY]
+    cmp r3, #0
+    bne snaps_stock
+    ldrb.w r2, [r0, #CUR]
+    b snaps_cross
+
+snaps_next_cur:                     @ in place of footswitch next's read of the current snapshot (manager): marks a wrap past 3 or 6
+    ldrb.w r0, [r0, #CUR]
+    cmp r0, #2
+    beq snaps_mark
+    bx lr
+
+snaps_prev_cur:                     @ in place of footswitch previous's read: marks a wrap past 1 or 4
+    ldrb.w r0, [r0, #CUR]
+    cbz r0, snaps_mark
+    bx lr
+
+snaps_cc_wrap:                      @ in place of CC 69's manager getter where next leaves 3 or previous leaves 1: marks the wrap
+    ldr r0, =MANAGER
+snaps_mark:
+    adr.w r1, snaps_data
+    movs r2, #1
+    strb r2, [r1, #WRAP]
+    bx lr
+
 snaps_flip:                         @ the lit one again: the other bank, then select(index) from the record the sound came from
-    push {r4-r10, lr}
+    mov r2, r1
+snaps_cross:                        @ (manager, index, the index being left)
+    push {r3-r11, lr}
     mov r4, r0
     mov r5, r1
+    mov r11, r2
     adr.w r6, snaps_data
     ldrb r0, [r6, #1]
     cbnz r0, snaps_ready
@@ -92,7 +138,7 @@ snaps_ready:
     bl snaps_copy
     adr.w r1, snaps_shadow          @ the record just swapped out holds the sound being left, with its edits
     mov.w r2, #REC
-    mla r1, r2, r5, r1
+    mla r1, r2, r11, r1
     mov r0, r9
     bl snaps_copy
     ldrb.w r8, [r4, #PREV]
@@ -127,7 +173,7 @@ snaps_flipped:
     ldr r3, =REDRAW
     blx r3
     mov r0, r10
-    pop {r4-r10, pc}
+    pop {r3-r11, pc}
 
 snaps_loaded:                       @ before the preset parser fills the records: bank A, and bank B from the file or anew
     adr.w r0, snaps_data
@@ -586,7 +632,7 @@ snaps_names:                        @ bank B's default names, 16 bytes apart
 snaps_file_head:                    @ key 0x64, bin16 of FILE_LEN (big-endian), "HX6B", version 1, 3 spare
     .byte FILE_KEY, 0xc5, FILE_LEN >> 8, FILE_LEN & 0xff, 'H', 'X', '6', 'B', 1, 0, 0, 0
 snaps_data:                         @ 0 bank B live, 1 snaps_shadow holds bank B, 2 flipped to bank A for a save, 3 cameras to redraw,
-    .word 0, 0                      @ 4 bank B written to a file, 6 bank B read from a file, 7 the map's new count
+    .word 0, 0                      @ 4 bank B written to a file, 5 WRAP, 6 bank B read from a file, 7 the map's new count
 snaps_temp:
     .space REC
 snaps_shadow:                       @ the bank not live: three records as the manager's

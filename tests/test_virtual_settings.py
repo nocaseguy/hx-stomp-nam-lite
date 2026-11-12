@@ -364,7 +364,8 @@ class Built:
         return r0 - (1 << 32) if r0 >> 31 else r0, struct.unpack('<BxxxI', self.m.read(OUT, 8))
 
 
-ALL = {'HX_TUNER': '1', 'HX_BPM': '1', 'HX_DSP_METER': '1', 'HX_LONG_PRESS': '1', 'HX_MORE_SNAPSHOTS': '1', 'HX_BREATHING_LINE': '1'}
+ALL = {'HX_TUNER': '1', 'HX_BPM': '1', 'HX_DSP_METER': '1', 'HX_LONG_PRESS': '1', 'HX_MORE_SNAPSHOTS': '1', 'HX_BREATHING_LINE': '1',
+       'HX_TAP_COLOR': '1'}
 
 
 @pytest.mark.firmware
@@ -484,6 +485,35 @@ def test_built_turn_on_a_stock_footswitches_setting_is_the_stock_turn(m4emu, pag
             m.call(0x28dcef50, VIEW, slot, delta)
         runs.append(([at for at, _ in m.log], m.calls(CHANGED), m.read(RECORDS, 40 * 137), m.read(VIEW, 0x50)))
     assert runs[0] == runs[1], 'the same calls, repaints and stores (the table register left over differs: ours is a copy)'
+
+
+
+@pytest.mark.firmware
+def test_built_turn_on_the_displays_page(m4emu):
+    """Tap LED Color in Displays' empty third slot (MENU 'Displays'): the stock turn handler steps it through the engine."""
+    new, _ = menu_entry0(stock_e0(), MODS, {'HX_TAP_COLOR': '1'})
+    b = Built(m4emu, new)
+    m = b.m
+    b.m.write(record(111) + 8, struct.pack('<BxxxI', 3, FLOAT_ONE))
+    m.write(VIEW, b'\0' * 0x50)
+    m.write(VIEW + 0xa, bytes([5, 0]))      # Displays, its one page: LED Ring Brightness, Tap Tempo LED, Tap LED Color
+    m.call(0x28dcef50, VIEW, 2, 4)
+    assert b.get(SETTINGS_IDS['tap_color.color']) == (0, (2, 1))     # Red -> DkOrange
+    assert struct.unpack('<BxxxI', m.read(record(111) + 8, 8)) == (2, 1)
+
+
+@pytest.mark.firmware
+@pytest.mark.parametrize('slot', [0, 1])    # LED Ring Brightness, Tap Tempo LED
+def test_built_turn_on_a_stock_displays_setting_is_the_stock_turn(m4emu, slot):
+    runs = []
+    for e0 in (stock_e0(), menu_entry0(stock_e0(), MODS, {'HX_TAP_COLOR': '1'})[0]):
+        m = Built(m4emu, e0).m
+        m.write(VIEW, b'\0' * 0x50)
+        m.write(VIEW + 0xa, bytes([5, 0]))
+        for delta in (4, -4, 400):
+            m.call(0x28dcef50, VIEW, slot, delta)
+        runs.append(([at for at, _ in m.log], m.calls(CHANGED), m.read(RECORDS, 40 * 137), m.read(VIEW, 0x50)))
+    assert runs[0] == runs[1], 'the same calls, repaints and stores'
 
 
 SETTINGS_IDS = setting_ids.by_name()

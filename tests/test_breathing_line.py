@@ -16,6 +16,8 @@ RATES = [round(2 ** 32 / (ms * 1000)) for ms in (8000, 6000, 4800, 4000, 3200, 2
 SCHEMES = [(c, c, c) for c in (0xffffff, 0xff0000, 0x00ff00, 0x0060ff)] + [
     (0xff1800, 0xff7000, 0xffc800), (0x0050ff, 0x00d0ff, 0xd0f8ff), (0x9000ff, 0xff2a7a, 0xff8a00),     # Fire, Ice, Sunset
     (0x0018ff, 0x0090ff, 0x00ffd0), (0x00ff70, 0x00b0ff, 0x9a00ff), (0xff00d0, 0x5000ff, 0x00f0ff)]     # Ocean, Aurora, Neon
+BEATS = [1, 4, 2, 2, 2, 1, 8]       # Speed Tempo: beats a cycle for each Type
+TEMPO = 10                          # Speed's Tempo value
 SINE = [round(127.5 + 127.5 * math.sin(2 * math.pi * a / 256)) for a in range(256)]
 
 
@@ -27,7 +29,8 @@ def test_settings_values_defaults_and_ids():
     assert s['color'].values[s['color'].default] == b'Rainbow' and len(s['color'].values) == len(SCHEMES) + 1
     assert s['motion'].values == (b'Off', b'Steady', b'Breathe', b'Cylon', b'Comet', b'Heart', b'Sparkle')
     assert s['motion'].values[s['motion'].default] == b'Breathe'
-    assert s['speed'].values == tuple(str(n).encode() for n in range(1, 11)) and s['speed'].values[s['speed'].default] == b'4'
+    assert s['speed'].values == tuple(str(n).encode() for n in range(1, 11)) + (b'Tempo',)
+    assert s['speed'].values[s['speed'].default] == b'4'
     ids = setting_ids.by_name()
     assert (ids['breathing_line.color'], ids['breathing_line.motion'], ids['breathing_line.speed']) == (0xd7, 0xd8, 0xd9)
     fields = {who: (cid, bit, bits) for _, cid, bit, bits, who, _ in setting_ids.VIRTUAL}
@@ -198,8 +201,8 @@ class Line:
     def set_data(self, i, v):
         self.m.u32(MOD + self.sym['bl_data'] + 4 * i, v)
 
-    def paint(self, fb=0x28d1ce98, **settings):
-        self.settings = {IDS[k]: v for k, v in settings.items()}
+    def paint(self, fb=0x28d1ce98, stock=None, **settings):
+        self.settings = {IDS[k]: v for k, v in settings.items()} | (stock or {})
         self.fills = []
         self.call('bl_paint', fb)
         return self.fills
@@ -316,6 +319,57 @@ def test_paint_survives_the_clock_wrapping(line):
     line.now = 0x00010000
     line.paint(motion=2, speed=0)
     assert line.data(4) == (phase + 0x20000 * RATES[0]) & 0xffffffff
+
+
+def f32(x):
+    return struct.unpack('<I', struct.pack('<f', x))[0]
+
+
+def tempo_rate(bpm, motion):
+    """The Tempo rate: 2^32 / BEATS[motion] beats of a whole-ms beat in µs, rounded as bl_tempo_rate rounds it."""
+    cycle = int(60000 / f32_value(bpm)) * 1000 * BEATS[motion]
+    q, r = divmod(M32, cycle)
+    return q + (r >= cycle >> 1)
+
+
+def f32_value(x):
+    return struct.unpack('<f', struct.pack('<f', x))[0]
+
+
+def rate_after(line, us, **paint):
+    line.paint(**paint)
+    phase = line.data(4)
+    line.now += us
+    line.paint(**paint)
+    return (line.data(4) - phase) & M32, us
+
+
+@pytest.mark.parametrize('motion', range(1, 7))
+def test_tempo_runs_a_cycle_in_each_types_beats(line, motion):
+    stock = {14: 2, 15: f32(120.0)}                 # Tempo Select Global, Global BPM 120
+    delta, us = rate_after(line, 100_000, motion=motion, speed=TEMPO, stock=stock)
+    assert delta == us * tempo_rate(120.0, motion)
+    assert abs(tempo_rate(120.0, motion) - 2 ** 32 / (500_000 * BEATS[motion])) < 1
+
+
+def test_tempo_follows_preset_bpm_unless_tempo_select_is_global(line):
+    for select in (0, 1):                           # Preset, Snapshot
+        stock = {14: select, 15: f32(120.0), 16: f32(90.0)}
+        delta, us = rate_after(line, 100_000, motion=2, speed=TEMPO, stock=stock)
+        assert delta == us * tempo_rate(90.0, 2)
+
+
+def test_tempo_takes_the_beat_in_whole_ms_as_the_stock_beat(line):
+    stock = {14: 2, 15: f32(133.0)}                 # 451.13 ms: the stock beat runs at 451
+    delta, us = rate_after(line, 100_000, motion=5, speed=TEMPO, stock=stock)
+    assert delta == us * round(2 ** 32 / (451_000 * BEATS[5]))
+
+
+@pytest.mark.parametrize('bpm', [0.0, 0.5, 1024.0, float('nan')])
+def test_tempo_without_a_tempo_runs_at_the_default_speed(line, bpm):
+    stock = {14: 2, 15: f32(bpm)}
+    delta, us = rate_after(line, 100_000, motion=2, speed=TEMPO, stock=stock)
+    assert delta == us * RATES[bl.SETTINGS[2].default]
 
 
 def test_paint_uses_the_defaults_for_values_above_max(line):
