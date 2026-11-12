@@ -1,5 +1,6 @@
 """tools/features/more_snapshots.py and src/m4/more_snapshots.s: the module run in unicorn against a fake snapshot manager and stock
-select (a flip on the lit snapshot, select's view of it, bank B's defaults and edits, preset load and save, the lock), the number
+select (a flip on the lit snapshot, next and previous across the banks, select's view of it, bank B's defaults and edits, preset
+load and save, the lock), the number
 it draws over the snapshot icon in bank B, and the firmware it builds."""
 import os
 import struct
@@ -48,9 +49,10 @@ def bank_a(i):
 class Manager:
     """The module in unicorn, with the manager's records, the lock, and select doing what stock does to them."""
 
-    def __init__(self, m4emu):
+    def __init__(self, m4emu, at=CODE):
         code, self.sym = m4emu.assemble('src/m4/more_snapshots.s', MODS, IDS)
-        self.m = m4emu.M4(code, CODE)
+        self.at = at
+        self.m = m4emu.M4(code, at)
         self.stack_top = m4emu.STACK_TOP
         self.depth, self.selects, self.inits, self.held = 0, [], [], []
         self.m.stub(LOCK, self._lock)
@@ -152,10 +154,37 @@ class Manager:
 
     def press(self, i):
         """The footswitch for snapshot i+1 (i 0..2), as the snapshot action calls select."""
-        return self.m.call(CODE + self.sym['snaps_select'], MGR, i)
+        return self.m.call(self.at + self.sym['snaps_select'], MGR, i)
 
     def call(self, sym, *args):
-        return self.m.call(CODE + self.sym[sym], *args)
+        return self.m.call(self.at + self.sym[sym], *args)
+
+    def step(self, way, source='fs'):
+        """Next (+1) or previous (-1) as stock does it: the footswitch functions read the current snapshot, wrap it in 0..2 and call
+        select; CC 69 reads it straight, and calls the manager getter only where it wraps."""
+        if source == 'fs':
+            cur = self.call('snaps_next_cur' if way > 0 else 'snaps_prev_cur', MGR)
+            assert cur == self.cur(), 'the current snapshot, as the stock read returns it'
+            return self.call('snaps_select', MGR, (cur + way) % 3)
+        cur = self.cur()
+        mgr = MGR
+        if cur == (2 if way > 0 else 0):
+            mgr = self.call('snaps_cc_wrap')
+            assert mgr == MGR, 'the manager, as the stock getter returns it'
+        return self.call('snaps_cc_select', mgr, (cur + way) % 3)
+
+    def cc(self, value):
+        """CC 69 with value 0..2: select straight, with no wrap read."""
+        return self.call('snaps_cc_select', MGR, value)
+
+    def go(self, i):
+        """Snapshot i in the live bank: a press unless it's lit, which would flip."""
+        if self.cur() != i:
+            self.press(i)
+        self.selects.clear()
+
+    def bank_b_live(self):
+        return self.m.read(self.at + self.sym['snaps_data'], 1)[0] == 1
 
     def read_section(self):
         """The load's read of section 10: (file, 10, 0, buffer) and the buffer's size on the stack."""
@@ -174,7 +203,7 @@ class Manager:
             self.m.u8(NODE + 0x40 * n + 0x24, 0)
         self.m.write(self.stack_top - 0x400, b'\xaa' * 0x400)     # a stack that is not zeroed, as on the unit
         sym, view_at = ('snaps_paint', 0x2812aae0) if view == 'top' else ('snaps_home_paint', 0x2812a05c)
-        self.m.call(CODE + self.sym[sym], FB, view_at)
+        self.m.call(self.at + self.sym[sym], FB, view_at)
         return self.events, [n for n in range(4) if self.m.read(NODE + 0x40 * n + 0x24, 1)[0]]
 
 
@@ -491,6 +520,127 @@ def test_a_load_without_a_whole_bank_b_starts_bank_b_anew(mgr, section):
     assert mgr.inits == [b'SNAPSHOT 4', b'SNAPSHOT 5', b'SNAPSHOT 6']
 
 
+def with_bank_b(mgr):
+    """A flip to bank B, each of 4..6 selected so each holds a sound, and back: this preset has a bank B, and bank A is live on
+    snapshot 1. Bank B's records."""
+    mgr.press(0)
+    mgr.press(1)
+    mgr.press(2)
+    mgr.press(0)
+    for i in range(3):
+        r = bytearray(mgr.rec(i))
+        r[5] = 0xb0 + i                                 # an edit on each of snapshots 4..6
+        mgr.m.write(record(i), r)
+    bank_b = [mgr.rec(i) for i in range(3)]
+    mgr.press(0)
+    mgr.selects.clear()
+    mgr.inits.clear()
+    return bank_b
+
+
+@pytest.mark.parametrize('source', ['fs', 'cc'])
+@pytest.mark.parametrize('way, start, end', [(1, 2, 0), (-1, 0, 2)])
+def test_without_bank_b_next_and_previous_wrap_within_1_to_3(mgr, source, way, start, end):
+    """A preset that never had a bank B stays stock: next on 3 goes to 1 and previous on 1 to 3, with no bank B made."""
+    mgr.m.u8(MGR + CUR, start)
+    assert mgr.step(way, source) == 1
+    assert [(new, old) for new, old, _, _ in mgr.selects] == [(end, start)] and mgr.inits == []
+    assert [mgr.rec(i) for i in range(3)] == [bank_a(i) for i in range(3)] and not mgr.bank_b_live()
+
+
+@pytest.mark.parametrize('source', ['fs', 'cc'])
+@pytest.mark.parametrize('way, start, end', [(1, 2, 0), (-1, 0, 2)])
+def test_with_bank_b_next_and_previous_cross_into_it(mgr, source, way, start, end):
+    """Next on 3 goes to 4, previous on 1 to 6: bank B is swapped in and select recalls its snapshot from the sound being left."""
+    bank_b = with_bank_b(mgr)
+    mgr.go(start)
+    assert mgr.step(way, source) == 1
+    (new, old, old_rec, new_rec), = mgr.selects
+    assert new == end and old != end, 'a select of another index, so it recalls rather than reselects'
+    assert (old_rec, new_rec) == (bank_a(start), bank_b[end]), 'from the snapshot being left to the other bank\'s'
+    assert [mgr.rec(i) for i in range(3)] == bank_b and mgr.bank_b_live() and mgr.cur() == end
+    assert mgr.inits == [] and mgr.depth == 0
+
+
+@pytest.mark.parametrize('source', ['fs', 'cc'])
+@pytest.mark.parametrize('way, start, end', [(1, 2, 0), (-1, 0, 2)])
+def test_in_bank_b_next_and_previous_cross_back_to_bank_a(mgr, source, way, start, end):
+    """Next on 6 goes to 1, previous on 4 to 3."""
+    bank_b = with_bank_b(mgr)
+    mgr.press(0)
+    mgr.go(start)
+    mgr.step(way, source)
+    (new, _, old_rec, new_rec), = mgr.selects
+    assert (new, old_rec, new_rec) == (end, bank_b[start], bank_a(end))
+    assert [mgr.rec(i) for i in range(3)] == [bank_a(i) for i in range(3)] and not mgr.bank_b_live() and mgr.cur() == end
+
+
+@pytest.mark.parametrize('source', ['fs', 'cc'])
+def test_next_runs_through_all_six_and_previous_back(mgr, source):
+    with_bank_b(mgr)
+    seen = []
+    for way in [1] * 6 + [-1] * 6:
+        mgr.step(way, source)
+        seen.append(mgr.cur() + 3 * mgr.bank_b_live() + 1)
+    assert seen == [2, 3, 4, 5, 6, 1, 6, 5, 4, 3, 2, 1]
+
+
+@pytest.mark.parametrize('source', ['fs', 'cc'])
+@pytest.mark.parametrize('way, start', [(1, 0), (1, 1), (-1, 1), (-1, 2)])
+def test_next_and_previous_inside_a_bank_go_straight_to_select(mgr, source, way, start):
+    with_bank_b(mgr)
+    mgr.go(start)
+    mgr.step(way, source)
+    assert [(new, old) for new, old, _, _ in mgr.selects] == [(start + way, start)] and not mgr.bank_b_live()
+
+
+def test_a_wrap_while_select_is_held_off_goes_to_select_and_is_forgotten(mgr):
+    with_bank_b(mgr)
+    mgr.go(2)
+    mgr.m.u8(MGR + BUSY, 1)
+    mgr.step(1)
+    assert mgr.held == [0] and not mgr.bank_b_live()
+    mgr.m.u8(MGR + BUSY, 0)
+    mgr.selects.clear()
+    mgr.cc(1)
+    assert [(new, old) for new, old, _, _ in mgr.selects] == [(1, 2)] and not mgr.bank_b_live(), 'the next select is stock'
+
+
+def test_a_wrap_without_bank_b_is_forgotten(mgr):
+    mgr.m.u8(MGR + CUR, 2)
+    mgr.step(1)
+    mgr.selects.clear()
+    mgr.press(0)
+    assert mgr.inits == [b'SNAPSHOT 4', b'SNAPSHOT 5', b'SNAPSHOT 6'] and mgr.bank_b_live(), 'the lit one again still flips'
+
+
+@pytest.mark.parametrize('lit', [0, 1, 2])
+def test_cc_69_on_the_lit_snapshot_stays_stock(mgr, lit):
+    """Only the footswitches flip on the lit snapshot: CC 69's 0..2 go to select, which Reselect Snapshot then handles."""
+    with_bank_b(mgr)
+    mgr.go(lit)
+    mgr.cc(lit)
+    assert [(new, old) for new, old, _, _ in mgr.selects] == [(lit, lit)] and not mgr.bank_b_live()
+
+
+def test_a_bank_b_from_the_file_is_crossed_into_without_a_flip(mgr):
+    records = b''.join(bytes([0xb0 + i]) * REC for i in range(3))
+    mgr.section = bank_b_file(records)
+    mgr.read_section()
+    mgr.call('snaps_loaded', MGR, 0, 0, 0)
+    mgr.m.u8(MGR + CUR, 2)
+    mgr.step(1)
+    assert mgr.inits == [] and mgr.bank_b_live() and mgr.rec(0)[:VALID] == records[:VALID], "the file's snapshot 4"
+
+
+def test_a_preset_load_forgets_the_last_presets_bank_b(mgr):
+    with_bank_b(mgr)
+    mgr.call('snaps_loaded', MGR, 0, 0, 0)
+    mgr.m.u8(MGR + CUR, 2)
+    mgr.step(1)
+    assert [(new, old) for new, old, _, _ in mgr.selects] == [(0, 2)] and mgr.inits == [] and not mgr.bank_b_live()
+
+
 def test_feature_flag():
     assert ms.FLAG == 'HX_MORE_SNAPSHOTS' and not getattr(ms, 'SETTINGS', ())
 
@@ -504,12 +654,50 @@ def test_build_sends_the_snapshot_footswitch_to_the_module_and_wraps_load_and_sa
     assert read(module, len(code)) == code
     assert [branch_target(s, read(s, 4)) for s in ms.FS_SELECT_CALLS] == [module + sym['snaps_select']] * 2
     assert [branch_target(s, read(s, 4)) for s, _, _ in ms.FILE_CALLS] == [module + sym[h] for _, _, h in ms.FILE_CALLS]
+    hooks = ((ms.NEXT_CUR, 'snaps_next_cur'), (ms.PREV_CUR, 'snaps_prev_cur'), (ms.CC_SELECT, 'snaps_cc_select'),
+             *((s, 'snaps_cc_wrap') for s in ms.CC_WRAP_CALLS))
+    assert [branch_target(s, read(s, 4)) for s, _ in hooks] == [module + sym[h] for _, h in hooks]
     for fn, before, after in ((ms.PARSE, 'snaps_loaded', None), *((fn, 'snaps_saving', 'snaps_saved') for fn, _ in ms.SERIALIZERS)):
         stub = branch_target(fn, read(fn, 4))
         assert branch_target(stub + 6, read(stub + 6, 4)) == module + sym[before], 'push, ldm, then the before handler'
         if after:
             at = stub + len(pm.chain_cave(stub, stub, [stub], [stub])) - 12      # the after handler's bl, before the epilogue
             assert branch_target(at, read(at, 4)) == module + sym[after]
+
+
+DISPATCH, DISPATCH_END, DISPATCH_SWITCH = 0x28dd14a0, 0x28dd1880, 0x28dd14e0
+OBJ, TRAMPOLINE = 0x28730000, 0x28740000
+NEXT_FN, PREV_FN = 7, 8                     # footswitch functions SnpshtUp and SnpshtDn, as FS3..FS10 Function set them
+
+
+@pytest.mark.firmware
+@pytest.mark.parametrize('k', [3, 4])
+def test_the_built_dispatch_crosses_the_banks_for_a_virtual_footswitch(m4emu, k):
+    """The built firmware's next and previous cases, entered at the dispatch's switch with its frame, as long press runs an FS6..FS10
+    Function (and as a release of FS4 or FS5 reaches them): next on 3 goes to 4 and on 6 to 1, previous on 1 to 6."""
+    code, sym = m4emu.assemble('src/m4/more_snapshots.s', MODS, IDS)
+    read, on = built({'HX_MORE_SNAPSHOTS': '1', 'HX_LONG_PRESS': '1'})
+    assert {'more_snapshots', 'long_press'} <= set(on)
+    module = branch_target(ms.FS_SELECT_CALLS[0], read(ms.FS_SELECT_CALLS[0], 4)) - sym['snaps_select']
+    mgr = Manager(m4emu, module)
+    mgr.m.load(DISPATCH, read(DISPATCH, DISPATCH_END - DISPATCH))
+    mgr.m.stub(0x28d960a4, lambda m: m.reg('r0', MGR))
+    # push {r4-r6,lr}; sub sp,#16; r4 k, r6 the object, r5 2k, r3 the function - 1; then the dispatch's switch
+    mgr.m.load(TRAMPOLINE, bytes.fromhex('70b5 84b0 0446 0e46 6500 1346') + pm.thumb_bw(TRAMPOLINE + 12, DISPATCH_SWITCH))
+
+    def release(fn):
+        """A release of footswitch k with function fn, its press marked as the press case marks it."""
+        mgr.m.u8(OBJ + 0x78 + k, 0)
+        mgr.m.u8(OBJ + (0x5d if fn == NEXT_FN else 0x5e), 1)
+        mgr.m.call(TRAMPOLINE, k, OBJ, fn - 1)
+        return mgr.cur() + 3 * mgr.bank_b_live() + 1
+
+    with_bank_b(mgr)
+    assert [release(NEXT_FN) for _ in range(6)] == [2, 3, 4, 5, 6, 1]
+    assert [release(PREV_FN) for _ in range(6)] == [6, 5, 4, 3, 2, 1]
+    mgr.call('snaps_loaded', MGR, 0, 0, 0)
+    mgr.m.u8(MGR + CUR, 2)
+    assert release(NEXT_FN) == 1 and mgr.inits == [], 'with no bank B, next on 3 wraps to 1'
 
 
 @pytest.mark.firmware
@@ -576,7 +764,9 @@ def test_the_number_covers_the_icon_digit_and_stays_inside_the_circle():
 def test_without_the_flag_the_sites_stay_stock():
     read, on = built({})
     assert 'more_snapshots' not in on
-    assert all(read(s, 4) == pm.thumb_bw(s, ms.SELECT) for s in ms.FS_SELECT_CALLS)
+    assert all(read(s, 4) == pm.thumb_bw(s, ms.SELECT) for s in (*ms.FS_SELECT_CALLS, ms.CC_SELECT))
+    assert read(ms.NEXT_CUR, 4) == pm.bl(ms.NEXT_CUR, ms.CUR_GET) and read(ms.PREV_CUR, 4) == pm.bl(ms.PREV_CUR, ms.CUR_GET)
+    assert all(read(s, 4) == pm.bl(s, ms.MANAGER_GET) for s in ms.CC_WRAP_CALLS)
     assert all(read(s, 4) == pm.bl(s, fn) for s, fn, _ in ms.FILE_CALLS)
     assert read(ms.PARSE, 4) == ms.PARSE_STOCK and all(read(fn, 4) == stock for fn, stock in ms.SERIALIZERS)
     assert struct.unpack('<I', read(ms.TOP_PAINT_LIT, 4))[0] == ms.TOP_PAINT

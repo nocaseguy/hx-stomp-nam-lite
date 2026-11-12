@@ -1,6 +1,6 @@
 """More snapshots: pressing the lit snapshot footswitch again flips between snapshots 1-3 and 4-6 (src/m4/more_snapshots.s); in
-4-6 the snapshot icon at the top right and the footswitch labels show 4, 5 or 6. Snapshots 4-6 live in RAM until the next preset load; a save writes
-snapshots 1-3, whichever bank is live."""
+4-6 the snapshot icon at the top right and the footswitch labels show 4, 5 or 6. Once a preset has a bank B, the next and previous snapshot
+footswitches and MIDI CC 69 run through all six: next on 3 goes to 4, next on 6 to 1, previous on 1 to 6, previous on 4 to 3."""
 
 FLAG = 'HX_MORE_SNAPSHOTS'
 
@@ -8,6 +8,10 @@ SELECT = 0x28de2f90                 # (manager, index): recalls a snapshot
 # The tail calls of select (b.w) a footswitch press reaches: the footswitch functions' (0x28dd14a0: 14 snapshot k for footswitch k,
 # as Snapshot mode sets them [verified on unit], and 7, 8 next and previous) and the snapshot action's (0x28de59a8)
 FS_SELECT_CALLS = (0x28dd1640, 0x28de59d8)
+# Footswitch next and previous (the dispatch's cases 7 and 8) read the current snapshot at these calls of 0x28de3750, then wrap it in 0..2
+NEXT_CUR, PREV_CUR, CUR_GET = 0x28dd1628, 0x28dd16dc, 0x28de3750
+# MIDI CC 69 (0x28d9b120): its calls of the manager getter only where 8 (next) wraps 2 to 0 and 9 (previous) 0 to 2, and its select
+CC_WRAP_CALLS, MANAGER_GET, CC_SELECT = (0x28d9b676, 0x28d9b6d8), 0x28d960a4, 0x28d9b5de
 PARSE, PARSE_STOCK = 0x28de42c4, bytes.fromhex('2de9 f04f')     # the preset's snapshots into the manager; push.w {r4-r11,lr}
 # The preset serializers: each copies the blocks, with their live values, then calls the snapshot writer 0x28de3c9c; a load takes the
 # live values as its current snapshot's. 0x28dea8c4 (push.w {r4-r8,lr}) is the one a save on the unit took [verified on unit],
@@ -26,6 +30,11 @@ def apply(p):
     m = p.module('src/m4/more_snapshots.s')
     for site in FS_SELECT_CALLS:
         p.own_call(site, SELECT, f"a footswitch's call of select at {site:#x}", m['snaps_select'])
+    p.own_call(NEXT_CUR, CUR_GET, "footswitch next's read of the current snapshot", m['snaps_next_cur'])
+    p.own_call(PREV_CUR, CUR_GET, "footswitch previous's read of the current snapshot", m['snaps_prev_cur'])
+    for site in CC_WRAP_CALLS:
+        p.own_call(site, MANAGER_GET, f"MIDI CC 69's call of the manager getter at {site:#x}, where it wraps", m['snaps_cc_wrap'])
+    p.own_call(CC_SELECT, SELECT, "MIDI CC 69's call of select", m['snaps_cc_select'])
     p.chain_entry(PARSE, PARSE_STOCK, before=m['snaps_loaded'])
     for site, stock, handler in FILE_CALLS:
         p.own_call(site, stock, f'the call at {site:#x} of {stock:#x}', m[handler])
