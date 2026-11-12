@@ -1,0 +1,102 @@
+name: Bug report
+description: Something in HXtra doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please check the README's [Known issues](https://github.com/wisemandenny/hxtra#known-issues) and the [open issues](https://github.com/wisemandenny/hxtra/issues) first.
+
+        **HX Stomp stuck at the splash screen?** Power it off, hold Page Right while powering it on, and reinstall the stock firmware with Line 6 Updater. Then tell us what happened here.
+  - type: input
+    id: version
+    attributes:
+      label: HXtra version
+      description: The boot screen shows it at power-on, or see the release you downloaded.
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options:
+        - HX Stomp
+        - HX Effects
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How are you running HXtra?
+      options:
+        - Installed with Line 6 Updater
+        - Run from RAM
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: How did you build it?
+      options:
+        - The setup page
+        - build.py on the command line
+    validations:
+      required: true
+  - type: dropdown
+    id: features
+    attributes:
+      label: Which feature is it about?
+      multiple: true
+      options:
+        - BPM display
+        - DSP usage display
+        - Six snapshots
+        - Long press and virtual footswitches
+        - Tap LED color
+        - Breathing line
+        - Metronome
+        - Gain-reduction meter
+        - Tuner settings
+        - Real block names
+        - Custom boot screen
+        - NAM A2 Lite
+        - The setup page or installing
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What to press or change on the HX Stomp, in order, to make it happen again.
+      placeholder: |
+        1. Open Global Settings > Displays
+        2. Set Tap LED Color to Rainbow
+        3. Tap the TAP footswitch
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: Photos or video
+      description: A photo or short video of the screen helps a lot. Drag files in here.
+  - type: input
+    id: setup
+    attributes:
+      label: Computer and browser
+      description: Only for problems with the setup page or installing.
+      placeholder: macOS 15, Chrome 142
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else?
+      description: The preset you were using, MIDI gear connected, other features you changed, or build options you used.

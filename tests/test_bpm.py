@@ -14,7 +14,7 @@ from features import bpm, tuner
 from firmware import assert_virtual, branch_target, menu_entry0, reader, stock_e0
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FONTS = (4, 5, 2, 1)                # Font's values as font numbers: XL 35 Bold, L 41 Lite, M 28 Bold, S 21 Reg
+FONTS = (4, 5, 2, 1)                # Font's values as font numbers: XL 35 Bold, L 41 Lite, M 28 Bold, S 21 Reg; then Off
 COLOURS = (0xffffff, 0xb1b1b1, 0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0080ff, 0xb000ff, 0xff0000)   # Tempo: TAP red
 TAP_NOW = 0x28e70000                # Tap LED Color's shown colour, in a build with it
 CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command Line Tools clang')
@@ -22,13 +22,13 @@ CLANG = pytest.mark.skipif(not os.path.exists(m4asm.CLANG), reason='no Command L
 
 def test_settings_values_defaults_and_ids():
     s = {x.key: x for x in bpm.SETTINGS}
-    assert s['font'].values == (b'XL', b'L', b'M', b'S')
+    assert s['font'].values == (b'XL', b'L', b'M', b'S', b'Off')
     assert s['color'].values == (b'White', b'Gray', b'Red', b'Orange', b'Yellow', b'Green', b'Cyan', b'Blue', b'Purple',
                                  b'Tempo')
-    assert s['dot'].values == (b'Left', b'Right', b'Both')
+    assert s['dot'].values == (b'Left', b'Right', b'Both', b'Off')
     assert [x.label for x in bpm.SETTINGS] == [b'Size\nFont', b'Color', b'Position\nDot'], 'Font over Size, Dot over Position'
     assert (s['font'].default, s['color'].default, s['dot'].default) == (1, 0, 0), 'L, White, Left'
-    assert len(FONTS) == len(s['font'].values) and len(COLOURS) == len(s['color'].values)
+    assert len(FONTS) == s['font'].max and len(COLOURS) == len(s['color'].values)
     ids = setting_ids.by_name()
     assert (ids['bpm.font'], ids['bpm.color'], ids['bpm.dot']) == (0xce, 0xcf, 0xd0), 'virtual: a unit keeps a value by ID, so never move them'
     assert bpm.FLAG == 'HX_BPM'
@@ -461,7 +461,7 @@ def test_before_sets_the_font_bpm_font_says(m4, value):
     assert [r[1] for r in m4.called(SET_FONT)] == [FONTS[value]]
 
 
-@pytest.mark.parametrize('value', [None, 4, 255])
+@pytest.mark.parametrize('value', [None, 5, 255])
 def test_before_takes_the_default_font_when_unset_or_out_of_range(m4, value):
     before(m4, font=value)
     assert [r[1] for r in m4.called(SET_FONT)] == [FONTS[1]] == [5], 'L, 41 Lite'
@@ -501,7 +501,7 @@ def test_a_build_with_tap_led_color_hands_bpm_its_shown_colour(monkeypatch):
 
 
 @pytest.mark.parametrize('value, xs', [(0, range(69, 99)), (1, range(221, 251)), (2, [*range(69, 99), *range(221, 251)]),
-                                       (None, range(69, 99)), (3, range(69, 99))])
+                                       (3, []), (None, range(69, 99)), (4, range(69, 99))])
 def test_before_shows_the_dots_bpm_dot_pos_says(m4, value, xs):
     before(m4, dot=value)
     shown = [r[0] for r in m4.called(SET_RECT_VISIBLE) if r[1] == 1]
@@ -517,3 +517,36 @@ def test_before_shows_the_dots_bpm_dot_pos_says(m4, value, xs):
 def test_before_lights_the_dot(m4, lit, tapped, expect):
     before(m4, colour=3, lit=lit, tapped=tapped)
     assert {r[1] for r in m4.called(SET_RECT_COLOUR)} == {expect}
+
+
+def test_font_off_hides_the_tempo_and_keeps_the_dot(m4):
+    before(m4, font=4)
+    assert not m4.called(SET_FONT) and [r[1] for r in m4.called(SET_TEXT_VISIBLE)] == [0]
+    assert struct.unpack('<I', m4.data(16, 4))[0] == 468, 'the period at 128 BPM, for the dot without a TAP footswitch'
+    assert len([r for r in m4.called(SET_RECT_VISIBLE) if r[1] == 1]) == 9
+
+
+@pytest.mark.parametrize('font, dot, shown', [(1, 0, True), (4, 0, True), (1, 3, True), (4, 3, False)])
+def test_before_notes_whether_any_of_it_shows(m4, font, dot, shown):
+    before(m4, font=font, dot=dot)
+    assert bool(m4.data(7)[0]) == shown
+
+
+def test_nothing_repaints_for_it_while_both_are_off(m4):
+    """With the tempo and the dot off the Home view is left as stock: no repaint for a beat, a tap or a tempo change."""
+    before(m4, font=4, dot=3)
+    fs_functions(m4, [1, 7, 7])
+    rings(m4, [1, 0, 0])
+    m4.call('bpm_tick')
+    m4.call('bpm_tap')
+    m4.call('bpm_written', 15)
+    assert not m4.called(REDRAW)
+    assert list(m4.data(4, 2)) == [1, 1], 'the beat is still followed, so the dot is in step once shown again'
+    before(m4, font=1, dot=3)
+    m4.call('bpm_tap')
+    assert m4.called(REDRAW), 'the tempo back on: the next Home paint lets repaints through again'
+
+
+def test_repaints_are_let_through_until_the_first_paint_past_1000_ms(m4):
+    """The boot's repaints from 1 s are what first show it, so before then it counts as shown."""
+    assert m4.data(7)[0] == 1

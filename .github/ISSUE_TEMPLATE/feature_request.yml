@@ -1,0 +1,60 @@
+name: Feature request
+description: An idea for something HXtra could add or do better.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. Please check the [open issues](https://github.com/wisemandenny/hxtra/issues?q=is%3Aissue+label%3Aenhancement) first, and add a 👍 to an existing request rather than opening a new one.
+
+        HXtra changes Line 6's firmware without its source code, so some ideas turn out to be impossible or too risky. We'll say so if that happens.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: What you're trying to do on the HX Stomp, and what gets in the way today.
+      placeholder: When I play live, I want to see the tempo without opening the tempo screen.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How should it work?
+      description: What you'd press, and what you'd see or hear.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where would it live?
+      multiple: true
+      options:
+        - Home screen
+        - Footswitches
+        - Global Settings
+        - A block or model
+        - Snapshots or presets
+        - Tuner
+        - MIDI
+        - The setup page
+        - Not sure
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options:
+        - HX Stomp
+        - HX Effects
+        - Both
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: How do you work around it now?
+      description: Stock settings, other gear or a workaround you use instead.
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else?
+      description: Sketches, photos, or how another pedal does it.
