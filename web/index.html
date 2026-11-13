@@ -134,7 +134,6 @@
   .demo { display: flex; gap: 6px; margin-top: 8px; }
   .demo img, .demo video { flex: 0 1 calc(50% - 3px); min-width: 0; aspect-ratio: 4 / 3; border-radius: 6px; background: #0d1117; }
   .demo video { aspect-ratio: 1280 / 914; }
-  .tour { width: 480px; max-width: 100%; height: auto; margin-top: 6px; border-radius: 8px; background: #0d1117; }
 
   .files { display: grid; gap: 6px; font-size: 14px; }
   .files div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); }
@@ -256,106 +255,13 @@
         <select id="lang"></select>
       </label>
     </div>
-    <h1 data-i18n="hero.title">HXtra for HX Stomp</h1>
-    <p class="lede" data-i18n="hero.lede">HXtra is a custom firmware for the HX Stomp. This page builds it from your own Line 6 file, walks you through installing it, and turns your <b>.nam</b> captures into files the HX Stomp can play, all running locally in this browser.</p>
-    <img class="tour" src="https://github.com/user-attachments/assets/b804955a-3275-40b6-932b-d1ccf10c4d95" alt="" width="480" height="360">
+    <h1 data-i18n="hero.title">Set up HXtra for HX Stomp</h1>
+    <p class="lede" data-i18n="hero.lede">Setup instructions</p>
   </header>
 
   <div class="warning" data-i18n="warn"><b>Unofficial and experimental.</b> HXtra isn't made or supported by Line 6. Installing modified firmware is at your own risk and may void your warranty. Don't worry though: if anything goes wrong, the <a href="#recovery">Recovery</a> steps put the stock firmware back easily.</div>
 
-  <section class="step" id="features" aria-labelledby="hfeats">
-    <div class="step-head solo">
-      <h2 id="hfeats" data-i18n="feat.title">Features</h2>
-      <p data-i18n="feat.sub">Every build has all of these + NAM A2 Lite.</p>
-    </div>
-    <div class="checks" id="feats">
-      <div class="feat" data-feature="HX_TUNER"><span data-i18n="feat.tuner"><b>Tuner settings</b></span>
-        <ul data-i18n="feat.tunerS">
-          <li><i>On the tuner's own third page</i></li>
-          <li><b>Tuner button</b> (Hold, Press): Hold opens the tuner when you hold TAP; Press opens it with a press, and TAP no longer taps the tempo.</li>
-          <li><b>Tuner lock</b> (Off, On): On locks the tuner's other settings (Output, Reference, Type, Trails, Offsets).</li>
-        </ul>
-        <div class="demo"><img src="https://github.com/user-attachments/assets/7decba81-b026-4fb5-95f9-6c8899b2e47c" alt="" loading="lazy"></div>
-      </div>
-      <div class="feat" data-feature="HX_BPM"><span data-i18n="feat.bpm"><b>BPM display</b></span>
-        <ul data-i18n="feat.bpmS">
-          <li><i>Global Settings › BPM Display</i></li>
-          <li><b>Font size</b> (XL, L, M, S, Off): the size of the tempo at the top left of the Home screen. Off hides it.</li>
-          <li><b>Color</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): the tempo's and the beat dot's colour. Tempo follows the TAP footswitch's colour (Tap LED Color).</li>
-          <li><b>Dot position</b> (Left, Right, Both, Off): where the beat dot blinks with TAP, beside the preset number. Off hides it; with both Off the BPM display is off.</li>
-        </ul>
-        <div class="demo"><img src="https://github.com/user-attachments/assets/62783af2-506f-4878-80ed-e2705acba51c" alt="" loading="lazy"><img src="https://github.com/user-attachments/assets/4579e864-8a7d-46fd-a764-ec5cd102b6e9" alt="" loading="lazy"></div>
-      </div>
-      <div class="feat" data-feature="HX_BREATHING_LINE"><span data-i18n="feat.line"><b>Breathing line</b></span>
-        <ul data-i18n="feat.lineS">
-          <li><i>Global Settings › Breathing Line</i></li>
-          <li><b>Color</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): the colour or gradient of the line across the middle of the Home screen.</li>
-          <li><b>Type</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): how it moves; Off gives back the stock line.</li>
-          <li><b>Speed</b> (1–10, Tempo): one cycle takes 8 s at 1 and 0.8 s at 10; Tempo follows the tempo, a beat a cycle for Heart, two for Breathe, Cylon and Comet, four for Steady, eight for Sparkle.</li>
-        </ul>
-        <div class="demo"><img src="https://github.com/user-attachments/assets/d492b0aa-1151-42c6-b84a-27f6fd36e5d8" alt="" loading="lazy"><img src="https://github.com/user-attachments/assets/dd1085e1-c51d-4377-8dee-26b8ce5e1423" alt="" loading="lazy"></div>
-      </div>
-      <div class="feat" data-feature="HX_DSP_METER"><span data-i18n="feat.dsp"><b>DSP meter</b></span>
-        <ul data-i18n="feat.dspS">
-          <li><i>No settings</i></li>
-          <li>Each block shows its share of the DSP, and the top right corner the total, in the Edit view and in the model browser.</li>
-        </ul>
-        <div class="demo"><img src="https://github.com/user-attachments/assets/fb8644f3-b5ab-4803-b3be-fefcfb23c7b3" alt="" loading="lazy"></div>
-      </div>
-      <div class="feat" data-feature="HX_GR"><span data-i18n="feat.gr"><b>Gain reduction meter</b></span>
-        <ul data-i18n="feat.grS">
-          <li><i>Knobs on the Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester and Red Squeeze compressors</i></li>
-          <li><b>Mtr Thk</b> (0 … 20): the meter's thickness in pixels; 0, the default, turns it off.</li>
-          <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): where on the Home screen the meter lights up to show how much the compressor is reducing the gain. Middle takes the place of the line across the middle.</li>
-          <li><b>Mtr Dir</b> (Normal, Reverse): Normal fills left to right or top to bottom; Reverse the other way.</li>
-        </ul>
-        <div class="demo"><video src="https://github.com/user-attachments/assets/50b5cd91-f578-4252-a1df-4b73d8ca1995" controls muted playsinline preload="none"></video></div>
-      </div>
-      <div class="feat"><span data-i18n="feat.vfs"><b>Virtual footswitches</b></span>
-        <ul data-i18n="feat.vfsS">
-          <li><i>Five extra footswitches, FS6 … FS10, that come with Footswitch long press</i></li>
-          <li><b>Assign a block</b>: in the block's Bypass Assign, press Page › once to see MIDI In, then turn MIDI In up from Off: FS6 is one click up, FS10 five, and while it's on one of them the knob reads FootswIn. The preset keeps the assignment.</li>
-          <li><b>Parameters</b>: assign one to the same FS in Controller Assign, and it follows the footswitch too.</li>
-          <li><b>MIDI</b>: <b>underneath, FS6 … FS10 are MIDI CC 20 … 24.</b> HX Edit shows them that way, and a MIDI controller sending those CCs switches them as well.</li>
-        </ul>
-        <div class="demo"><img src="https://github.com/user-attachments/assets/f0261c29-ef31-4527-8d96-21ef176b67aa" alt="" loading="lazy"></div>
-      </div>
-      <div class="feat" data-feature="HX_LONG_PRESS"><span data-i18n="feat.hold"><b>Footswitch long press</b></span>
-        <ul data-i18n="feat.holdS">
-          <li><i>Global Settings › Footswitches</i></li>
-          <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): what holding that footswitch for a second does in Stomp mode. FS6 … FS10 are virtual footswitches: assign blocks to them in Bypass Assign.</li>
-          <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): what that virtual footswitch does, as FS3 … FS5 Function do for the real ones. Stomp, the default, toggles its blocks.</li>
-          <li><b>Switch a virtual footswitch</b>: hold the footswitch whose Hold is set to that FS. By default, holding FS1 switches FS6, and so on up to FS5 and FS10. A tap still toggles the footswitch's own blocks.</li>
-        </ul>
-        <div class="demo"><img src="https://github.com/user-attachments/assets/50a6ecf0-6d87-4556-8ffd-035e4b40987b" alt="" loading="lazy"></div>
-      </div>
-      <div class="feat" data-feature="HX_MORE_SNAPSHOTS"><span data-i18n="feat.snap"><b>More snapshots</b></span>
-        <ul data-i18n="feat.snapS">
-          <li><i>No settings</i></li>
-          <li>Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6.</li>
-          <li>Once a preset has snapshots 4–6, next and previous snapshot (SnpshtUp, SnpshtDn, MIDI CC 69) step through all six: next on 3 goes to 4, and next on 6 back to 1.</li>
-          <li>MIDI CC 69 selects any of the six directly: values 0–2 for snapshots 1–3, 3–5 for 4–6.</li>
-        </ul>
-        <div class="demo"><img src="https://github.com/user-attachments/assets/8ce9d86c-cffb-491e-9c47-0430a02a4af7" alt="" loading="lazy"></div>
-      </div>
-      <div class="feat" data-feature="HX_TAP_COLOR"><span data-i18n="feat.tap"><b>Tap LED color</b></span>
-        <ul data-i18n="feat.tapS">
-          <li><i>Global Settings › Displays</i></li>
-          <li><b>Tap LED Color</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): the colour of the TAP footswitch's blinking ring, and of its icon and label on the Home screen. Red is the stock colour. Rainbow fades the ring a small step round the colour wheel at each beat, from red through orange, yellow, green, blue, indigo and violet and back; Random picks a new colour at each beat. Both keep the label white.</li>
-        </ul>
-        <div class="demo"><img src="https://github.com/user-attachments/assets/29f1b0a3-fa13-4d40-bfb0-cb426b15079d" alt="" loading="lazy"></div>
-      </div>
-      <div class="feat" data-feature="HX_CLICK"><span data-i18n="feat.click"><b>Metronome</b></span>
-        <ul data-i18n="feat.clickS">
-          <li><i>New block: Looper › Metronome</i></li>
-          <li><b>Time</b> (a note value, synced to the tempo): the beat, as a delay's Time.</li>
-          <li><b>Level</b> (−60 … +6 dB): the click's volume.</li>
-          <li><b>Accent</b> (Off, 2 … 12): every nth beat is a downbeat, a higher click.</li>
-          <li><b>Thru</b> (Off, On): On plays your signal with the click under it; Off plays the click alone.</li>
-        </ul>
-        <div class="demo"><video src="https://github.com/user-attachments/assets/f25be41c-3ab0-45a1-87fa-99cd50194933" controls muted playsinline preload="none"></video></div>
-      </div>
-    </div>
+  <section class="step" id="options" hidden>
     <div class="checks" id="opts" hidden>
       <div class="feat" data-option="HX_REAL_NAMES" hidden><label><input type="checkbox"> <span data-i18n="feat.names"><b>Real block names</b> (optional, off unless you tick it)</span></label>
         <ul data-i18n="feat.namesS">
@@ -366,7 +272,6 @@
       </div>
     </div>
     <p class="tip" id="featNone" hidden data-i18n="feat.none">This copy of the page has no feature code, so it builds NAM A2 Lite and the boot screen only. The page published with each HXtra release has it.</p>
-
   </section>
 
   <nav class="steps-nav" aria-label="Steps">
@@ -558,6 +463,7 @@
       <li data-i18n="rec.li1">Turn the HX Stomp off.</li>
       <li data-i18n="rec.li2"><b>Hold the Page › button while you turn it on.</b> It starts in update mode with a dark screen.</li>
       <li data-i18n="rec.li3">In Line 6 Updater, choose <b>Choose File</b> and pick the <b>stock</b> file from step 1 (<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>).</li>
+      <li data-i18n="rec.li4">Use <b>HX Edit</b> to restore the backup file you made in step 1 (<b>File &gt; Restore From Backup...</b>).</li>
     </ol>
   </section>
 
@@ -660,31 +566,9 @@ var EN = {
 var LANGS = {
   "es": {
     "lang": "Idioma",
-    "hero.title": "HXtra para HX Stomp",
-    "hero.lede": "HXtra es un firmware personalizado para el HX Stomp. Esta página lo crea a partir de tu propio archivo de Line 6, te guía en la instalación y convierte tus capturas <b>.nam</b> en archivos que el HX Stomp puede reproducir, todo ejecutándose localmente en este navegador.",
+    "hero.title": "Configura HXtra para HX Stomp",
+    "hero.lede": "Instrucciones de configuración",
     "warn": "<b>No oficial y experimental.</b> HXtra no lo ha creado ni lo respalda Line 6. Instalar un firmware modificado es bajo tu propia responsabilidad y puede anular la garantía. Pero tranquilo: si algo sale mal, los pasos de <a href=\"#recovery\">Recuperación</a> restauran fácilmente el firmware original.",
-    "feat.title": "Funciones",
-    "feat.sub": "Todas las versiones incluyen estas funciones + NAM A2 Lite.",
-    "feat.tuner": "<b>Ajustes del afinador</b>",
-    "feat.tunerS": "\n          <li><i>En la tercera página del propio afinador</i></li>\n          <li><b>Botón del afinador</b> (Hold, Press): Hold abre el afinador al mantener pulsado TAP; Press lo abre con una pulsación, y TAP ya no marca el tempo.</li>\n          <li><b>Bloqueo del afinador</b> (Off, On): On bloquea los demás ajustes del afinador (Output, Reference, Type, Trails, Offsets).</li>\n        ",
-    "feat.bpm": "<b>Pantalla de BPM</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Tamaño de fuente</b> (XL, L, M, S, Off): el tamaño del tempo en la parte superior izquierda de la pantalla Home. Off lo oculta.</li>\n          <li><b>Color</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): el color del tempo y del punto de pulso. Tempo usa el color del footswitch TAP (Color del LED de TAP).</li>\n          <li><b>Posición del punto</b> (Left, Right, Both, Off): dónde parpadea con TAP el punto de pulso, junto al número de preset. Off lo oculta; con ambos en Off, la pantalla de BPM se apaga.</li>\n        ",
-    "feat.line": "<b>Línea que respira</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Color</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): el color o degradado de la línea que cruza el centro de la pantalla Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): cómo se mueve; Off devuelve la línea original.</li>\n          <li><b>Velocidad</b> (1–10, Tempo): un ciclo dura 8 s con 1 y 0,8 s con 10; Tempo sigue el tempo, un tiempo por ciclo en Heart, dos en Breathe, Cylon y Comet, cuatro en Steady, ocho en Sparkle.</li>\n        ",
-    "feat.dsp": "<b>Medidor de DSP</b>",
-    "feat.dspS": "\n          <li><i>Sin ajustes</i></li>\n          <li>Cada bloque muestra su parte del DSP, y la esquina superior derecha el total, en la vista Edit y en el explorador de modelos.</li>\n        ",
-    "feat.gr": "<b>Medidor de reducción de ganancia</b>",
-    "feat.grS": "\n          <li><i>Ajustes en los compresores Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester y Red Squeeze</i></li>\n          <li><b>Mtr Thk</b> (0 … 20): el grosor del medidor en píxeles; 0, el valor por defecto, lo desactiva.</li>\n          <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): dónde de la pantalla Home se ilumina el medidor para mostrar cuánta ganancia reduce el compresor. Middle ocupa el lugar de la línea que cruza el centro.</li>\n          <li><b>Mtr Dir</b> (Normal, Reverse): Normal rellena de izquierda a derecha o de arriba abajo; Reverse al revés.</li>\n        ",
-    "feat.vfs": "<b>Footswitches virtuales</b>",
-    "feat.vfsS": "\n          <li><i>Cinco footswitches extra, FS6 … FS10, que llegan con Pulsación larga del footswitch</i></li>\n          <li><b>Asignar un bloque</b>: en el Bypass Assign del bloque, pulsa Page › una vez para ver MIDI In y luego sube MIDI In desde Off: FS6 es un clic más arriba, FS10 cinco, y mientras esté en uno de ellos el knob dice FootswIn. El preset conserva la asignación.</li>\n          <li><b>Parámetros</b>: asigna uno al mismo FS en Controller Assign y también seguirá al footswitch.</li>\n          <li><b>MIDI</b>: <b>por debajo, FS6 … FS10 son MIDI CC 20 … 24.</b> HX Edit los muestra así, y un controlador MIDI que envíe esos CC también los activa.</li>\n        ",
-    "feat.hold": "<b>Pulsación larga del footswitch</b>",
-    "feat.holdS": "\n          <li><i>Global Settings › Footswitches</i></li>\n          <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): lo que hace mantener pulsado ese footswitch durante un segundo en modo Stomp. FS6 … FS10 son footswitches virtuales: asígnales bloques en Bypass Assign.</li>\n          <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): lo que hace cada footswitch virtual, como FS3 … FS5 Function para los reales. Stomp, el valor por defecto, alterna sus bloques.</li>\n          <li><b>Activar un footswitch virtual</b>: mantén pulsado el footswitch cuyo Hold esté ajustado a ese FS. Por defecto, mantener FS1 activa FS6, y así hasta FS5 y FS10. Una pulsación breve sigue alternando los bloques del propio footswitch.</li>\n        ",
-    "feat.snap": "<b>Más snapshots</b>",
-    "feat.snapS": "\n          <li><i>Sin ajustes</i></li>\n          <li>Seis snapshots por preset: vuelve a pulsar el footswitch del snapshot encendido para alternar entre los snapshots 1–3 y 4–6.</li>\n          <li>Cuando un preset tiene snapshots 4–6, snapshot siguiente y anterior (SnpshtUp, SnpshtDn, MIDI CC 69) recorren los seis: siguiente en el 3 va al 4, y siguiente en el 6 vuelve al 1.</li>\n          <li>MIDI CC 69 selecciona cualquiera de los seis directamente: valores 0–2 para los snapshots 1–3, 3–5 para 4–6.</li>\n        ",
-    "feat.click": "<b>Metronome</b>",
-    "feat.clickS": "\n          <li><i>Bloque nuevo: Looper › Metronome</i></li>\n          <li><b>Time</b> (una nota (valor de nota, sincronizado con el tempo)): el pulso, como el Time de un delay.</li>\n          <li><b>Level</b> (−60 … +6 dB): el volumen del clic.</li>\n          <li><b>Accent</b> (Off, 2 … 12): cada n-ésimo pulso es un tiempo fuerte, con un clic más agudo.</li>\n          <li><b>Thru</b> (Off, On): On reproduce tu señal con el clic debajo; Off reproduce solo el clic.</li>\n        ",
-    "feat.tap": "<b>Color del LED de TAP</b>",
-    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Color del LED de TAP</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): el color del anillo que parpadea en el footswitch TAP, y de su icono y su etiqueta en la pantalla Home. Red es el color de serie. Rainbow hace avanzar el anillo un pequeño paso por la rueda de colores en cada pulso, del rojo al naranja, amarillo, verde, azul, índigo y violeta, y vuelta a empezar; Random elige un color nuevo en cada pulso. Ambos dejan la etiqueta en blanco.</li>\n        ",
     "feat.none": "Esta copia de la página no incluye el código de las funciones, así que solo crea NAM A2 Lite y la pantalla de inicio. La página publicada con cada versión de HXtra sí lo incluye.",
     "nav.1": "Preparación",
     "nav.2": "Crear",
@@ -767,6 +651,7 @@ var LANGS = {
     "rec.li1": "Apaga el HX Stomp.",
     "rec.li2": "<b>Mantén pulsado el botón Page › (página a la derecha) mientras lo enciendes.</b> Arranca en modo de actualización con la pantalla oscura.",
     "rec.li3": "En Line 6 Updater, elige <b>Choose File</b> y selecciona el archivo <b>original</b> del paso 1 (<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>).",
+    "rec.li4": "Usa <b>HX Edit</b> para restaurar la copia de seguridad que hiciste en el paso 1 (<b>File &gt; Restore From Backup...</b>).",
     "faq.title": "Preguntas",
     "faq.q1": "¿Por qué necesito mi propio archivo de firmware?",
     "faq.a1": "El firmware es de Line 6, así que este proyecto no puede distribuirlo. Esta página toma tu copia, cambia unas cuantas de sus quince partes (la aplicación principal, el programa DSP y su biblioteca de grafos, la lista de modelos y el almacén de imágenes) y corrige todas las sumas de verificación. El bootloader nunca se modifica. Por favor, no compartas el archivo que crees.",
@@ -848,31 +733,9 @@ var LANGS = {
   },
   "pt": {
     "lang": "Idioma",
-    "hero.title": "HXtra para HX Stomp",
-    "hero.lede": "O HXtra é um firmware personalizado para o HX Stomp. Esta página o gera a partir do seu próprio arquivo da Line 6, mostra como instalá-lo e transforma suas capturas <b>.nam</b> em arquivos que o HX Stomp consegue tocar, tudo rodando localmente neste navegador.",
+    "hero.title": "Configure o HXtra para HX Stomp",
+    "hero.lede": "Instruções de configuração",
     "warn": "<b>Não oficial e experimental.</b> O HXtra não é feito nem suportado pela Line 6. Instalar firmware modificado é por sua conta e risco e pode anular a garantia. Mas fique tranquilo: se algo der errado, os passos de <a href=\"#recovery\">Recuperação</a> restauram o firmware original com facilidade.",
-    "feat.title": "Recursos",
-    "feat.sub": "Toda versão inclui todos estes recursos + NAM A2 Lite.",
-    "feat.tuner": "<b>Ajustes do afinador</b>",
-    "feat.tunerS": "\n          <li><i>Na terceira página do próprio afinador</i></li>\n          <li><b>Botão do afinador</b> (Hold, Press): Hold abre o afinador ao segurar TAP; Press o abre com um toque, e TAP deixa de marcar o tempo.</li>\n          <li><b>Trava do afinador</b> (Off, On): On trava os outros ajustes do afinador (Output, Reference, Type, Trails, Offsets).</li>\n        ",
-    "feat.bpm": "<b>Display de BPM</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Tamanho da fonte</b> (XL, L, M, S, Off): o tamanho do tempo no canto superior esquerdo da tela Home. Off o oculta.</li>\n          <li><b>Cor</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): a cor do tempo e do ponto de pulso. Tempo usa a cor do footswitch TAP (Cor do LED do TAP).</li>\n          <li><b>Posição do ponto</b> (Left, Right, Both, Off): onde o ponto de pulso pisca com o TAP, ao lado do número do preset. Off o oculta; com os dois em Off, a exibição de BPM fica desligada.</li>\n        ",
-    "feat.line": "<b>Linha que respira</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Cor</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): a cor ou o degradê da linha no meio da tela Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): como ela se move; Off devolve a linha original.</li>\n          <li><b>Velocidade</b> (1–10, Tempo): um ciclo leva 8 s com 1 e 0,8 s com 10; Tempo segue o andamento, um tempo por ciclo em Heart, dois em Breathe, Cylon e Comet, quatro em Steady, oito em Sparkle.</li>\n        ",
-    "feat.dsp": "<b>Medidor de DSP</b>",
-    "feat.dspS": "\n          <li><i>Sem ajustes</i></li>\n          <li>Cada bloco mostra a sua parte do DSP, e o canto superior direito o total, na visão Edit e no navegador de modelos.</li>\n        ",
-    "feat.gr": "<b>Medidor de redução de ganho</b>",
-    "feat.grS": "\n          <li><i>Ajustes nos compressores Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester e Red Squeeze</i></li>\n          <li><b>Mtr Thk</b> (0 … 20): a espessura do medidor em pixels; 0, o padrão, o desativa.</li>\n          <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): onde na tela Home o medidor se acende para mostrar quanto o compressor está reduzindo o ganho. Middle ocupa o lugar da linha que cruza o meio.</li>\n          <li><b>Mtr Dir</b> (Normal, Reverse): Normal preenche da esquerda para a direita ou de cima para baixo; Reverse ao contrário.</li>\n        ",
-    "feat.vfs": "<b>Footswitches virtuais</b>",
-    "feat.vfsS": "\n          <li><i>Cinco footswitches extras, FS6 … FS10, que vêm com o Toque longo no footswitch</i></li>\n          <li><b>Atribuir um bloco</b>: no Bypass Assign do bloco, aperte Page › uma vez para ver MIDI In e depois aumente MIDI In a partir de Off: FS6 fica um clique acima, FS10 cinco, e enquanto estiver em um deles o knob mostra FootswIn. O preset guarda a atribuição.</li>\n          <li><b>Parâmetros</b>: atribua um ao mesmo FS em Controller Assign e ele também acompanha o footswitch.</li>\n          <li><b>MIDI</b>: <b>por baixo, FS6 … FS10 são MIDI CC 20 … 24.</b> O HX Edit os mostra assim, e um controlador MIDI que envie esses CCs também os aciona.</li>\n        ",
-    "feat.hold": "<b>Toque longo no footswitch</b>",
-    "feat.holdS": "\n          <li><i>Global Settings › Footswitches</i></li>\n          <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): o que segurar esse footswitch por um segundo faz no modo Stomp. FS6 … FS10 são footswitches virtuais: atribua blocos a eles em Bypass Assign.</li>\n          <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): o que cada footswitch virtual faz, como FS3 … FS5 Function fazem para os reais. Stomp, o padrão, alterna seus blocos.</li>\n          <li><b>Acionar um footswitch virtual</b>: segure o footswitch cujo Hold está definido para esse FS. Por padrão, segurar FS1 aciona FS6, e assim por diante até FS5 e FS10. Um toque simples continua alternando os blocos do próprio footswitch.</li>\n        ",
-    "feat.snap": "<b>Mais snapshots</b>",
-    "feat.snapS": "\n          <li><i>Sem ajustes</i></li>\n          <li>Seis snapshots por preset: aperte de novo o footswitch do snapshot aceso para alternar entre os snapshots 1–3 e 4–6.</li>\n          <li>Quando um preset tem os snapshots 4–6, próximo e anterior (SnpshtUp, SnpshtDn, MIDI CC 69) percorrem os seis: próximo no 3 vai para o 4, e próximo no 6 volta para o 1.</li>\n          <li>MIDI CC 69 seleciona qualquer um dos seis diretamente: valores 0–2 para os snapshots 1–3, 3–5 para 4–6.</li>\n        ",
-    "feat.click": "<b>Metronome</b>",
-    "feat.clickS": "\n          <li><i>Bloco novo: Looper › Metronome</i></li>\n          <li><b>Time</b> (um valor de nota, sincronizado com o tempo): a batida, como o Time de um delay.</li>\n          <li><b>Level</b> (−60 … +6 dB): o volume do clique.</li>\n          <li><b>Accent</b> (Off, 2 … 12): cada n-ésima batida é um tempo forte, com um clique mais agudo.</li>\n          <li><b>Thru</b> (Off, On): On toca o seu sinal com o clique por baixo; Off toca só o clique.</li>\n        ",
-    "feat.tap": "<b>Cor do LED do TAP</b>",
-    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Cor do LED do TAP</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): a cor do anel que pisca no footswitch TAP, e do seu ícone e rótulo na tela Home. Red é a cor original. Rainbow avança o anel um pequeno passo pela roda de cores a cada batida, do vermelho ao laranja, amarelo, verde, azul, índigo e violeta, e de volta; Random escolhe uma cor nova a cada batida. Os dois mantêm o rótulo branco.</li>\n        ",
     "feat.none": "Esta cópia da página não tem o código dos recursos, então gera só o NAM A2 Lite e a tela de abertura. A página publicada com cada versão do HXtra tem.",
     "nav.1": "Preparação",
     "nav.2": "Gerar",
@@ -955,6 +818,7 @@ var LANGS = {
     "rec.li1": "Desligue o HX Stomp.",
     "rec.li2": "<b>Segure o botão Page › (página à direita) enquanto liga.</b> Ele inicia em modo de atualização, com a tela apagada.",
     "rec.li3": "No Line 6 Updater, clique em <b>Choose File</b> e escolha o arquivo <b>original</b> do passo 1 (<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>).",
+    "rec.li4": "Use o <b>HX Edit</b> para restaurar o backup que você fez no passo 1 (<b>File &gt; Restore From Backup...</b>).",
     "faq.title": "Perguntas",
     "faq.q1": "Por que preciso do meu próprio arquivo de firmware?",
     "faq.a1": "O firmware é da Line 6, então este projeto não pode distribuí-lo. Esta página pega a sua cópia, altera algumas das quinze partes (o aplicativo principal, o programa do DSP e sua biblioteca de grafos, a lista de modelos e o armazenamento de imagens) e corrige todos os checksums. O bootloader nunca é alterado. Por favor, não compartilhe o arquivo gerado.",
@@ -1036,31 +900,9 @@ var LANGS = {
   },
   "fr": {
     "lang": "Langue",
-    "hero.title": "HXtra pour HX Stomp",
-    "hero.lede": "HXtra est un firmware personnalisé pour le HX Stomp. Cette page le crée à partir de votre propre fichier Line 6, vous guide dans l'installation et transforme vos captures <b>.nam</b> en fichiers que le HX Stomp sait lire, le tout en local dans ce navigateur.",
+    "hero.title": "Installer HXtra sur le HX Stomp",
+    "hero.lede": "Instructions d'installation",
     "warn": "<b>Non officiel et expérimental.</b> HXtra n'est ni conçu ni pris en charge par Line 6. Installer un firmware modifié se fait à vos risques et peut annuler votre garantie. Rassurez-vous toutefois : en cas de problème, les étapes de <a href=\"#recovery\">Récupération</a> remettent facilement le firmware d'origine.",
-    "feat.title": "Fonctions",
-    "feat.sub": "Chaque version inclut toutes ces fonctions + NAM A2 Lite.",
-    "feat.tuner": "<b>Réglages de l'accordeur</b>",
-    "feat.tunerS": "\n          <li><i>Sur la troisième page propre à l'accordeur</i></li>\n          <li><b>Bouton de l'accordeur</b> (Hold, Press): Hold ouvre l'accordeur quand vous maintenez TAP ; Press l'ouvre d'une simple pression, et TAP ne marque plus le tempo.</li>\n          <li><b>Verrouillage de l'accordeur</b> (Off, On): On verrouille les autres réglages de l'accordeur (Output, Reference, Type, Trails, Offsets).</li>\n        ",
-    "feat.bpm": "<b>Affichage BPM</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Taille de police</b> (XL, L, M, S, Off): la taille du tempo en haut à gauche de l'écran Home. Off le masque.</li>\n          <li><b>Couleur</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): la couleur du tempo et du point de pulsation. Tempo reprend la couleur du footswitch TAP (Couleur de la LED TAP).</li>\n          <li><b>Position du point</b> (Left, Right, Both, Off): l'endroit où le point de pulsation clignote avec TAP, à côté du numéro de preset. Off le masque ; avec les deux sur Off, l'affichage du BPM est éteint.</li>\n        ",
-    "feat.line": "<b>Ligne qui respire</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Couleur</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): la couleur ou le dégradé de la ligne au milieu de l'écran Home.</li>\n          <li><b>Type</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): la façon dont elle bouge ; Off rend la ligne d'origine.</li>\n          <li><b>Vitesse</b> (1–10, Tempo) : un cycle dure 8 s à 1 et 0,8 s à 10 ; Tempo suit le tempo, un temps par cycle pour Heart, deux pour Breathe, Cylon et Comet, quatre pour Steady, huit pour Sparkle.</li>\n        ",
-    "feat.dsp": "<b>Indicateur DSP</b>",
-    "feat.dspS": "\n          <li><i>Aucun réglage</i></li>\n          <li>Chaque bloc affiche sa part du DSP, et le coin supérieur droit le total, dans la vue Edit et dans le navigateur de modèles.</li>\n        ",
-    "feat.gr": "<b>Indicateur de réduction de gain</b>",
-    "feat.grS": "\n          <li><i>Réglages sur les compresseurs Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester et Red Squeeze</i></li>\n          <li><b>Mtr Thk</b> (0 … 20): l'épaisseur de l'indicateur en pixels ; 0, la valeur par défaut, le désactive.</li>\n          <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): où, sur l'écran Home, l'indicateur s'allume pour montrer de combien le compresseur réduit le gain. Middle prend la place de la ligne qui traverse le milieu.</li>\n          <li><b>Mtr Dir</b> (Normal, Reverse): Normal remplit de gauche à droite ou de haut en bas ; Reverse dans l'autre sens.</li>\n        ",
-    "feat.vfs": "<b>Footswitches virtuels</b>",
-    "feat.vfsS": "\n          <li><i>Cinq footswitches supplémentaires, FS6 … FS10, livrés avec l'Appui long sur footswitch</i></li>\n          <li><b>Assigner un bloc</b> : dans le Bypass Assign du bloc, appuyez une fois sur Page › pour voir MIDI In, puis montez MIDI In depuis Off : FS6 est un cran plus haut, FS10 cinq, et tant qu'il est sur l'un d'eux le bouton affiche FootswIn. Le preset conserve l'assignation.</li>\n          <li><b>Paramètres</b> : assignez-en un au même FS dans Controller Assign, et il suit lui aussi le footswitch.</li>\n          <li><b>MIDI</b> : <b>en interne, FS6 … FS10 sont les MIDI CC 20 … 24.</b> HX Edit les affiche ainsi, et un contrôleur MIDI qui envoie ces CC les actionne aussi.</li>\n        ",
-    "feat.hold": "<b>Appui long sur footswitch</b>",
-    "feat.holdS": "\n          <li><i>Global Settings › Footswitches</i></li>\n          <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): ce que fait un maintien d'une seconde sur ce footswitch en mode Stomp. FS6 … FS10 sont des footswitches virtuels : assignez-leur des blocs dans Bypass Assign.</li>\n          <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): ce que fait chaque footswitch virtuel, comme FS3 … FS5 Function pour les vrais. Stomp, la valeur par défaut, bascule ses blocs.</li>\n          <li><b>Actionner un footswitch virtuel</b> : maintenez le footswitch dont le Hold est réglé sur ce FS. Par défaut, maintenir FS1 actionne FS6, et ainsi de suite jusqu'à FS5 et FS10. Un appui bref continue de basculer les blocs du footswitch lui-même.</li>\n        ",
-    "feat.snap": "<b>Plus de snapshots</b>",
-    "feat.snapS": "\n          <li><i>Aucun réglage</i></li>\n          <li>Six snapshots par preset : appuyez à nouveau sur le footswitch du snapshot allumé pour basculer entre les snapshots 1–3 et 4–6.</li>\n          <li>Dès qu'un preset a des snapshots 4–6, snapshot suivant et précédent (SnpshtUp, SnpshtDn, MIDI CC 69) parcourent les six : suivant sur le 3 passe au 4, et suivant sur le 6 revient au 1.</li>\n          <li>MIDI CC 69 sélectionne directement n'importe lequel des six : valeurs 0–2 pour les snapshots 1–3, 3–5 pour 4–6.</li>\n        ",
-    "feat.click": "<b>Metronome</b>",
-    "feat.clickS": "\n          <li><i>Nouveau bloc : Looper › Metronome</i></li>\n          <li><b>Time</b> (une valeur de note, synchronisée sur le tempo): le temps, comme le Time d'un delay.</li>\n          <li><b>Level</b> (−60 … +6 dB): le volume du clic.</li>\n          <li><b>Accent</b> (Off, 2 … 12): un temps sur n est un temps fort, avec un clic plus aigu.</li>\n          <li><b>Thru</b> (Off, On): On joue votre signal avec le clic en dessous ; Off joue le clic seul.</li>\n        ",
-    "feat.tap": "<b>Couleur de la LED TAP</b>",
-    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Couleur de la LED TAP</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): la couleur de l'anneau qui clignote sur le footswitch TAP, ainsi que de son icône et de son libellé sur l'écran Home. Red est la couleur d'origine. Rainbow fait avancer l'anneau d'un petit pas sur le cercle chromatique à chaque temps, du rouge à l'orange, au jaune, au vert, au bleu, à l'indigo et au violet, puis retour ; Random choisit une nouvelle couleur à chaque temps. Les deux laissent le libellé blanc.</li>\n        ",
     "feat.none": "Cette copie de la page ne contient pas le code des fonctions : elle crée donc seulement NAM A2 Lite et l'écran de démarrage. La page publiée avec chaque version de HXtra l'a.",
     "nav.1": "Préparation",
     "nav.2": "Créer",
@@ -1143,6 +985,7 @@ var LANGS = {
     "rec.li1": "Éteignez le HX Stomp.",
     "rec.li2": "<b>Maintenez le bouton Page › (page suivante) en l'allumant.</b> Il démarre en mode mise à jour, écran noir.",
     "rec.li3": "Dans Line 6 Updater, cliquez sur <b>Choose File</b> et choisissez le fichier <b>d'origine</b> de l'étape 1 (<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>).",
+    "rec.li4": "Utilisez <b>HX Edit</b> pour restaurer la sauvegarde faite à l'étape 1 (<b>File &gt; Restore From Backup...</b>).",
     "faq.title": "Questions",
     "faq.q1": "Pourquoi ai-je besoin de mon propre fichier firmware ?",
     "faq.a1": "Le firmware appartient à Line 6 : ce projet ne peut donc pas le distribuer. Cette page prend votre copie, modifie quelques-unes de ses quinze parties (l'application principale, le programme DSP et sa bibliothèque de graphes, la liste des modèles et le stockage des images) et corrige toutes les sommes de contrôle. Le bootloader n'est jamais modifié. Merci de ne pas partager le fichier que vous créez.",
@@ -1224,31 +1067,9 @@ var LANGS = {
   },
   "de": {
     "lang": "Sprache",
-    "hero.title": "HXtra für den HX Stomp",
-    "hero.lede": "HXtra ist eine eigene Firmware für den HX Stomp. Diese Seite baut sie aus deiner eigenen Line-6-Datei, führt dich durch die Installation und wandelt deine <b>.nam</b>-Captures in Dateien um, die der HX Stomp spielen kann, alles lokal in diesem Browser.",
+    "hero.title": "HXtra für den HX Stomp einrichten",
+    "hero.lede": "Einrichtungsanleitung",
     "warn": "<b>Inoffiziell und experimentell.</b> HXtra ist kein Produkt von Line 6 und wird von Line 6 nicht unterstützt. Die Installation veränderter Firmware erfolgt auf eigenes Risiko und kann die Garantie erlöschen lassen. Keine Sorge: Falls etwas schiefgeht, bringen dich die Schritte unter <a href=\"#recovery\">Wiederherstellung</a> ganz einfach zur Original-Firmware zurück.",
-    "feat.title": "Funktionen",
-    "feat.sub": "Jeder Build enthält all das + NAM A2 Lite.",
-    "feat.tuner": "<b>Tuner-Einstellungen</b>",
-    "feat.tunerS": "\n          <li><i>Auf der dritten Seite der Tuner-Einstellungen</i></li>\n          <li><b>Tuner-Taste</b> (Hold, Press): Hold öffnet den Tuner, wenn du TAP gedrückt hältst; Press öffnet ihn mit einem Druck, und TAP gibt dann nicht mehr das Tempo vor.</li>\n          <li><b>Tuner-Sperre</b> (Off, On): On sperrt die übrigen Tuner-Einstellungen (Output, Reference, Type, Trails, Offsets).</li>\n        ",
-    "feat.bpm": "<b>BPM-Anzeige</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Schriftgröße</b> (XL, L, M, S, Off): die Größe des Tempos oben links auf dem Home-Screen. Off blendet es aus.</li>\n          <li><b>Farbe</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): die Farbe von Tempo und Beat-Punkt. Tempo übernimmt die Farbe des TAP-Fußschalters (Farbe der TAP-LED).</li>\n          <li><b>Punktposition</b> (Left, Right, Both, Off): wo der Beat-Punkt mit TAP blinkt, neben der Preset-Nummer. Off blendet ihn aus; stehen beide auf Off, ist die BPM-Anzeige aus.</li>\n        ",
-    "feat.line": "<b>Atmende Linie</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Farbe</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): die Farbe oder der Farbverlauf der Linie quer durch die Mitte des Home-Screens.</li>\n          <li><b>Typ</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): wie sie sich bewegt; Off bringt die Original-Linie zurück.</li>\n          <li><b>Geschwindigkeit</b> (1–10, Tempo): ein Durchlauf dauert 8 s bei 1 und 0,8 s bei 10; Tempo folgt dem Tempo, ein Schlag je Durchlauf bei Heart, zwei bei Breathe, Cylon und Comet, vier bei Steady, acht bei Sparkle.</li>\n        ",
-    "feat.dsp": "<b>DSP-Anzeige</b>",
-    "feat.dspS": "\n          <li><i>Keine Einstellungen</i></li>\n          <li>Jeder Block zeigt seinen DSP-Anteil und die obere rechte Ecke die Summe, in der Edit-Ansicht und im Modellbrowser.</li>\n        ",
-    "feat.gr": "<b>Gain-Reduction-Anzeige</b>",
-    "feat.grS": "\n          <li><i>Regler an den Kompressoren Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester und Red Squeeze</i></li>\n          <li><b>Mtr Thk</b> (0 … 20): die Dicke der Anzeige in Pixeln; 0, der Standardwert, schaltet sie aus.</li>\n          <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): wo auf dem Home-Bildschirm die Anzeige aufleuchtet, um zu zeigen, wie stark der Kompressor den Pegel absenkt. Middle ersetzt die Linie quer durch die Mitte.</li>\n          <li><b>Mtr Dir</b> (Normal, Reverse): Normal füllt von links nach rechts oder von oben nach unten; Reverse umgekehrt.</li>\n        ",
-    "feat.vfs": "<b>Virtuelle Fußschalter</b>",
-    "feat.vfsS": "\n          <li><i>Fünf zusätzliche Fußschalter, FS6 … FS10, die mit Langer Druck auf Fußschalter kommen</i></li>\n          <li><b>Block zuweisen</b>: Drücke im Bypass Assign des Blocks einmal Page ›, um MIDI In zu sehen, und erhöhe dann MIDI In von Off aus: FS6 ist einen Klick höher, FS10 fünf, und solange er auf einem davon steht, heißt der Regler FootswIn. Das Preset speichert die Zuweisung.</li>\n          <li><b>Parameter</b>: Weise einen in Controller Assign demselben FS zu, dann folgt er ebenfalls dem Fußschalter.</li>\n          <li><b>MIDI</b>: <b>Intern sind FS6 … FS10 die MIDI CC 20 … 24.</b> HX Edit zeigt sie so an, und ein MIDI-Controller, der diese CCs sendet, schaltet sie ebenfalls.</li>\n        ",
-    "feat.hold": "<b>Langer Druck auf Fußschalter</b>",
-    "feat.holdS": "\n          <li><i>Global Settings › Footswitches</i></li>\n          <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): was das Halten dieses Fußschalters für eine Sekunde im Stomp-Modus auslöst. FS6 … FS10 sind virtuelle Fußschalter: Weise ihnen in Bypass Assign Blöcke zu.</li>\n          <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): was jeder virtuelle Fußschalter tut, wie FS3 … FS5 Function bei den echten. Stomp, die Voreinstellung, schaltet seine Blöcke um.</li>\n          <li><b>Virtuellen Fußschalter schalten</b>: Halte den Fußschalter gedrückt, dessen Hold auf diesen FS eingestellt ist. Standardmäßig schaltet Halten von FS1 den FS6, und so weiter bis FS5 und FS10. Kurzes Antippen schaltet weiterhin die Blöcke des Fußschalters selbst um.</li>\n        ",
-    "feat.snap": "<b>Mehr Snapshots</b>",
-    "feat.snapS": "\n          <li><i>Keine Einstellungen</i></li>\n          <li>Sechs Snapshots pro Preset: Drücke den leuchtenden Snapshot-Fußschalter erneut, um zwischen den Snapshots 1–3 und 4–6 zu wechseln.</li>\n          <li>Sobald ein Preset Snapshots 4–6 hat, laufen nächster und vorheriger Snapshot (SnpshtUp, SnpshtDn, MIDI CC 69) durch alle sechs: Weiter auf 3 springt zu 4, weiter auf 6 zurück zu 1.</li>\n          <li>MIDI CC 69 wählt jeden der sechs direkt: Werte 0–2 für die Snapshots 1–3, 3–5 für 4–6.</li>\n        ",
-    "feat.click": "<b>Metronome</b>",
-    "feat.clickS": "\n          <li><i>Neuer Block: Looper › Metronome</i></li>\n          <li><b>Time</b> (ein Notenwert, mit dem Tempo synchronisiert): der Beat, wie die Time eines Delays.</li>\n          <li><b>Level</b> (−60 … +6 dB): die Lautstärke des Klicks.</li>\n          <li><b>Accent</b> (Off, 2 … 12): jeder n-te Beat ist ein Taktschwerpunkt mit höherem Klick.</li>\n          <li><b>Thru</b> (Off, On): On spielt dein Signal mit dem Klick darunter; Off spielt nur den Klick.</li>\n        ",
-    "feat.tap": "<b>Farbe der TAP-LED</b>",
-    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Farbe der TAP-LED</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): die Farbe des blinkenden Rings am TAP-Fußschalter sowie seines Symbols und seiner Beschriftung auf dem Home-Screen. Red ist die Werksfarbe. Rainbow bewegt den Ring bei jedem Schlag ein kleines Stück weiter über den Farbkreis, von Rot über Orange, Gelb, Grün, Blau, Indigo und Violett und wieder zurück; Random wählt bei jedem Schlag eine neue Farbe. Bei beiden bleibt die Beschriftung weiß.</li>\n        ",
     "feat.none": "Diese Kopie der Seite enthält keinen Funktionscode und baut daher nur NAM A2 Lite und den Startbildschirm. Die mit jedem HXtra-Release veröffentlichte Seite hat ihn.",
     "nav.1": "Vorbereiten",
     "nav.2": "Bauen",
@@ -1331,6 +1152,7 @@ var LANGS = {
     "rec.li1": "Schalte den HX Stomp aus.",
     "rec.li2": "<b>Halte die Taste Page › (Seite rechts) gedrückt, während du ihn einschaltest.</b> Er startet im Update-Modus mit dunklem Display.",
     "rec.li3": "Wähle in Line 6 Updater <b>Choose File</b> und nimm die <b>Original</b>-Datei aus Schritt 1 (<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>).",
+    "rec.li4": "Stelle mit <b>HX Edit</b> das Backup wieder her, das du in Schritt 1 gemacht hast (<b>File &gt; Restore From Backup...</b>).",
     "faq.title": "Fragen",
     "faq.q1": "Warum brauche ich meine eigene Firmware-Datei?",
     "faq.a1": "Die Firmware gehört Line 6, deshalb darf dieses Projekt sie nicht weitergeben. Diese Seite nimmt deine Kopie, ändert einige ihrer fünfzehn Teile (die Hauptanwendung, das DSP-Programm und dessen Graph-Bibliothek, die Modellliste und den Bilderspeicher) und korrigiert alle Prüfsummen. Der Bootloader wird nie verändert. Bitte gib die gebaute Datei nicht weiter.",
@@ -1412,31 +1234,9 @@ var LANGS = {
   },
   "it": {
     "lang": "Lingua",
-    "hero.title": "HXtra per l'HX Stomp",
-    "hero.lede": "HXtra è un firmware personalizzato per l'HX Stomp. Questa pagina lo crea partendo dal tuo file Line 6, ti guida nell'installazione e trasforma le tue catture <b>.nam</b> in file che l'HX Stomp può suonare, il tutto in locale in questo browser.",
+    "hero.title": "Configura HXtra per l'HX Stomp",
+    "hero.lede": "Istruzioni di configurazione",
     "warn": "<b>Non ufficiale e sperimentale.</b> HXtra non è realizzato né supportato da Line 6. Installare un firmware modificato è a tuo rischio e può invalidare la garanzia. Ma niente paura: se qualcosa va storto, i passaggi di <a href=\"#recovery\">Ripristino</a> rimettono facilmente il firmware originale.",
-    "feat.title": "Funzioni",
-    "feat.sub": "Ogni build ha tutte queste funzioni + NAM A2 Lite.",
-    "feat.tuner": "<b>Impostazioni dell'accordatore</b>",
-    "feat.tunerS": "\n          <li><i>Sulla terza pagina dell'accordatore</i></li>\n          <li><b>Pulsante accordatore</b> (Hold, Press): Hold apre l'accordatore tenendo premuto TAP; Press lo apre con una pressione, e TAP non batte più il tempo.</li>\n          <li><b>Blocco accordatore</b> (Off, On): On blocca le altre impostazioni dell'accordatore (Output, Reference, Type, Trails, Offsets).</li>\n        ",
-    "feat.bpm": "<b>Display BPM</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Dimensione carattere</b> (XL, L, M, S, Off): la dimensione del tempo in alto a sinistra nella schermata Home. Off lo nasconde.</li>\n          <li><b>Colore</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): il colore del tempo e del punto del beat. Tempo usa il colore del footswitch TAP (Colore del LED TAP).</li>\n          <li><b>Posizione del punto</b> (Left, Right, Both, Off): dove lampeggia il punto del beat con TAP, accanto al numero del preset. Off lo nasconde; con entrambi su Off, la visualizzazione BPM è spenta.</li>\n        ",
-    "feat.line": "<b>Linea che respira</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Colore</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): il colore o il gradiente della linea al centro della schermata Home.</li>\n          <li><b>Tipo</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): come si muove; Off ripristina la linea originale.</li>\n          <li><b>Velocità</b> (1–10, Tempo): un ciclo dura 8 s a 1 e 0,8 s a 10; Tempo segue il tempo, un battito per ciclo con Heart, due con Breathe, Cylon e Comet, quattro con Steady, otto con Sparkle.</li>\n        ",
-    "feat.dsp": "<b>Indicatore DSP</b>",
-    "feat.dspS": "\n          <li><i>Nessuna impostazione</i></li>\n          <li>Ogni blocco mostra la sua quota di DSP, e l'angolo in alto a destra il totale, nella vista Edit e nel browser dei modelli.</li>\n        ",
-    "feat.gr": "<b>Indicatore di gain reduction</b>",
-    "feat.grS": "\n          <li><i>Manopole sui compressori Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester e Red Squeeze</i></li>\n          <li><b>Mtr Thk</b> (0 … 20): lo spessore dell'indicatore in pixel; 0, il valore predefinito, lo disattiva.</li>\n          <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): dove nella schermata Home si accende l'indicatore per mostrare quanto il compressore riduce il guadagno. Middle prende il posto della linea che attraversa il centro.</li>\n          <li><b>Mtr Dir</b> (Normal, Reverse): Normal riempie da sinistra a destra o dall'alto in basso; Reverse al contrario.</li>\n        ",
-    "feat.vfs": "<b>Footswitch virtuali</b>",
-    "feat.vfsS": "\n          <li><i>Cinque footswitch extra, FS6 … FS10, che arrivano con la Pressione lunga del footswitch</i></li>\n          <li><b>Assegnare un blocco</b>: nel Bypass Assign del blocco, premi Page › una volta per vedere MIDI In, poi alza MIDI In da Off: FS6 è un clic più su, FS10 cinque, e finché è su uno di questi la manopola mostra FootswIn. Il preset conserva l'assegnazione.</li>\n          <li><b>Parametri</b>: assegnane uno allo stesso FS in Controller Assign e seguirà anche lui il footswitch.</li>\n          <li><b>MIDI</b>: <b>sotto il cofano, FS6 … FS10 sono MIDI CC 20 … 24.</b> HX Edit li mostra così, e anche un controller MIDI che invia quei CC li attiva.</li>\n        ",
-    "feat.hold": "<b>Pressione lunga del footswitch</b>",
-    "feat.holdS": "\n          <li><i>Global Settings › Footswitches</i></li>\n          <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): cosa fa tenere premuto quel footswitch per un secondo in modalità Stomp. FS6 … FS10 sono footswitch virtuali: assegna loro dei blocchi in Bypass Assign.</li>\n          <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): cosa fa ogni footswitch virtuale, come FS3 … FS5 Function per quelli reali. Stomp, l'impostazione predefinita, attiva o disattiva i suoi blocchi.</li>\n          <li><b>Attivare un footswitch virtuale</b>: tieni premuto il footswitch il cui Hold è impostato su quell'FS. Di default, tenere premuto FS1 attiva FS6, e così via fino a FS5 e FS10. Un tocco breve continua ad attivare o disattivare i blocchi del footswitch stesso.</li>\n        ",
-    "feat.snap": "<b>Più snapshot</b>",
-    "feat.snapS": "\n          <li><i>Nessuna impostazione</i></li>\n          <li>Sei snapshot per preset: premi di nuovo il footswitch dello snapshot acceso per passare tra gli snapshot 1–3 e 4–6.</li>\n          <li>Quando un preset ha gli snapshot 4–6, snapshot successivo e precedente (SnpshtUp, SnpshtDn, MIDI CC 69) scorrono tutti e sei: successivo sul 3 va al 4, e successivo sul 6 torna all'1.</li>\n          <li>MIDI CC 69 seleziona direttamente uno qualsiasi dei sei: valori 0–2 per gli snapshot 1–3, 3–5 per 4–6.</li>\n        ",
-    "feat.click": "<b>Metronome</b>",
-    "feat.clickS": "\n          <li><i>Nuovo blocco: Looper › Metronome</i></li>\n          <li><b>Time</b> (un valore di nota, sincronizzato al tempo): il beat, come il Time di un delay.</li>\n          <li><b>Level</b> (−60 … +6 dB): il volume del click.</li>\n          <li><b>Accent</b> (Off, 2 … 12): ogni n-esimo beat è un movimento forte, con un click più acuto.</li>\n          <li><b>Thru</b> (Off, On): On riproduce il tuo segnale con il click sotto; Off riproduce solo il click.</li>\n        ",
-    "feat.tap": "<b>Colore del LED TAP</b>",
-    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Colore del LED TAP</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): il colore dell'anello che lampeggia sul footswitch TAP, e della sua icona e della sua etichetta nella schermata Home. Red è il colore di fabbrica. Rainbow fa avanzare l'anello di un piccolo passo sulla ruota dei colori a ogni battito, dal rosso all'arancione, giallo, verde, blu, indaco e viola, e di nuovo da capo; Random sceglie un colore nuovo a ogni battito. Entrambi lasciano l'etichetta bianca.</li>\n        ",
     "feat.none": "Questa copia della pagina non contiene il codice delle funzioni, quindi crea solo NAM A2 Lite e la schermata di avvio. La pagina pubblicata con ogni versione di HXtra lo contiene.",
     "nav.1": "Preparazione",
     "nav.2": "Crea",
@@ -1519,6 +1319,7 @@ var LANGS = {
     "rec.li1": "Spegni l'HX Stomp.",
     "rec.li2": "<b>Tieni premuto il pulsante Page › (Pagina a destra) mentre lo accendi.</b> Si avvia in modalità aggiornamento con lo schermo spento.",
     "rec.li3": "In Line 6 Updater, scegli <b>Choose File</b> e seleziona il file <b>originale</b> del passaggio 1 (<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>).",
+    "rec.li4": "Usa <b>HX Edit</b> per ripristinare il backup che hai fatto nel passaggio 1 (<b>File &gt; Restore From Backup...</b>).",
     "faq.title": "Domande",
     "faq.q1": "Perché mi serve il mio file firmware?",
     "faq.a1": "Il firmware è di Line 6, quindi questo progetto non può distribuirlo. Questa pagina prende la tua copia, modifica alcune delle sue quindici parti (l'applicazione principale, il programma DSP e la sua libreria grafica, l'elenco dei modelli e l'archivio delle immagini) e corregge tutti i checksum. Il bootloader non viene mai modificato. Per favore, non condividere il file che crei.",
@@ -1600,31 +1401,9 @@ var LANGS = {
   },
   "ja": {
     "lang": "言語",
-    "hero.title": "HX Stomp 用 HXtra",
-    "hero.lede": "HXtra は HX Stomp 用のカスタムファームウェアです。このページでは、お手持ちの Line 6 ファイルからのビルド、インストールの手順のご案内、そして <b>.nam</b> キャプチャーを HX Stomp で鳴らせるファイルへの変換を行います。処理はすべてこのブラウザ内でローカルに実行されます。",
+    "hero.title": "HX Stomp に HXtra をセットアップ",
+    "hero.lede": "セットアップ手順",
     "warn": "<b>非公式・実験的なものです。</b>HXtra は Line 6 による制作・サポートではありません。改変したファームウェアのインストールは自己責任で行ってください。保証の対象外になる場合があります。ご心配なく。問題が起きた場合でも、<a href=\"#recovery\">復旧</a>の手順で純正ファームウェアに簡単に戻せます。",
-    "feat.title": "機能",
-    "feat.sub": "どのビルドにも、これらの機能すべて + NAM A2 Lite が入っています。",
-    "feat.tuner": "<b>チューナー設定</b>",
-    "feat.tunerS": "\n          <li><i>チューナー自身の 3 ページ目</i></li>\n          <li><b>チューナーボタン</b> (Hold, Press): Hold は TAP の長押しでチューナーを開き、Press は 1 回押すだけで開きます。このとき TAP ではテンポをタップできなくなります。</li>\n          <li><b>チューナーロック</b> (Off, On): On にすると、チューナーのほかの設定 (Output、Reference、Type、Trails、Offsets) をロックします。</li>\n        ",
-    "feat.bpm": "<b>BPM 表示</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>フォントサイズ</b> (XL, L, M, S, Off): Home 画面の左上に表示するテンポの大きさ。 Off で非表示になります。</li>\n          <li><b>カラー</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): テンポとビートドットの色。 Tempo は TAP フットスイッチの色（TAP LED の色）に合わせます。</li>\n          <li><b>ドット位置</b> (Left, Right, Both, Off): TAP に合わせてビートドットが点滅する場所。プリセット番号の横です。 Off で非表示になります。両方を Off にすると BPM 表示がオフになります。</li>\n        ",
-    "feat.line": "<b>Breathing Line</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>カラー</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): Home 画面の中央を横切るラインの色またはグラデーション。</li>\n          <li><b>タイプ</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): ラインの動き方。Off にすると標準のラインに戻ります。</li>\n          <li><b>スピード</b> (1–10, Tempo): 1 周期は 1 で 8 秒、10 で 0.8 秒です。Tempo はテンポに合わせ、1 周期は Heart で 1 拍、Breathe、Cylon、Comet で 2 拍、Steady で 4 拍、Sparkle で 8 拍です。</li>\n        ",
-    "feat.dsp": "<b>DSP メーター</b>",
-    "feat.dspS": "\n          <li><i>設定なし</i></li>\n          <li>Edit 画面とモデルブラウザで、各ブロックの DSP 使用率を、右上にその合計を表示します。</li>\n        ",
-    "feat.gr": "<b>ゲインリダクションメーター</b>",
-    "feat.grS": "\n          <li><i>Deluxe、LA Studio、Kinky、Ampeg Opto、Rochester、Red Squeeze コンプレッサーのノブ</i></li>\n          <li><b>Mtr Thk</b> (0 … 20): メーターの太さ(ピクセル)。初期値の 0 でオフになります。</li>\n          <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): Home 画面のどこにメーターを点灯させ、コンプレッサーがどれだけゲインを下げているかを表示するか。Middle は中央を横切る線の代わりになります。</li>\n          <li><b>Mtr Dir</b> (Normal, Reverse): Normal は左から右、または上から下へ埋まり、Reverse はその逆です。</li>\n        ",
-    "feat.vfs": "<b>仮想フットスイッチ</b>",
-    "feat.vfsS": "\n          <li><i>フットスイッチ長押しで使える追加のフットスイッチ 5 つ、FS6 … FS10</i></li>\n          <li><b>ブロックを割り当てる</b>：ブロックの Bypass Assign で Page › を 1 回押して MIDI In を表示し、MIDI In を Off から上げます。FS6 は 1 つ上、FS10 は 5 つ上です。そのいずれかに合わせている間、ノブの表示は FootswIn になります。割り当てはプリセットに保存されます。</li>\n          <li><b>パラメーター</b>：Controller Assign で同じ FS に割り当てると、フットスイッチに連動します。</li>\n          <li><b>MIDI</b>：<b>内部的には、FS6 … FS10 は MIDI CC 20 … 24 です。</b>HX Edit でもそのように表示され、これらの CC を送信する MIDI コントローラーでも切り替えられます。</li>\n        ",
-    "feat.hold": "<b>フットスイッチ長押し</b>",
-    "feat.holdS": "\n          <li><i>Global Settings › Footswitches</i></li>\n          <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): Stomp モードでそのフットスイッチを 1 秒間押し続けたときの動作。FS6 … FS10 は仮想フットスイッチで、Bypass Assign でブロックを割り当てます。</li>\n          <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): 各仮想フットスイッチの動作で、実際のフットスイッチの FS3 … FS5 Function と同じです。初期設定の Stomp は、そのブロックを切り替えます。</li>\n          <li><b>仮想フットスイッチを切り替える</b>：Hold がその FS に設定されたフットスイッチを長押しします。初期設定では、FS1 を長押しすると FS6 が切り替わり、以降 FS5 と FS10 まで同様です。タップすると、そのフットスイッチ自身のブロックがこれまでどおり切り替わります。</li>\n        ",
-    "feat.snap": "<b>スナップショット増設</b>",
-    "feat.snapS": "\n          <li><i>設定なし</i></li>\n          <li>1 プリセットにスナップショットを 6 つ。点灯中のスナップショットのフットスイッチをもう一度押すと、スナップショット 1〜3 と 4〜6 が切り替わります。</li>\n          <li>スナップショット 4〜6 があるプリセットでは、次/前のスナップショット（SnpshtUp、SnpshtDn、MIDI CC 69）が 6 つすべてを巡ります。3 で次へ進むと 4 に、6 で次へ進むと 1 に戻ります。</li>\n          <li>MIDI CC 69 で 6 つのどれでも直接選べます。値 0〜2 でスナップショット 1〜3、3〜5 で 4〜6。</li>\n        ",
-    "feat.click": "<b>Metronome</b>",
-    "feat.clickS": "\n          <li><i>新しいブロック: Looper › Metronome</i></li>\n          <li><b>Time</b> (音符の長さ、テンポに同期): ビートの間隔。ディレイの Time と同じです。</li>\n          <li><b>Level</b> (−60 … +6 dB): クリックの音量。</li>\n          <li><b>Accent</b> (Off, 2 … 12): n 拍ごとにダウンビートとなり、高いクリックが鳴ります。</li>\n          <li><b>Thru</b> (Off, On): On はクリックを重ねてあなたの信号を出力し、Off はクリックだけを出力します。</li>\n        ",
-    "feat.tap": "<b>TAP LED の色</b>",
-    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>TAP LED の色</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): TAP フットスイッチで点滅するリングの色と、Home 画面に表示されるアイコンとラベルの色。Red が標準の色です。 Rainbow ではリングがビートごとに色相環を少しずつ進み、赤から橙、黄、緑、青、藍、紫を経て赤に戻ります。Random ではビートごとにランダムな色になります。どちらもラベルは白のままです。</li>\n        ",
     "feat.none": "このページには機能のコードが入っていないため、NAM A2 Lite と起動画面のみをビルドします。HXtra のリリースごとに公開されるページには入っています。",
     "nav.1": "準備",
     "nav.2": "ビルド",
@@ -1707,6 +1486,7 @@ var LANGS = {
     "rec.li1": "HX Stomp の電源を切ります。",
     "rec.li2": "<b>Page › ボタンを押したまま電源を入れます。</b>画面が暗い状態のアップデートモードで起動します。",
     "rec.li3": "Line 6 Updater で <b>Choose File</b> を選び、手順1の<b>純正</b>ファイル(<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>)を指定します。",
+    "rec.li4": "<b>HX Edit</b> で、ステップ 1 で作成したバックアップファイルを復元します（<b>File &gt; Restore From Backup...</b>）。",
     "faq.title": "よくある質問",
     "faq.q1": "なぜ自分のファームウェアファイルが必要なのですか?",
     "faq.a1": "ファームウェアは Line 6 のものなので、このプロジェクトから配布することはできません。このページはお手持ちのファイルを使い、15個のパーツのうちいくつか(メインアプリケーション、DSP プログラムとそのグラフライブラリ、モデル一覧、画像ストア)を変更し、すべてのチェックサムを修正します。ブートローダーは一切変更しません。作成したファイルは共有しないでください。",
@@ -1788,31 +1568,9 @@ var LANGS = {
   },
   "zh": {
     "lang": "语言",
-    "hero.title": "适用于 HX Stomp 的 HXtra",
-    "hero.lede": "HXtra 是适用于 HX Stomp 的定制固件。本页会用你自己的 Line 6 文件制作它，带你完成安装，并把你的 <b>.nam</b> 采样转换成 HX Stomp 能播放的文件，一切都在本浏览器中本地运行。",
+    "hero.title": "为 HX Stomp 设置 HXtra",
+    "hero.lede": "设置说明",
     "warn": "<b>非官方，实验性质。</b>HXtra 并非 Line 6 出品，也不受其支持。安装修改过的固件风险自负，且可能导致失去保修。不用担心：万一出问题，按照<a href=\"#recovery\">恢复</a>步骤就能轻松装回原厂固件。",
-    "feat.title": "功能",
-    "feat.sub": "每个版本都包含以上所有功能 + NAM A2 Lite。",
-    "feat.tuner": "<b>调音器设置</b>",
-    "feat.tunerS": "\n          <li><i>在调音器自己的第三页</i></li>\n          <li><b>调音器按钮</b> (Hold, Press): Hold 表示按住 TAP 打开调音器；Press 表示按一下即可打开，此时 TAP 不再打拍子。</li>\n          <li><b>调音器锁定</b> (Off, On): On 会锁定调音器的其他设置（Output、Reference、Type、Trails、Offsets）。</li>\n        ",
-    "feat.bpm": "<b>BPM 显示</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>字体大小</b> (XL, L, M, S, Off): 主屏幕左上角速度数字的大小。 Off 时隐藏。</li>\n          <li><b>颜色</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): 速度数字和节拍点的颜色。 Tempo 跟随 TAP 踏板的颜色（TAP LED 颜色）。</li>\n          <li><b>圆点位置</b> (Left, Right, Both, Off): 节拍点随 TAP 闪烁的位置，在预设编号旁边。 Off 时隐藏；两者都设为 Off 时，BPM 显示关闭。</li>\n        ",
-    "feat.line": "<b>呼吸线</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>颜色</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): 主屏幕中间那条线的颜色或渐变。</li>\n          <li><b>类型</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): 它的运动方式；Off 会恢复原厂的线。</li>\n          <li><b>速度</b> (1–10, Tempo): 一个周期在 1 时为 8 秒，在 10 时为 0.8 秒；Tempo 跟随速度（BPM），Heart 每周期一拍，Breathe、Cylon 和 Comet 两拍，Steady 四拍，Sparkle 八拍。</li>\n        ",
-    "feat.dsp": "<b>DSP 表</b>",
-    "feat.dspS": "\n          <li><i>无设置</i></li>\n          <li>在编辑视图和型号浏览器中，每个模块显示自己占用的 DSP 比例，右上角显示总量。</li>\n        ",
-    "feat.gr": "<b>增益衰减表</b>",
-    "feat.grS": "\n          <li><i>Deluxe、LA Studio、Kinky、Ampeg Opto、Rochester 和 Red Squeeze 压缩器上的旋钮</i></li>\n          <li><b>Mtr Thk</b> (0 … 20): 指示条的粗细，单位为像素；0（默认值）表示关闭。</li>\n          <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): 指示条在 Home 屏幕上的亮起位置，用来显示压缩器正在衰减多少增益。Middle 会取代横穿中间的那条线。</li>\n          <li><b>Mtr Dir</b> (Normal, Reverse): Normal 从左到右或从上到下填充；Reverse 则相反。</li>\n        ",
-    "feat.vfs": "<b>虚拟踏板</b>",
-    "feat.vfsS": "\n          <li><i>五个额外的踏板 FS6 … FS10，随踏板长按功能一起提供</i></li>\n          <li><b>分配模块</b>：在模块的 Bypass Assign 中，按一次 Page › 找到 MIDI In，然后将 MIDI In 从 Off 向上调：FS6 是向上一格，FS10 是五格；设在其中之一时，旋钮名称显示为 FootswIn。预设会保存该分配。</li>\n          <li><b>参数</b>：在 Controller Assign 中把参数分配给同一个 FS，它也会跟随该踏板。</li>\n          <li><b>MIDI</b>：<b>底层上，FS6 … FS10 就是 MIDI CC 20 … 24。</b>HX Edit 也是这样显示的，发送这些 CC 的 MIDI 控制器同样可以切换它们。</li>\n        ",
-    "feat.hold": "<b>踏板长按</b>",
-    "feat.holdS": "\n          <li><i>Global Settings › Footswitches</i></li>\n          <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): 在 Stomp 模式下，按住该踏板一秒会做什么。FS6 … FS10 是虚拟踏板：在 Bypass Assign 中为它们分配模块。</li>\n          <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): 每个虚拟踏板的功能，与实体踏板的 FS3 … FS5 Function 相同。默认的 Stomp 会切换它的模块。</li>\n          <li><b>切换虚拟踏板</b>：按住 Hold 设为该 FS 的踏板。默认情况下，按住 FS1 切换 FS6，依此类推直到 FS5 和 FS10。轻点仍会切换该踏板自身的模块。</li>\n        ",
-    "feat.snap": "<b>更多 snapshot</b>",
-    "feat.snapS": "\n          <li><i>无设置</i></li>\n          <li>每个预设六个 snapshot：再按一次亮着的 snapshot 踏板，就在 snapshot 1–3 和 4–6 之间切换。</li>\n          <li>预设有 snapshot 4–6 后，下一个/上一个 snapshot（SnpshtUp、SnpshtDn、MIDI CC 69）会在全部六个之间切换：在 3 上按下一个会到 4，在 6 上按下一个会回到 1。</li>\n          <li>MIDI CC 69 可直接选择六个中的任意一个：值 0–2 对应 snapshot 1–3，3–5 对应 4–6。</li>\n        ",
-    "feat.click": "<b>Metronome</b>",
-    "feat.clickS": "\n          <li><i>新模块: Looper › Metronome</i></li>\n          <li><b>Time</b> (音符时值，与速度同步): 节拍，与延迟的 Time 相同。</li>\n          <li><b>Level</b> (−60 … +6 dB): 节拍音的音量。</li>\n          <li><b>Accent</b> (Off, 2 … 12): 每 n 拍为一个强拍，节拍音更高。</li>\n          <li><b>Thru</b> (Off, On): On 在节拍音之上播放你的信号；Off 只播放节拍音。</li>\n        ",
-    "feat.tap": "<b>TAP LED 颜色</b>",
-    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>TAP LED 颜色</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): TAP 踏板闪烁的灯环颜色，以及它在主屏幕上的图标和标签的颜色。Red 为出厂颜色。 Rainbow 让灯环每拍沿色环前进一小步，从红经橙、黄、绿、蓝、靛、紫再回到红；Random 每拍随机换一种颜色。两者的标签都保持白色。</li>\n        ",
     "feat.none": "本页面副本不含功能代码，因此只制作 NAM A2 Lite 和开机画面。每个 HXtra 发布版随附的页面则包含这些功能。",
     "nav.1": "准备工作",
     "nav.2": "制作",
@@ -1895,6 +1653,7 @@ var LANGS = {
     "rec.li1": "关闭 HX Stomp。",
     "rec.li2": "<b>按住 Page ›（向右翻页）键的同时开机。</b>它会以黑屏状态进入更新模式。",
     "rec.li3": "在 Line 6 Updater 中点 <b>Choose File</b>，选择第 1 步的<b>原厂</b>文件（<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>）。",
+    "rec.li4": "用 <b>HX Edit</b> 恢复你在第 1 步中创建的备份文件（<b>File &gt; Restore From Backup...</b>）。",
     "faq.title": "常见问题",
     "faq.q1": "为什么需要我自己的固件文件？",
     "faq.a1": "固件属于 Line 6，本项目无权分发。本页拿你的副本，修改其十五个部分中的几个（主程序、DSP 程序及其图形库、型号列表和图像存储），并修正所有校验和。bootloader 从不改动。请不要分享你制作出的文件。",
@@ -1976,31 +1735,9 @@ var LANGS = {
   },
   "ko": {
     "lang": "언어",
-    "hero.title": "HX Stomp용 HXtra",
-    "hero.lede": "HXtra는 HX Stomp용 커스텀 펌웨어입니다. 이 페이지는 내 Line 6 파일로 HXtra를 빌드하고, 설치 과정을 안내하고, <b>.nam</b> 캡처를 HX Stomp에서 재생할 수 있는 파일로 바꿔 줍니다. 모든 작업은 이 브라우저 안에서 로컬로 실행됩니다.",
+    "hero.title": "HX Stomp에 HXtra 설정하기",
+    "hero.lede": "설정 안내",
     "warn": "<b>비공식 실험 버전입니다.</b> HXtra는 Line 6가 만들거나 지원하는 것이 아닙니다. 수정된 펌웨어 설치는 본인 책임이며 보증이 무효화될 수 있습니다. 그래도 걱정하지 마세요. 문제가 생기면 <a href=\"#recovery\">복구</a> 절차로 순정 펌웨어를 쉽게 되돌릴 수 있습니다.",
-    "feat.title": "기능",
-    "feat.sub": "모든 빌드에 이 기능 전부 + NAM A2 Lite가 들어갑니다.",
-    "feat.tuner": "<b>튜너 설정</b>",
-    "feat.tunerS": "\n          <li><i>튜너 자체 설정의 세 번째 페이지</i></li>\n          <li><b>튜너 버튼</b> (Hold, Press): Hold는 TAP을 길게 누르면 튜너가 열리고, Press는 한 번 누르면 열리며 TAP으로는 더 이상 템포를 입력할 수 없습니다.</li>\n          <li><b>튜너 잠금</b> (Off, On): On이면 튜너의 다른 설정(Output, Reference, Type, Trails, Offsets)을 잠급니다.</li>\n        ",
-    "feat.bpm": "<b>BPM 표시</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>글꼴 크기</b> (XL, L, M, S, Off): 홈 화면 왼쪽 위에 표시되는 템포의 크기. Off로 하면 숨겨집니다.</li>\n          <li><b>색상</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): 템포와 비트 점의 색. Tempo는 TAP 풋스위치의 색상(TAP LED 색상)을 따릅니다.</li>\n          <li><b>점 위치</b> (Left, Right, Both, Off): TAP에 맞춰 비트 점이 깜빡이는 위치로, 프리셋 번호 옆입니다. Off로 하면 숨겨지며, 둘 다 Off이면 BPM 표시가 꺼집니다.</li>\n        ",
-    "feat.line": "<b>숨쉬는 선</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>색상</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): 홈 화면 가운데를 가로지르는 선의 색 또는 그라데이션.</li>\n          <li><b>종류</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): 선이 움직이는 방식. Off는 기본 선으로 되돌립니다.</li>\n          <li><b>속도</b> (1–10, Tempo): 한 주기는 1에서 8초, 10에서 0.8초입니다. Tempo는 템포를 따르며, 한 주기는 Heart에서 1박, Breathe, Cylon, Comet에서 2박, Steady에서 4박, Sparkle에서 8박입니다.</li>\n        ",
-    "feat.dsp": "<b>DSP 미터</b>",
-    "feat.dspS": "\n          <li><i>설정 없음</i></li>\n          <li>편집 화면과 모델 브라우저에서 각 블록이 차지하는 DSP 비율을, 오른쪽 위 모서리에는 총합을 보여 줍니다.</li>\n        ",
-    "feat.gr": "<b>게인 리덕션 미터</b>",
-    "feat.grS": "\n          <li><i>Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester, Red Squeeze 컴프레서의 노브</i></li>\n          <li><b>Mtr Thk</b> (0 … 20): 미터의 두께(픽셀). 기본값 0은 끕니다.</li>\n          <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): Home 화면 어디에서 미터가 켜져 컴프레서가 게인을 얼마나 줄이는지 보여 줄지 정합니다. Middle은 가운데를 가로지르는 선 자리를 차지합니다.</li>\n          <li><b>Mtr Dir</b> (Normal, Reverse): Normal은 왼쪽에서 오른쪽 또는 위에서 아래로 채우고, Reverse는 반대로 채웁니다.</li>\n        ",
-    "feat.vfs": "<b>가상 풋스위치</b>",
-    "feat.vfsS": "\n          <li><i>풋스위치 길게 누르기와 함께 제공되는 추가 풋스위치 5개, FS6 … FS10</i></li>\n          <li><b>블록 할당</b>: 블록의 Bypass Assign에서 Page ›를 한 번 눌러 MIDI In을 표시한 다음, MIDI In을 Off에서 올립니다. FS6은 한 칸 위, FS10은 다섯 칸 위이며, 그중 하나에 있는 동안 노브 이름이 FootswIn으로 표시됩니다. 프리셋에 할당이 저장됩니다.</li>\n          <li><b>파라미터</b>: Controller Assign에서 같은 FS에 파라미터를 할당하면 풋스위치를 따라 움직입니다.</li>\n          <li><b>MIDI</b>: <b>내부적으로 FS6 … FS10은 MIDI CC 20 … 24입니다.</b> HX Edit에도 그렇게 표시되며, 해당 CC를 보내는 MIDI 컨트롤러로도 전환할 수 있습니다.</li>\n        ",
-    "feat.hold": "<b>풋스위치 길게 누르기</b>",
-    "feat.holdS": "\n          <li><i>Global Settings › Footswitches</i></li>\n          <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): Stomp 모드에서 해당 풋스위치를 1초간 누르고 있을 때의 동작. FS6 … FS10은 가상 풋스위치로, Bypass Assign에서 블록을 할당합니다.</li>\n          <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): 각 가상 풋스위치의 동작으로, 실제 풋스위치의 FS3 … FS5 Function과 같습니다. 기본값인 Stomp는 해당 블록을 토글합니다.</li>\n          <li><b>가상 풋스위치 전환</b>: Hold가 해당 FS로 설정된 풋스위치를 길게 누릅니다. 기본적으로 FS1을 길게 누르면 FS6이 전환되고, FS5와 FS10까지 같은 방식입니다. 짧게 누르면 그 풋스위치 자체의 블록이 그대로 토글됩니다.</li>\n        ",
-    "feat.snap": "<b>스냅샷 늘리기</b>",
-    "feat.snapS": "\n          <li><i>설정 없음</i></li>\n          <li>프리셋당 스냅샷 6개: 켜진 스냅샷 풋스위치를 한 번 더 누르면 스냅샷 1–3과 4–6이 번갈아 전환됩니다.</li>\n          <li>스냅샷 4–6이 있는 프리셋에서는 다음/이전 스냅샷(SnpshtUp, SnpshtDn, MIDI CC 69)이 6개 모두를 차례로 오갑니다. 3에서 다음으로 가면 4로, 6에서 다음으로 가면 1로 돌아갑니다.</li>\n          <li>MIDI CC 69로 6개 중 어느 것이든 바로 선택합니다. 값 0–2는 스냅샷 1–3, 3–5는 4–6입니다.</li>\n        ",
-    "feat.click": "<b>Metronome</b>",
-    "feat.clickS": "\n          <li><i>새 블록: Looper › Metronome</i></li>\n          <li><b>Time</b> (음표 값, 템포에 동기화): 박자로, 딜레이의 Time과 같습니다.</li>\n          <li><b>Level</b> (−60 … +6 dB): 클릭의 음량.</li>\n          <li><b>Accent</b> (Off, 2 … 12): n번째 박마다 강박이 되며 더 높은 클릭이 납니다.</li>\n          <li><b>Thru</b> (Off, On): On은 클릭을 깔고 신호를 그대로 내보내고, Off는 클릭만 내보냅니다.</li>\n        ",
-    "feat.tap": "<b>TAP LED 색상</b>",
-    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>TAP LED 색상</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): TAP 풋스위치에서 깜박이는 링의 색상과 홈 화면에 표시되는 아이콘 및 라벨의 색상. Red가 기본 색상입니다. Rainbow는 박자마다 링을 색상환을 따라 조금씩 움직여 빨강에서 주황, 노랑, 초록, 파랑, 남색, 보라를 거쳐 다시 빨강으로 돌아가고, Random은 박자마다 새로운 색을 고릅니다. 둘 다 라벨은 흰색으로 둡니다.</li>\n        ",
     "feat.none": "이 페이지 사본에는 기능 코드가 없어서 NAM A2 Lite와 시작 화면만 빌드합니다. HXtra 릴리스마다 공개되는 페이지에는 들어 있습니다.",
     "nav.1": "준비",
     "nav.2": "빌드",
@@ -2083,6 +1820,7 @@ var LANGS = {
     "rec.li1": "HX Stomp 전원을 끄세요.",
     "rec.li2": "<b>Page ›(오른쪽 페이지) 버튼을 누른 채로 전원을 켜세요.</b> 화면이 꺼진 상태로 업데이트 모드로 시작합니다.",
     "rec.li3": "Line 6 Updater에서 <b>Choose File</b>을 누르고 1단계의 <b>순정</b> 파일(<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>)을 고르세요.",
+    "rec.li4": "<b>HX Edit</b>에서 1단계에서 만든 백업 파일을 복원합니다(<b>File &gt; Restore From Backup...</b>).",
     "faq.title": "자주 묻는 질문",
     "faq.q1": "왜 내 펌웨어 파일이 필요한가요?",
     "faq.a1": "펌웨어는 Line 6의 것이라 이 프로젝트가 배포할 수 없습니다. 이 페이지는 사용자의 파일을 받아 15개 부분 중 일부(메인 애플리케이션, DSP 프로그램과 그 그래프 라이브러리, 모델 목록, 이미지 저장소)를 수정하고 모든 체크섬을 바로잡습니다. 부트로더는 절대 바꾸지 않습니다. 빌드한 파일은 공유하지 말아 주세요.",
@@ -2164,31 +1902,9 @@ var LANGS = {
   },
   "ru": {
     "lang": "Язык",
-    "hero.title": "HXtra для HX Stomp",
-    "hero.lede": "HXtra — это кастомная прошивка для HX Stomp. Эта страница соберёт её из вашего собственного файла Line 6, проведёт вас через установку и превратит ваши захваты <b>.nam</b> в файлы, которые умеет воспроизводить HX Stomp, и всё это работает локально в этом браузере.",
+    "hero.title": "Установка HXtra на HX Stomp",
+    "hero.lede": "Инструкции по установке",
     "warn": "<b>Неофициально и экспериментально.</b> HXtra не создана и не поддерживается Line 6. Установка изменённой прошивки — на ваш страх и риск и может лишить вас гарантии. Но не волнуйтесь: если что-то пойдёт не так, шаги <a href=\"#recovery\">восстановления</a> легко вернут стоковую прошивку.",
-    "feat.title": "Функции",
-    "feat.sub": "В каждой сборке есть все эти функции + NAM A2 Lite.",
-    "feat.tuner": "<b>Настройки тюнера</b>",
-    "feat.tunerS": "\n          <li><i>На третьей странице собственных настроек тюнера</i></li>\n          <li><b>Кнопка тюнера</b> (Hold, Press): Hold открывает тюнер при удержании TAP; Press открывает его нажатием, и TAP больше не задаёт темп.</li>\n          <li><b>Блокировка тюнера</b> (Off, On): On блокирует остальные настройки тюнера (Output, Reference, Type, Trails, Offsets).</li>\n        ",
-    "feat.bpm": "<b>Индикатор BPM</b>",
-    "feat.bpmS": "\n          <li><i>Global Settings › BPM Display</i></li>\n          <li><b>Размер шрифта</b> (XL, L, M, S, Off): размер темпа в левом верхнем углу экрана Home. Off скрывает его.</li>\n          <li><b>Цвет</b> (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): цвет темпа и точки доли. Tempo берёт цвет педали TAP (Цвет светодиода TAP).</li>\n          <li><b>Положение точки</b> (Left, Right, Both, Off): где мигает точка доли в такт с TAP, рядом с номером пресета. Off скрывает её; если оба в Off, отображение BPM выключено.</li>\n        ",
-    "feat.line": "<b>Дышащая линия</b>",
-    "feat.lineS": "\n          <li><i>Global Settings › Breathing Line</i></li>\n          <li><b>Цвет</b> (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): цвет или градиент линии посередине экрана Home.</li>\n          <li><b>Тип</b> (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): как она движется; Off возвращает стандартную линию.</li>\n          <li><b>Скорость</b> (1–10, Tempo): один цикл длится 8 с при 1 и 0,8 с при 10; Tempo следует темпу: одна доля на цикл у Heart, две у Breathe, Cylon и Comet, четыре у Steady, восемь у Sparkle.</li>\n        ",
-    "feat.dsp": "<b>Индикатор DSP</b>",
-    "feat.dspS": "\n          <li><i>Нет настроек</i></li>\n          <li>Каждый блок показывает свою долю DSP, а правый верхний угол — общую, в режиме Edit и в браузере моделей.</li>\n        ",
-    "feat.gr": "<b>Индикатор gain reduction</b>",
-    "feat.grS": "\n          <li><i>Ручки на компрессорах Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester и Red Squeeze</i></li>\n          <li><b>Mtr Thk</b> (0 … 20): толщина индикатора в пикселях; 0, значение по умолчанию, отключает его.</li>\n          <li><b>Mtr Pos</b> (Middle, Top, Left, Bottom, Right): где на экране Home загорается индикатор, показывая, насколько компрессор снижает усиление. Middle занимает место линии посередине.</li>\n          <li><b>Mtr Dir</b> (Normal, Reverse): Normal заполняет слева направо или сверху вниз; Reverse — наоборот.</li>\n        ",
-    "feat.vfs": "<b>Виртуальные педали</b>",
-    "feat.vfsS": "\n          <li><i>Пять дополнительных педалей, FS6 … FS10, которые появляются вместе с Долгим нажатием педали</i></li>\n          <li><b>Назначение блока</b>: в Bypass Assign блока нажмите Page › один раз, чтобы увидеть MIDI In, затем поднимите MIDI In с Off: FS6 — на один щелчок выше, FS10 — на пять; пока выбран один из них, ручка подписана FootswIn. Назначение сохраняется в пресете.</li>\n          <li><b>Параметры</b>: назначьте параметр на тот же FS в Controller Assign, и он тоже будет следовать за педалью.</li>\n          <li><b>MIDI</b>: <b>внутри FS6 … FS10 — это MIDI CC 20 … 24.</b> HX Edit показывает их именно так, и MIDI-контроллер, отправляющий эти CC, тоже их переключает.</li>\n        ",
-    "feat.hold": "<b>Долгое нажатие педали</b>",
-    "feat.holdS": "\n          <li><i>Global Settings › Footswitches</i></li>\n          <li><b>FS1 … FS5 Hold</b> (Off, Tuner, FS4, FS5, FS6 … FS10): что делает удержание этой педали в течение секунды в режиме Stomp. FS6 … FS10 — виртуальные педали: назначайте им блоки в Bypass Assign.</li>\n          <li><b>FS6 … FS10 Function</b> (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): что делает каждая виртуальная педаль, как FS3 … FS5 Function для настоящих. Stomp, значение по умолчанию, переключает её блоки.</li>\n          <li><b>Переключение виртуальной педали</b>: удерживайте педаль, у которой Hold настроен на этот FS. По умолчанию удержание FS1 переключает FS6, и так далее до FS5 и FS10. Короткое нажатие по-прежнему переключает блоки самой педали.</li>\n        ",
-    "feat.snap": "<b>Больше снапшотов</b>",
-    "feat.snapS": "\n          <li><i>Нет настроек</i></li>\n          <li>Шесть снапшотов на пресет: нажмите горящую педаль снапшота ещё раз, чтобы переключаться между снапшотами 1–3 и 4–6.</li>\n          <li>Когда у пресета есть снапшоты 4–6, следующий и предыдущий снапшот (SnpshtUp, SnpshtDn, MIDI CC 69) проходят по всем шести: «следующий» на 3 переходит к 4, а на 6 — обратно к 1.</li>\n          <li>MIDI CC 69 напрямую выбирает любой из шести: значения 0–2 — снапшоты 1–3, 3–5 — снапшоты 4–6.</li>\n        ",
-    "feat.click": "<b>Metronome</b>",
-    "feat.clickS": "\n          <li><i>Новый блок: Looper › Metronome</i></li>\n          <li><b>Time</b> (длительность ноты, синхронизирована с темпом): доля, как Time у дилея.</li>\n          <li><b>Level</b> (−60 … +6 dB): громкость щелчка.</li>\n          <li><b>Accent</b> (Off, 2 … 12): каждая n-я доля является сильной, с более высоким щелчком.</li>\n          <li><b>Thru</b> (Off, On): On воспроизводит ваш сигнал с щелчком под ним; Off воспроизводит только щелчок.</li>\n        ",
-    "feat.tap": "<b>Цвет светодиода TAP</b>",
-    "feat.tapS": "\n          <li><i>Global Settings › Displays</i></li>\n          <li><b>Цвет светодиода TAP</b> (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): цвет мигающего кольца педали TAP, а также её значка и подписи на экране Home. Red — заводской цвет. Rainbow на каждой доле сдвигает цвет кольца на небольшой шаг по цветовому кругу: от красного через оранжевый, жёлтый, зелёный, синий, индиго и фиолетовый и обратно; Random на каждой доле выбирает новый цвет. В обоих случаях подпись остаётся белой.</li>\n        ",
     "feat.none": "В этой копии страницы нет кода функций, поэтому она собирает только NAM A2 Lite и загрузочный экран. В странице, опубликованной с каждым релизом HXtra, он есть.",
     "nav.1": "Подготовка",
     "nav.2": "Сборка",
@@ -2271,6 +1987,7 @@ var LANGS = {
     "rec.li1": "Выключите HX Stomp.",
     "rec.li2": "<b>Удерживайте кнопку Page › (страница вправо) при включении.</b> Он запустится в режиме обновления с тёмным экраном.",
     "rec.li3": "В Line 6 Updater нажмите <b>Choose File</b> и выберите <b>стоковый</b> файл из шага 1 (<code>HX_Stomp_v3.80.0_0x103966115.hxf</code>).",
+    "rec.li4": "Восстановите в <b>HX Edit</b> резервную копию, сделанную на шаге 1 (<b>File &gt; Restore From Backup...</b>).",
     "faq.title": "Вопросы",
     "faq.q1": "Зачем нужен мой собственный файл прошивки?",
     "faq.a1": "Прошивка принадлежит Line 6, поэтому проект не может её распространять. Эта страница берёт вашу копию, меняет несколько из пятнадцати её частей (основное приложение, программу DSP и её графовую библиотеку, список моделей и хранилище изображений) и исправляет все контрольные суммы. Загрузчик не меняется никогда. Пожалуйста, не делитесь собранным файлом.",
@@ -2479,11 +2196,11 @@ var LANG_NAMES = {
     }).then(function (c) {
       features = c.features;
       optBoxes.forEach(function (o) { o.hidden = (c.options || []).indexOf(o.dataset.option) < 0; });
-      $("opts").hidden = optBoxes.every(function (o) { return o.hidden; });
+      $("opts").hidden = $("options").hidden = optBoxes.every(function (o) { return o.hidden; });
       release = c.release;
       $("release").hidden = !release;
       relDraw();
-    }, function () { $("featNone").hidden = false; });
+    }, function () { $("featNone").hidden = $("options").hidden = false; });
   }
 
   function buildFirmware(files) {

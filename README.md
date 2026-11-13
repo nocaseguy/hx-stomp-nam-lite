@@ -64,14 +64,32 @@ If an install ever stops at the splash screen, hold Page Right while powering on
 
 ## Features
 
+Every build has all of these + NAM A2 Lite.
+
 <sub>Every demo was recorded from a real HX Stomp's screen, along with its audio and button presses, then overlaid on a simulated HX Stomp.</sub>
 
-<table>
-<tr>
-<td width="50%" valign="top">
+### <img src="docs/assets/icons/tuner.svg" width="28" height="28" align="top" alt=""> Tuner settings
+
+*On the tuner's own third page*
+
+- **Tuner button** (Hold, Press): Hold opens the tuner when you hold TAP; Press opens it with a press, and TAP no longer taps the tempo.
+- **Tuner lock** (Off, On): On locks the tuner's other settings (Output, Reference, Type, Trails, Offsets).
+
+<!-- demo: tuner -->
+<details>
+<summary>Demo</summary>
+
+<img src="https://github.com/user-attachments/assets/7decba81-b026-4fb5-95f9-6c8899b2e47c" width="100%" alt="The tuner: Activate set to Press, so one press opens it, then Lock On and its knobs no longer change">
+
+</details>
 
 ### <img src="docs/assets/icons/bpm.svg" width="40" height="28" align="top" alt=""> BPM display
-The tempo at the top left of the Home screen, and a beat dot that blinks with TAP. Choose its size, its colour and where the dot sits.
+
+*Global Settings › BPM Display*
+
+- **Font size** (XL, L, M, S, Off): the size of the tempo at the top left of the Home screen. Off hides it.
+- **Color** (White, Gray, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Tempo): the tempo's and the beat dot's colour. Tempo follows the TAP footswitch's colour (Tap LED Color).
+- **Dot position** (Left, Right, Both, Off): where the beat dot blinks with TAP, beside the preset number. Off hides it; with both Off the BPM display is off.
 
 <!-- demo: bpm -->
 <details>
@@ -88,88 +106,13 @@ The tempo at the top left of the Home screen, and a beat dot that blinks with TA
 
 </details>
 
-&nbsp;
-
-</td>
-<td width="50%" valign="top">
-
-### <img src="docs/assets/icons/dsp-usage.svg" width="32" height="32" align="top" alt=""> DSP usage display
-Every block shows its share of the DSP, and the total sits at the top right (`47/75`). The model browser shows what a model costs *before* you add it.
-
-<!-- demo: dsp-usage -->
-<details>
-<summary>Demo</summary>
-
-<img src="https://github.com/user-attachments/assets/fb8644f3-b5ab-4803-b3be-fefcfb23c7b3" width="100%" alt="Browsing bass amps: the DSP total previews each model, then the added block shows its share">
-
-</details>
-
-&nbsp;
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-### <img src="docs/assets/icons/snapshots.svg" width="104" height="32" align="top" alt=""> Six snapshots
-Press the lit snapshot footswitch again to flip to snapshots 4–6. Next and previous step through all six, MIDI CC 69 values 0–5 select any of them, and all six are saved with the preset.
-
-<!-- demo: snapshots -->
-<details>
-<summary>Demo</summary>
-
-<img src="https://github.com/user-attachments/assets/8ce9d86c-cffb-491e-9c47-0430a02a4af7" width="100%" alt="Snapshots 1 to 3, the lit footswitch again for 4 to 6, and again back to 1 to 3">
-
-</details>
-
-&nbsp;
-
-</td>
-<td valign="top">
-
-### <img src="docs/assets/icons/long-press.svg" width="28" height="28" align="top" alt=""> Long press and virtual footswitches
-Hold FS1–FS5 for a second action: the tuner, FS4, FS5, or one of five virtual footswitches, FS6–FS10, each with a footswitch function of its own.
-
-<!-- demo: long-press -->
-<details>
-<summary>Long press demo</summary>
-
-<img src="https://github.com/user-attachments/assets/50a6ecf0-6d87-4556-8ffd-035e4b40987b" width="100%" alt="Tapping and holding FS2, holding FS1 for the tuner, then the Hold and FS6 to FS10 Function settings">
-
-</details>
-
-<details>
-<summary>Virtual footswitch demo</summary>
-
-<img src="https://github.com/user-attachments/assets/f0261c29-ef31-4527-8d96-21ef176b67aa" width="100%" alt="A block's Bypass Assign: MIDI In set to the virtual footswitch FS6, then holding FS2 toggles it">
-
-</details>
-
-&nbsp;
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-### <img src="docs/assets/icons/tap-color.svg" width="28" height="28" align="top" alt=""> Tap LED color
-Light the TAP footswitch in any footswitch colour, or let Rainbow and Random change it on every beat. The BPM display can follow it.
-
-<!-- demo: tap-color -->
-<details>
-<summary>Demo</summary>
-
-<img src="https://github.com/user-attachments/assets/29f1b0a3-fa13-4d40-bfb0-cb426b15079d" width="100%" alt="Tap LED Color: red, green, blue, then Rainbow walking the colour wheel, and BPM Display Color Tempo following it">
-
-</details>
-
-&nbsp;
-
-</td>
-<td valign="top">
-
 ### <img src="docs/assets/icons/breathing-line.svg" width="28" height="28" align="top" alt=""> Breathing line
-Just for fun: the Home screen's divider comes alive. Rainbow, Fire, Ocean, Cylon, Comet, Heart, Sparkle and more, even in time with the tempo.
+
+*Global Settings › Breathing Line*
+
+- **Color** (White, Red, Green, Blue, Fire, Ice, Sunset, Ocean, Aurora, Neon, Rainbow): the colour or gradient of the line across the middle of the Home screen.
+- **Type** (Off, Steady, Breathe, Cylon, Comet, Heart, Sparkle): how it moves; Off gives back the stock line.
+- **Speed** (1–10, Tempo): one cycle takes 8 s at 1 and 0.8 s at 10; Tempo follows the tempo, a beat a cycle for Heart, two for Breathe, Cylon and Comet, four for Steady, eight for Sparkle.
 
 <!-- demo: breathing-line -->
 <details>
@@ -186,31 +129,27 @@ Just for fun: the Home screen's divider comes alive. Rainbow, Fire, Ocean, Cylon
 
 </details>
 
-&nbsp;
+### <img src="docs/assets/icons/dsp-usage.svg" width="32" height="32" align="top" alt=""> DSP meter
 
-</td>
-</tr>
-<tr>
-<td valign="top">
+*No settings*
 
-### <img src="docs/assets/icons/metronome.svg" width="35" height="28" align="top" alt=""> Metronome
-A click-track block in time with the tempo, with an optional downbeat accent. Find it at Looper › Metronome.
+- Each block shows its share of the DSP, and the top right corner the total, in the Edit view and in the model browser.
 
-<!-- demo: metronome -->
+<!-- demo: dsp-usage -->
 <details>
 <summary>Demo</summary>
 
-https://github.com/user-attachments/assets/f25be41c-3ab0-45a1-87fa-99cd50194933
+<img src="https://github.com/user-attachments/assets/fb8644f3-b5ab-4803-b3be-fefcfb23c7b3" width="100%" alt="Browsing bass amps: the DSP total previews each model, then the added block shows its share">
 
 </details>
 
-&nbsp;
+### <img src="docs/assets/icons/gr-meter.svg" width="28" height="28" align="top" alt=""> Gain reduction meter
 
-</td>
-<td valign="top">
+*Knobs on the Deluxe, LA Studio, Kinky, Ampeg Opto, Rochester and Red Squeeze compressors*
 
-### <img src="docs/assets/icons/gr-meter.svg" width="28" height="28" align="top" alt=""> Gain-reduction meter
-See how hard your compressor is working, as a meter on the Home screen. It works with six of the stock compressors.
+- **Mtr Thk** (0 … 20): the meter's thickness in pixels; 0, the default, turns it off.
+- **Mtr Pos** (Middle, Top, Left, Bottom, Right): where on the Home screen the meter lights up to show how much the compressor is reducing the gain. Middle takes the place of the line across the middle.
+- **Mtr Dir** (Normal, Reverse): Normal fills left to right or top to bottom; Reverse the other way.
 
 <!-- demo: gr-meter -->
 <details>
@@ -220,31 +159,89 @@ https://github.com/user-attachments/assets/50b5cd91-f578-4252-a1df-4b73d8ca1995
 
 </details>
 
-&nbsp;
+### <img src="docs/assets/icons/long-press.svg" width="28" height="28" align="top" alt=""> Virtual footswitches
 
-</td>
-</tr>
-<tr>
-<td valign="top">
+*Five extra footswitches, FS6 … FS10, that come with Footswitch long press*
 
-### <img src="docs/assets/icons/tuner.svg" width="28" height="28" align="top" alt=""> Tuner settings
-Open the tuner with a single press instead of a hold, and lock its settings so a stray knob turn can't change them.
+- **Assign a block**: in the block's Bypass Assign, press Page › once to see MIDI In, then turn MIDI In up from Off: FS6 is one click up, FS10 five, and while it's on one of them the knob reads FootswIn. The preset keeps the assignment.
+- **Parameters**: assign one to the same FS in Controller Assign, and it follows the footswitch too.
+- **MIDI**: **underneath, FS6 … FS10 are MIDI CC 20 … 24.** HX Edit shows them that way, and a MIDI controller sending those CCs switches them as well.
 
-<!-- demo: tuner -->
 <details>
 <summary>Demo</summary>
 
-<img src="https://github.com/user-attachments/assets/7decba81-b026-4fb5-95f9-6c8899b2e47c" width="100%" alt="The tuner: Activate set to Press, so one press opens it, then Lock On and its knobs no longer change">
+<img src="https://github.com/user-attachments/assets/f0261c29-ef31-4527-8d96-21ef176b67aa" width="100%" alt="A block's Bypass Assign: MIDI In set to the virtual footswitch FS6, then holding FS2 toggles it">
 
 </details>
 
-&nbsp;
+### <img src="docs/assets/icons/long-press.svg" width="28" height="28" align="top" alt=""> Footswitch long press
 
-</td>
-<td valign="top">
+*Global Settings › Footswitches*
 
-### <img src="docs/assets/icons/real-names.svg" width="28" height="28" align="top" alt=""> Real block names
-*Optional.* Title each block by the gear it's based on: Deez One Mod reads Boss DS-1 Mod. Tick its box on the setup page.
+- **FS1 … FS5 Hold** (Off, Tuner, FS4, FS5, FS6 … FS10): what holding that footswitch for a second does in Stomp mode. FS6 … FS10 are virtual footswitches: assign blocks to them in Bypass Assign.
+- **FS6 … FS10 Function** (Tuner, Stomp, Bank Up, Bank Dn, PresetUp, PresetDn, SnpshtUp, SnpshtDn, FS Mode&gt;, &lt;FS Mode, AllBypas, TogglEXP): what that virtual footswitch does, as FS3 … FS5 Function do for the real ones. Stomp, the default, toggles its blocks.
+- **Switch a virtual footswitch**: hold the footswitch whose Hold is set to that FS. By default, holding FS1 switches FS6, and so on up to FS5 and FS10. A tap still toggles the footswitch's own blocks.
+
+<!-- demo: long-press -->
+<details>
+<summary>Demo</summary>
+
+<img src="https://github.com/user-attachments/assets/50a6ecf0-6d87-4556-8ffd-035e4b40987b" width="100%" alt="Tapping and holding FS2, holding FS1 for the tuner, then the Hold and FS6 to FS10 Function settings">
+
+</details>
+
+### <img src="docs/assets/icons/snapshots.svg" width="104" height="32" align="top" alt=""> More snapshots
+
+*No settings*
+
+- Six snapshots a preset: press the lit snapshot footswitch again to flip between snapshots 1–3 and 4–6.
+- Once a preset has snapshots 4–6, next and previous snapshot (SnpshtUp, SnpshtDn, MIDI CC 69) step through all six: next on 3 goes to 4, and next on 6 back to 1.
+- MIDI CC 69 selects any of the six directly: values 0–2 for snapshots 1–3, 3–5 for 4–6.
+
+<!-- demo: snapshots -->
+<details>
+<summary>Demo</summary>
+
+<img src="https://github.com/user-attachments/assets/8ce9d86c-cffb-491e-9c47-0430a02a4af7" width="100%" alt="Snapshots 1 to 3, the lit footswitch again for 4 to 6, and again back to 1 to 3">
+
+</details>
+
+### <img src="docs/assets/icons/tap-color.svg" width="28" height="28" align="top" alt=""> Tap LED color
+
+*Global Settings › Displays*
+
+- **Tap LED Color** (Red, DkOrange, LtOrange, Yellow, Green, Teal, Blue, Violet, Pink, White, Rainbow, Random): the colour of the TAP footswitch's blinking ring, and of its icon and label on the Home screen. Red is the stock colour. Rainbow fades the ring a small step round the colour wheel at each beat, from red through orange, yellow, green, blue, indigo and violet and back; Random picks a new colour at each beat. Both keep the label white.
+
+<!-- demo: tap-color -->
+<details>
+<summary>Demo</summary>
+
+<img src="https://github.com/user-attachments/assets/29f1b0a3-fa13-4d40-bfb0-cb426b15079d" width="100%" alt="Tap LED Color: red, green, blue, then Rainbow walking the colour wheel, and BPM Display Color Tempo following it">
+
+</details>
+
+### <img src="docs/assets/icons/metronome.svg" width="35" height="28" align="top" alt=""> Metronome
+
+*New block: Looper › Metronome*
+
+- **Time** (a note value, synced to the tempo): the beat, as a delay's Time.
+- **Level** (−60 … +6 dB): the click's volume.
+- **Accent** (Off, 2 … 12): every nth beat is a downbeat, a higher click.
+- **Thru** (Off, On): On plays your signal with the click under it; Off plays the click alone.
+
+<!-- demo: metronome -->
+<details>
+<summary>Demo</summary>
+
+https://github.com/user-attachments/assets/f25be41c-3ab0-45a1-87fa-99cd50194933
+
+</details>
+
+### <img src="docs/assets/icons/real-names.svg" width="28" height="28" align="top" alt=""> Real block names (optional, off unless you tick it on the setup page)
+
+*No settings*
+
+- Each block's title in the model browser and the Edit view names the gear it's based on: Deez One Mod becomes Boss DS-1 Mod. Line 6 originals keep theirs.
 
 <!-- demo: real-names -->
 <details>
@@ -254,29 +251,13 @@ Open the tuner with a single press instead of a hold, and lock its settings so a
 
 </details>
 
-&nbsp;
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
 ### <img src="docs/assets/icons/nam.svg" width="28" height="28" align="top" alt=""> NAM A2 Lite
-[Neural Amp Modeler](https://www.neuralampmodeler.com) captures on the HX Stomp's own DSP, from [hx-stomp-nam-lite](https://github.com/nocaseguy/hx-stomp-nam-lite). The setup page converts your `.nam` files.
 
-&nbsp;
-
-</td>
-<td valign="top">
+- [Neural Amp Modeler](https://www.neuralampmodeler.com) captures on the HX Stomp's own DSP, from [hx-stomp-nam-lite](https://github.com/nocaseguy/hx-stomp-nam-lite). The setup page converts your `.nam` files.
 
 ### <img src="docs/assets/icons/boot-screen.svg" width="28" height="28" align="top" alt=""> Custom boot screen
-"HXtra STOMP" out of the box, or [your own picture and boot text](docs/features.md#boot-screen-hx-stomp-only), emoji included, from the command-line build.
 
-&nbsp;
-
-</td>
-</tr>
-</table>
+- "HXtra STOMP" out of the box, or [your own picture and boot text](docs/features.md#boot-screen-hx-stomp-only), emoji included, from the command-line build.
 
 <div align="center">
 

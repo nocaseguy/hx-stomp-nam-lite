@@ -94,12 +94,6 @@ def test_sources_have_every_m4_source():
     assert {p for p in listed_sources() if p.startswith("src/m4/")} == m4
 
 
-def test_page_lists_the_web_features():
-    # the page builds every one, the set whose MD5 a release pins
-    page = (ROOT / "web/index.html").read_text()
-    assert sorted(re.findall(r'<div class="feat" data-feature="(\w+)">', page)) == sorted(m4cache.web_flags())
-
-
 def test_page_lists_the_web_options():
     # opt-in features: a checkbox each, hidden until the release's cache offers it, unticked
     page = (ROOT / "web/index.html").read_text()

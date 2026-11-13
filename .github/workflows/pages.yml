@@ -2,7 +2,7 @@ name: pages
 
 # Publishes the setup page (web/) for a release, with the files the in-browser build reads (build.py, tools/, src/m4/,
 # src/sharc/: tests/test_web_build.py checks they cover web/firmware-worker.js's SOURCES) in the repository's own layout, and the release's m4cache.json (tools/release.py attaches it) at the root: the page is at /web/.
-# Only a release publishes it, so the page always matches a release, not whatever is on main.
+# A release publishes it; a manual run can take the page from another ref, keeping the release's m4cache.json.
 on:
   release:
     types: [published]
@@ -11,6 +11,9 @@ on:
       tag:
         description: The release to publish again
         required: true
+      ref:
+        description: Where to take the page and build files from, when only the page changed since the release (default, the release)
+        required: false
 
 permissions:
   contents: read
@@ -33,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ inputs.ref || env.TAG }}
       - name: site
         run: |
           mkdir -p _site/src
