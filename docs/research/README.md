@@ -18,6 +18,7 @@ The on-unit test tools these notes use (`hx_ctl.py`, `hx_smoke.py`, `hx_reamp.py
 | [KIT_HEAP_USE.md](KIT_HEAP_USE.md) | which stock internal heaps are used at run time, and the NAM block's own DM |
 | [KIT_UNIT_MEASUREMENTS.md](KIT_UNIT_MEASUREMENTS.md) | first probe measurements: call rate, the load word, the empty-preset base load |
 | [KIT_EP_DMA.md](KIT_EP_DMA.md) | external-port DMA on the ADSP-21469, from ADI's manual |
+| [SHARC_VISA.md](SHARC_VISA.md) | Entry 2's VISA code (16/32/48-bit): where it loads, instruction lengths and forms, the compiled C calling convention; the disassembler `tools/sharc/visa_dis.py` |
 
 ## Original Helix Floor hardware
 
