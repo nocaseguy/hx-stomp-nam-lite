@@ -102,16 +102,21 @@ def _ldr(*blocks):
 def test_parse_entry2_parcel_order_counts_and_zero_fills():
     pm_word = 0x0F0000077AAC
     pm_body = list(struct.unpack("<3I", pm_word.to_bytes(6, "little") + (0).to_bytes(6, "little")))
-    img = v.parse_entry2(_ldr((5, 1, 0x8C100, pm_body), (4, 2, 0xE149A, [7, 8]),
+    img = v.parse_entry2(_ldr((5, 1, 0x8C100, pm_body), (2, 2, 0x8C101, []), (4, 2, 0xE149A, [7, 8]),
                               (3, 3, 0x13AC4B, [0x0F000007, 0x7AACFFFF]),         # odd count: last half is padding
                               (1, 2, 0x13AC4E, []),
                               (10, 1, 0x300001, [0x00011901]), (1, 1, 0x300002, [])))
-    assert img.pm == {0x8C100: pm_word}
+    assert img.pm == {0x8C100: pm_word, 0x8C101: 0, 0x8C102: 0}        # tag-2 zero fill: NOPs
     assert img.dm == {0xE149A: 7, 0xE149B: 8}
     assert {a: img.sw[a] for a in range(0x13AC4B, 0x13AC50)} == {0x13AC4B: 0x0F00, 0x13AC4C: 0x0007, 0x13AC4D: 0x7AAC,
                                                                   0x13AC4E: 0, 0x13AC4F: 0}
     assert 0x13AC50 not in img.sw
     assert [img.sw[a] for a in range(0x600002, 0x600006)] == [0x1901, 0x0001, 0, 0]
+
+
+def test_parse_entry2_rejects_an_unknown_tag():
+    with pytest.raises(ValueError, match="desync"):
+        v.parse_entry2(_ldr((0x55, 0, 0, [])))
 
 
 # ---- the stock file
@@ -148,6 +153,13 @@ def test_stock_pm_code_reencodes_with_sasm():
         else:
             assert w in sasm.encode(t, sasm.Ctx(pc=a)), (hex(a), t)
     assert sorted(undecoded) == [0x8EA83, 0x8EA84]          # data words after an RTI
+
+
+@pytest.mark.firmware
+def test_stock_pm_listing_has_no_holes():
+    pm = _img().pm
+    assert sorted(pm) == list(range(0x8C100, 0x8EE96))
+    assert [i.text for i in v.disasm_pm(pm, 0x8C111, 0x8C117)] == ["R0 = DM(0x200000)"] + ["NOP"] * 4 + ["I12 = DM(M7,I6)"]
 
 
 @pytest.mark.firmware

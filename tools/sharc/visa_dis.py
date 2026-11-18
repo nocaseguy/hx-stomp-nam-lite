@@ -4,7 +4,8 @@
 Entry 2 is an LDR boot stream: blocks {tag, count, addr} from word 384 of the raw payload.
 Its code is in three kinds of block:
 
-    tag 5    48-bit ISA instructions in PM, at normal-word addresses (0x8c100..0x8ee95)
+    tag 5    48-bit ISA instructions in PM, at normal-word addresses (0x8c100..0x8ee95);
+             the tag-2 zero fills between them are NOPs in the code
     tag 3    VISA in internal memory: 16-bit parcels at short-word addresses,
              the high half of each 32-bit word first
     tag 10   VISA in DDR2: word 0x300000 + k holds the parcels at short-word
@@ -61,6 +62,8 @@ def parse_entry2(raw):
         tag, cnt, addr = w[i:i + 3]
         if tag == 0:
             break
+        if tag > 12:
+            raise ValueError(f"Entry 2 LDR desync at word {i}: tag {tag:#x}")
         n = _WORDS.get(tag, lambda c: 0)(cnt)
         body = w[i + 3:i + 3 + n]
         if tag == 5:
@@ -76,6 +79,8 @@ def parse_entry2(raw):
             for k, v in enumerate(body):
                 a = DDR_VISA + 2 * (addr + k - 0x300000)
                 sw[a], sw[a + 1] = v & 0xFFFF, v >> 16
+        elif tag == 2:                                              # 48-bit zeros in PM: NOPs in the code
+            pm.update((addr + k, 0) for k in range(cnt))
         elif tag == 1 and SW_SPACE[0] <= addr < SW_SPACE[1]:        # zeros, even mid-instruction
             sw.update((addr + k, 0) for k in range(cnt))
         elif tag == 1 and 0x300000 <= addr < 0x400000:

@@ -12,7 +12,7 @@ How Entry 2's VISA code is laid out and encoded, and what `tools/sharc/visa_dis.
 
 Entry 2 is an LDR boot stream read raw (`l6ia.parse(l6)[2]`, not swapped), blocks `{tag, count, addr}` from word 384.
 
-- Tag 5: 48-bit ISA instructions in PM at `0x8c100..0x8ee95`. Two calls from VISA go just below it (`0x8c0c3`, `0x8c0ec`), to code Entry 2 does not load.
+- Tag 5: 48-bit ISA instructions in PM at `0x8c100..0x8ee95`. Four tag-2 blocks (48-bit zero fills: 4, 21, 3 and 7 words at `0x8c112`, `0x8c2ac`, `0x8d67d`, `0x8ea85`) sit between its tag-5 blocks; they are NOPs in the code, and `visa_dis.py` lists them, so the PM listing has no holes. Two calls from VISA go just below it (`0x8c0c3`, `0x8c0ec`), to code Entry 2 does not load.
 - Tag 3: VISA in internal memory, short-word addresses `0x13ac4a..0x183138`. The count is in parcels; each 32-bit word holds two parcels, **the high half first**, counted from the block's start (an odd count ends on a padding half). `patch_amp.expand_sharc_blob0_buffer`'s words `w[37192..37193]` read this way as `R0 = 0x77aac; RFRAME`.
 - Tag 10: VISA in DDR2. Word `0x300000 + k` holds the parcels at short-word `0x600000 + 2k` (low half) and `0x600000 + 2k + 1` (high half), up to `0x61a0de`.
 - Tag 1 blocks between those blocks are zeros in the code, even in the middle of an instruction: `9980 bf80` at `0x13b35d` takes its third parcel `0000` from a zero fill (`DM(I4,M6) = 0xbf800000`), and two 48-bit NOPs follow.
@@ -35,7 +35,7 @@ How it was checked: 2,308 call sites are `CJUMP` (3 parcels), `DM(I7,M7) = R2` (
 
 ## The forms (verified offline)
 
-- **48-bit**: the ISA encoding unchanged (`MODIFY(I7,-2)` = `1607 ffff fffe`, `R2 = DM(0xe149a)` = `1002 000e 149a`). The ISA decoder re-encodes all 11,633 tag-5 instructions to the same words with sasm; the other two are data after an RTI.
+- **48-bit**: the ISA encoding unchanged (`MODIFY(I7,-2)` = `1607 ffff fffe`, `R2 = DM(0xe149a)` = `1002 000e 149a`). The ISA decoder re-encodes all 11,633 tag-5 instructions to the same words with sasm; the other two are data after an RTI. The 35 tag-2 words decode as `NOP`.
 - **32-bit, the ISA form without a compute** (types 1, 3, 4, 5, 7, 9): the ISA instruction's top 32 bits, with `0x3f` in place of compute bits 22..16 (`JUMP (M14,I12) (DB)` = `083f 343f`, `I12 = DM(M7,I6)` = `4dfe 0e3f`).
 - **32-bit compute** (`0x01`, bit 7 set): no condition; the 23-bit compute field is `(p1 & 0x7f) << 16 | p2` (`0193 04c4` = `F4 = F12 * F4`, `0180 b0da` = `COMPU(R13, R10)`).
 - **32-bit ureg = data16** (`0x0f`, bit 7 set): ureg in bits 6..0, the immediate sign-extended (`0f80 ff80` = `R0 = -0x80`). The SRU masks at `0x6092ce..` confirm the sign extension.
